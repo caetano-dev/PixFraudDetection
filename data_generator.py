@@ -153,7 +153,9 @@ def create_circular_payment_ring(accounts_df, date):
     
     # Select 3 to 5 accounts for the cycle
     num_in_cycle = np.random.randint(3, 6)
-    cycle_accounts = np.random.choice(accounts_df['holder_id'], num_in_cycle, replace=False)
+    cycle_accounts = np.random.choice(accounts_df['account_id'], num_in_cycle, replace=False)
+
+    fraud_device, fraud_ip = str(uuid.uuid4()), generate_ip_address()
 
     amount = round(np.random.uniform(1000.0, 5000.0), 2)
     transaction_time = date
@@ -164,13 +166,20 @@ def create_circular_payment_ring(accounts_df, date):
         receiver = cycle_accounts[(i + 1) % num_in_cycle]
         transaction_time += timedelta(minutes=np.random.randint(5, 30))
         
+        if np.random.rand() < 0.7:
+            device_id, ip_address = fraud_device, fraud_ip
+        else:
+            device_id, ip_address = get_account_details(accounts_df, sender)
+        
         ring_transactions.append({
             'transaction_id': str(uuid.uuid4()),
             'sender_id': sender,
             'receiver_id': receiver,
             'amount': amount * np.random.uniform(0.95, 1.05), # Slight variations
             'timestamp': transaction_time.isoformat(),
-            'fraud_flag': 'CIRCULAR_PAYMENT'
+            'fraud_flag': 'CIRCULAR_PAYMENT',
+            'device_id': device_id,
+            'ip_address': ip_address
         })
         
     return ring_transactions
