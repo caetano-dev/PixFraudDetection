@@ -1,6 +1,6 @@
-# PIX Fraud Detection System
+# PIX Fraud Detection System - Work in progress
 
-A real-time fraud detection system for Brazilian PIX transactions using Neo4j graph database and Redis streaming. This system generates synthetic transaction data with realistic fraud patterns and provides graph-based fraud detection capabilities.
+Proof of concept for a real-time fraud detection system for Brazilian PIX transactions using Neo4j graph database and Redis streaming. This system generates synthetic transaction data with realistic fraud patterns and provides graph-based fraud detection capabilities.
 
 ## Features
 
