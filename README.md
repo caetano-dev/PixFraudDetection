@@ -4,10 +4,11 @@ Proof of concept for a real-time fraud detection system for Brazilian PIX transa
 
 ## Features
 
-- **Synthetic Data Generation**: Creates realistic Brazilian PIX accounts (CPF/CNPJ) and transactions
-- **Fraud Pattern Detection**: Identifies smurfing rings, circular payments, and device/IP sharing
-- **Real-time Streaming**: Uses Redis for transaction streaming simulation
-- **Graph Database**: Neo4j for relationship-based fraud analysis
+- **Synthetic Data Generation**: Creates realistic Brazilian PIX accounts (CPF/CNPJ) with calculated risk profiles.
+- **Behavioral Simulation**: Generates transactions based on time-of-day, day-of-week, and events like salary payments.
+- **Advanced Fraud Patterns**: Identifies smurfing rings and circular payments using targeted high-risk accounts.
+- **Real-time Streaming**: Uses Redis for transaction streaming simulation.
+- **Graph Database**: Neo4j for relationship-based fraud analysis.
 
 ## Prerequisites
 
@@ -53,7 +54,7 @@ REDIS_DB=0
 ```bash
 python data_generator.py
 ```
-Creates 5,000 accounts and 100,000 transactions with fraud patterns.
+Creates 10,000 accounts and 300,000 transactions with realistic behavioral patterns.
 
 ### Step 2: Start Ingestion Engine
 ```bash
@@ -75,6 +76,20 @@ Simulates real-time transaction flow.
 - `test_setup.py` - Verifies system connectivity
 - `requirements.txt` - Python dependencies
 - `.env` - Database configuration
+
+## Transaction Types Generated
+
+The data generator creates a mix of legitimate and fraudulent transaction types, each with a unique `fraud_flag`.
+
+- **Legitimate Transactions**:
+  - `NORMAL`: Standard peer-to-peer or consumer transactions.
+  - `NORMAL_SALARY`: Bulk salary payments from businesses to individuals on specific days of the month.
+  - `NORMAL_MICRO`: Small, frequent payments for everyday items like coffee or transport.
+  - `NORMAL_B2B`: High-value transfers between business accounts during business hours.
+- **Fraudulent Transactions**:
+  - `SMURFING_VICTIM_TRANSFER`: The initial large transfer from a victim to a mule account.
+  - `SMURFING_DISTRIBUTION`: The subsequent distribution of stolen funds from a central mule to other mules in the ring.
+  - `CIRCULAR_PAYMENT`: Transactions that form a closed loop between high-risk accounts to launder money.
 
 ## Fraud Patterns Detected
 
@@ -99,22 +114,25 @@ cypher-shell -u neo4j -p neo4j "ALTER USER neo4j SET PASSWORD 'password'"
 ```bash
 python test_setup.py
 ```
+
 ## Project Roadmap & Status
 
 This project is being developed in phases. Here is a summary of what has been implemented and what is planned for the future.
 
-### **Phase 1: Data Pipeline & Graph Foundation (In Progress)**
+### **Phase 1: Data Pipeline & Graph Foundation (Completed)**
 
 The core infrastructure for generating, streaming, and storing transaction data is complete.
 
 -   **Synthetic Data Generation** (`data_generator.py`):
-    -   [x] Generation of 5,000 realistic PIX accounts, including valid CPF and CNPJ numbers.
-    -   [x] Creation of 100,000 transactions with varied amounts and timestamps.
+    -   [x] Generation of 10,000 realistic PIX accounts with valid CPF/CNPJ.
+    -   [x] **Enhanced Realism**: Accounts now have a calculated `risk_score` based on age, verification status, and other factors.
+    -   [x] Creation of 300,000 transactions with varied amounts and timestamps.
+    -   [x] **Behavioral Simulation**: Transaction generation is now weighted based on time of day (business hours, late night), day of week, and special events (salary days), making the data distribution more lifelike.
     -   [x] Embedding of specific fraud patterns into the dataset:
-        -   **Smurfing/Structuring**: A central account distributes funds to a ring of mule accounts.
-        -   **Circular Payments**: Money is moved in a loop between 3-5 accounts to obscure its origin.
+        -   **Smurfing/Structuring**: Fraudulent rings are now formed by targeting high-risk accounts as mules.
+        -   **Circular Payments**: Money is moved in a loop between high-risk accounts to obscure its origin.
         -   **Shared Identifiers**: Fraudulent accounts in a ring share a common device and IP address.
-    -   [ ] Make sure data is good enough for the fraud detection algorithms.
+    -   [x] Make sure data is good enough for the fraud detection algorithms.
 
 -   **Real-time Streaming Simulation**:
     -   [x] A publisher script (`stream_simulator.py`) reads the synthetic data and streams it to a Redis Pub/Sub channel in real-time.
@@ -122,7 +140,7 @@ The core infrastructure for generating, streaming, and storing transaction data 
 -   **Graph Ingestion Engine** (`ingestion_engine.py`):
     -   [x] A subscriber script connects to Redis and Neo4j, listening for incoming transactions.
     -   [x] Implemented an idempotent ingestion process using `MERGE` to prevent data duplication.
-    -   [x] Built a flexible graph schema as planned in the documentation, creating `:Account`, `:Transaction`, `:Device`, and `:IPAddress` nodes and their relationships for rich, contextual queries.
+    -   [x] Built a flexible graph schema that captures rich, contextual properties for all nodes and relationships.
 
 ### **Phase 2: Graph Analytics & Fraud Detection (To-Do)**
 
