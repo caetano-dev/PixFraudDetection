@@ -20,23 +20,50 @@ driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
 def ingest_transaction(driver, tx_data):
     """
-    Ingests a single transaction into Neo4j using a hybrid approach for maximum fraud detection flexibility.
+    Ingests a single transaction into Neo4j, enriching nodes with all available data.
     """
     query = """
-    // Use MERGE to find or create the source and destination accounts
+    // Find or create the source account and set its properties
     MERGE (src:Account {accountId: $sender_id})
+    ON CREATE SET
+        src.creation_date = datetime($timestamp), // Placeholder, ideally from account data
+        src.is_verified = $sender_verified,
+        src.state = $sender_state,
+        src.risk_score = toFloat($sender_risk_score)
+    ON MATCH SET
+        src.is_verified = $sender_verified,
+        src.state = $sender_state,
+        src.risk_score = toFloat($sender_risk_score)
+
+    // Find or create the destination account and set its properties
     MERGE (dest:Account {accountId: $receiver_id})
+    ON CREATE SET
+        dest.creation_date = datetime($timestamp), // Placeholder
+        dest.is_verified = $receiver_verified,
+        dest.state = $receiver_state,
+        dest.risk_score = toFloat($receiver_risk_score)
+    ON MATCH SET
+        dest.is_verified = $receiver_verified,
+        dest.state = $receiver_state,
+        dest.risk_score = toFloat($receiver_risk_score)
 
     // MERGE the device and IP address nodes
     MERGE (dev:Device {deviceId: $device_id})
     MERGE (ip:IPAddress {ip: $ip_address})
 
-    // MERGE the transaction node itself, setting properties ON CREATE
+    // MERGE the transaction node itself, setting all properties
     MERGE (tx:Transaction {transactionId: $transaction_id})
     ON CREATE SET
         tx.amount = toFloat($amount),
         tx.timestamp = datetime($timestamp),
-        tx.fraudFlag = $fraud_flag
+        tx.fraudFlag = $fraud_flag,
+        tx.transaction_type = $transaction_type,
+        tx.channel = $channel,
+        tx.merchant_category = $merchant_category,
+        tx.hour_of_day = toInteger($hour_of_day),
+        tx.day_of_week = toInteger($day_of_week),
+        tx.is_weekend = $is_weekend,
+        tx.same_state = $same_state
 
     // MERGE the relationships connecting all entities
     MERGE (src)-[:SENT]->(tx)
@@ -44,19 +71,23 @@ def ingest_transaction(driver, tx_data):
     MERGE (tx)-[:USED_DEVICE]->(dev)
     MERGE (tx)-[:FROM_IP]->(ip)
     
-    // ADD: Direct account-to-account relationship for flow visualization and aggregation
+    // Update the direct account-to-account relationship for flow analysis
     MERGE (src)-[flow:MONEY_FLOW]->(dest)
     ON CREATE SET 
         flow.firstTransaction = datetime($timestamp), 
         flow.totalAmount = toFloat($amount), 
         flow.transactionCount = 1,
-        flow.fraudTransactionCount = CASE WHEN $fraud_flag <> 'NORMAL' THEN 1 ELSE 0 END
+        flow.fraudTransactionCount = CASE WHEN $fraud_flag STARTS WITH 'SMURFING' OR $fraud_flag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END
     ON MATCH SET 
         flow.lastTransaction = datetime($timestamp), 
         flow.totalAmount = flow.totalAmount + toFloat($amount), 
         flow.transactionCount = flow.transactionCount + 1,
-        flow.fraudTransactionCount = flow.fraudTransactionCount + CASE WHEN $fraud_flag <> 'NORMAL' THEN 1 ELSE 0 END
+        flow.fraudTransactionCount = flow.fraudTransactionCount + CASE WHEN $fraud_flag STARTS WITH 'SMURFING' OR $fraud_flag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END
     """
+    
+    # We need to get the state for sender and receiver to pass to the query
+    # This is a simplification; in a real system, this data would be joined
+    # before hitting the ingestion engine. For now, we'll assume it's in the tx_data.
     
     driver.execute_query(query, **tx_data)
     print(f"Ingested transaction: {tx_data['transaction_id']}")
