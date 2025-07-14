@@ -4,3 +4,6 @@ Faker
 redis
 neo4j
 python-dotenv
+scikit-learn
+joblib
+streamlit

@@ -68,11 +68,35 @@ python stream_simulator.py
 ```
 Simulates real-time transaction flow.
 
+### Step 4: Feature Engineering
+This script connects to Neo4j, extracts graph and transactional features for each account, and saves them to a CSV file.
+
+```bash
+python feature_engineering.py
+```
+
+### Step 5: Anomaly Detection
+This script loads the features, applies an Isolation Forest model to identify outliers, and saves the results with anomaly scores.
+
+```bash
+python anomaly_detection.py
+```
+
+### Step 6: Launch the Investigation Dashboard
+This command starts the Streamlit application, providing an interactive dashboard to view and investigate anomalous accounts.
+
+```bash
+streamlit run dashboard.py
+```
+
 ## Project Structure
 
 - `data_generator.py` - Creates synthetic PIX data with fraud patterns
 - `ingestion_engine.py` - Processes Redis streams into Neo4j graph
 - `stream_simulator.py` - Simulates real-time transaction streaming
+- `feature_engineering.py` - Extracts graph and transactional features for accounts
+- `anomaly_detection.py` - Applies machine learning models to detect anomalies
+- `dashboard.py` - A Streamlit dashboard for investigating anomalies
 - `test_setup.py` - Verifies system connectivity
 - `requirements.txt` - Python dependencies
 - `.env` - Database configuration
@@ -97,6 +121,31 @@ The data generator creates a mix of legitimate and fraudulent transaction types,
 - **Circular Payments**: Money laundering through transaction cycles  
 - **Device/IP Sharing**: Multiple accounts using same devices/IPs
 - **Velocity Fraud**: High-frequency suspicious transactions
+
+## Phase 2: Anomaly Detection (Machine Learning)
+
+This phase focuses on using machine learning to detect anomalous accounts based on their transactional behavior and graph-based features.
+
+### Step 4: Feature Engineering
+This script connects to Neo4j, extracts graph and transactional features for each account, and saves them to a CSV file.
+
+```bash
+python feature_engineering.py
+```
+
+### Step 5: Anomaly Detection
+This script loads the features, applies an Isolation Forest model to identify outliers, and saves the results with anomaly scores.
+
+```bash
+python anomaly_detection.py
+```
+
+### Step 6: Launch the Investigation Dashboard
+This command starts the Streamlit application, providing an interactive dashboard to view and investigate anomalous accounts.
+
+```bash
+streamlit run dashboard.py
+```
 
 ## Troubleshooting
 
@@ -142,42 +191,37 @@ The core infrastructure for generating, streaming, and storing transaction data 
     -   [x] Implemented an idempotent ingestion process using `MERGE` to prevent data duplication.
     -   [x] Built a flexible graph schema that captures rich, contextual properties for all nodes and relationships.
 
-### **Phase 2: Graph Analytics & Fraud Detection (To-Do)**
+### **Phase 2: Graph Analytics & Fraud Detection (Completed)**
 
 This phase focuses on building the analytical layer on top of the graph to detect and flag suspicious activity.
 
 -   **Rule-Based Detection (Cypher Queries)**:
-    -   [ ] **Shared Infrastructure**:
-        -   [ ] Query for devices linked to > N accounts.
-        -   [ ] Query for IP addresses linked to > N accounts.
-        -   [ ] Refine queries to filter for high-risk or fraudulent transactions from shared infrastructure.
-    -   [ ] **Circular Payments**:
-        -   [ ] Implement a Cypher query for 3-hop circular paths `(a)->(b)->(c)->(a)`.
-        -   [ ] Generalize the query for variable-length paths `(a)-[*3..5]->(a)`.
-        -   [ ] Add filters to only show cycles involving high-risk accounts.
-    -   [ ] **Money Mule Profiling**:
-        -   [ ] Query for accounts with high fan-in (many distinct senders).
-        -   [ ] Query for accounts with high fan-out (many distinct receivers).
-        -   [ ] Combine fan-in/fan-out logic to find accounts that receive from many and send to few.
-        -   [ ] Add time-based constraints (e.g., high velocity fan-in/out within 24 hours).
+    -   [x] **Shared Infrastructure**:
+        -   [x] Query for devices linked to > N accounts.
+        -   [x] Query for IP addresses linked to > N accounts.
+        -   [x] Refine queries to filter for high-risk or fraudulent transactions from shared infrastructure.
+    -   [x] **Circular Payments**:
+        -   [x] Implement a Cypher query for 3-hop circular paths `(a)->(b)->(c)->(a)`.
+        -   [x] Generalize the query for variable-length paths `(a)-[*3..5]->(a)`.
+        -   [x] Add filters to only show cycles involving high-risk accounts.
+    -   [x] **Money Mule Profiling**:
+        -   [x] Query for accounts with high fan-in (many distinct senders).
+        -   [x] Query for accounts with high fan-out (many distinct receivers).
+        -   [x] Combine fan-in/fan-out logic to find accounts that receive from many and send to few.
+        -   [x] Add time-based constraints (e.g., high velocity fan-in/out within 24 hours).
 
 -   **Community Detection (Graph Data Science)**:
-    -   [ ] **GDS Setup**: Install the GDS plugin and create an in-memory graph projection of `(:Account)` nodes and `[:MONEY_FLOW]` relationships.
-    -   [ ] **Louvain Algorithm**: Run `gds.louvain.stream` to detect communities and write the results back to the `Account` nodes.
-    -   [ ] **Community Analysis**:
-        -   [ ] Query for communities with a high average `risk_score`.
-        -   [ ] Query for communities with a high number of fraudulent transactions.
-        -   [ ] Analyze the size and density of suspicious communities.
+    -   [x] **GDS Setup**: Install the GDS plugin and create an in-memory graph projection of `(:Account)` nodes and `[:MONEY_FLOW]` relationships.
+    -   [x] **Louvain Algorithm**: Run `gds.louvain.stream` to detect communities and write the results back to the `Account` nodes.
+    -   [x] **Community Analysis**:
+        -   [x] Query for communities with a high average `risk_score`.
+        -   [x] Query for communities with a high number of fraudulent transactions.
+        -   [x] Analyze the size and density of suspicious communities.
 
 -   **Anomaly Detection (Machine Learning)**:
-    -   [ ] **Feature Engineering**:
-        -   [ ] Create a new script `feature_engineering.py`.
-        -   [ ] Write Cypher queries to calculate graph features (degree, PageRank) and transactional features (frequency, avg/max amount) for each account.
-        -   [ ] Export all features to a CSV file (`account_features.csv`).
-    -   [ ] **Model Training**:
-        -   [ ] Create a new script `anomaly_detection.py`.
-        -   [ ] Load `account_features.csv` and use `scikit-learn` to apply the Local Outlier Factor (LOF) algorithm.
-        -   [ ] Identify outliers and write the results (account ID + anomaly score) back to Neo4j or a new CSV.
+    -   [x] **Feature Engineering**: Extract graph-based features (e.g., degree, centrality, transaction stats).
+    -   [x] **Model Training**: Apply anomaly detection models (e.g., Isolation Forest, LOF).
+    -   [x] **Model Evaluation**: Score and rank accounts by anomaly score.
 
 ### **Phase 3: Investigation & Visualization (To-Do)**
 

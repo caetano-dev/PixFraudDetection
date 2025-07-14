@@ -50,7 +50,7 @@ def calculate_initial_risk(account_info):
     return min(round(random.uniform(0.1, 0.3) + risk, 2), 1.0)
 
 # Enhanced account generation with more realistic features
-NUM_ACCOUNTS = 10000
+NUM_ACCOUNTS = 4000
 print(f"Generating {NUM_ACCOUNTS} accounts...")
 accounts_data = []
 
@@ -395,10 +395,10 @@ def create_business_transaction(accounts_df, date):
     }
 
 # Generate transactions with realistic patterns and fraud rates
-TOTAL_TRANSACTIONS = 300000
+TOTAL_TRANSACTIONS = 40000
 current_date = start_date
 
-print(f"Generating {TOTAL_TRANSACTIONS} transactions...")
+print(f"Generating {TOTAL_TRANSACTIONS} transactions... This is going to take a few seconds.")
 while len(transactions) < TOTAL_TRANSACTIONS:
     current_date += timedelta(minutes=np.random.randint(1, 30))
     if current_date > end_date:

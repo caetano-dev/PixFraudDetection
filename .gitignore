@@ -1,5 +1,8 @@
-pix_accounts.csv
-pix_transactions.csv
+*.csv
+*.joblib
+etc/
+share/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
