@@ -22,85 +22,45 @@ def ingest_transaction(driver, tx_data):
     """
     Ingests a single transaction into Neo4j, enriching nodes with all available data.
     """
-    query = """
-    // Find or create the source account and set its properties
-    MERGE (src:Account {accountId: $sender_id})
-    ON CREATE SET
-        src.creation_date = datetime($timestamp), // Placeholder, ideally from account data
-        src.is_verified = $sender_verified,
-        src.state = $sender_state,
-        src.risk_score = toFloat($sender_risk_score)
-    ON MATCH SET
-        src.is_verified = $sender_verified,
-        src.state = $sender_state,
-        src.risk_score = toFloat($sender_risk_score)
+    with driver.session() as session:
+        # Ingests based on the 'decision' from the fraud detector
+        # We only ingest transactions that were approved
+        if tx_data.get('decision') == 'APPROVED':
+            session.write_transaction(create_transaction_cypher, tx_data)
+            print(f"  -> Ingested approved transaction {tx_data['transaction_id']} into Neo4j.")
+        else:
+            print(f"  -> Skipped ingestion for denied transaction {tx_data['transaction_id']}.")
 
-    // Find or create the destination account and set its properties
-    MERGE (dest:Account {accountId: $receiver_id})
-    ON CREATE SET
-        dest.creation_date = datetime($timestamp), // Placeholder
-        dest.is_verified = $receiver_verified,
-        dest.state = $receiver_state,
-        dest.risk_score = toFloat($receiver_risk_score)
-    ON MATCH SET
-        dest.is_verified = $receiver_verified,
-        dest.state = $receiver_state,
-        dest.risk_score = toFloat($receiver_risk_score)
-
-    // MERGE the device and IP address nodes
-    MERGE (dev:Device {deviceId: $device_id})
-    MERGE (ip:IPAddress {ip: $ip_address})
-
-    // MERGE the transaction node itself, setting all properties
-    MERGE (tx:Transaction {transactionId: $transaction_id})
-    ON CREATE SET
-        tx.amount = toFloat($amount),
-        tx.timestamp = datetime($timestamp),
-        tx.fraudFlag = $fraud_flag,
-        tx.transaction_type = $transaction_type,
-        tx.channel = $channel,
-        tx.merchant_category = $merchant_category,
-        tx.hour_of_day = toInteger($hour_of_day),
-        tx.day_of_week = toInteger($day_of_week),
-        tx.is_weekend = $is_weekend,
-        tx.same_state = $same_state
-
-    // MERGE the relationships connecting all entities
-    MERGE (src)-[:SENT]->(tx)
-    MERGE (tx)-[:RECEIVED_BY]->(dest)
-    MERGE (tx)-[:USED_DEVICE]->(dev)
-    MERGE (tx)-[:FROM_IP]->(ip)
-    
-    // Update the direct account-to-account relationship for flow analysis
-    MERGE (src)-[flow:MONEY_FLOW]->(dest)
-    ON CREATE SET 
-        flow.firstTransaction = datetime($timestamp), 
-        flow.totalAmount = toFloat($amount), 
-        flow.transactionCount = 1,
-        flow.fraudTransactionCount = CASE WHEN $fraud_flag STARTS WITH 'SMURFING' OR $fraud_flag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END
-    ON MATCH SET 
-        flow.lastTransaction = datetime($timestamp), 
-        flow.totalAmount = flow.totalAmount + toFloat($amount), 
-        flow.transactionCount = flow.transactionCount + 1,
-        flow.fraudTransactionCount = flow.fraudTransactionCount + CASE WHEN $fraud_flag STARTS WITH 'SMURFING' OR $fraud_flag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END
+def create_transaction_cypher(tx, tx_data):
     """
-    
-    # We need to get the state for sender and receiver to pass to the query
-    # This is a simplification; in a real system, this data would be joined
-    # before hitting the ingestion engine. For now, we'll assume it's in the tx_data.
-    
-    driver.execute_query(query, **tx_data)
-    print(f"Ingested transaction: {tx_data['transaction_id']}")
+    A Cypher query to create a transaction and connect it to accounts.
+    """
+    # Cypher query to merge nodes and create the transaction relationship
+    query = (
+        "MERGE (sender:Account {accountId: $from_account_id}) "
+        "ON CREATE SET sender.risk_score = $from_risk_score, sender.account_type = $from_account_type "
+        "MERGE (receiver:Account {accountId: $to_account_id}) "
+        "ON CREATE SET receiver.risk_score = $to_risk_score, receiver.account_type = $to_account_type "
+        "CREATE (sender)-[:SENT]->(t:Transaction { "
+        "  transaction_id: $transaction_id, "
+        "  amount: $amount, "
+        "  timestamp: datetime($timestamp), "
+        "  fraud_flag: $fraud_flag, "
+        "  fraud_probability: $fraud_probability, "
+        "  decision: $decision "
+        "})-[:TO]->(receiver)"
+    )
+    tx.run(query, **tx_data)
 
 with driver.session() as session:
     session.run("MATCH (n) DETACH DELETE n")
     print("Cleared existing data in Neo4j.")
 
-
+# Subscribe to the 'approved_transactions' channel instead of the raw feed
 p = r.pubsub()
-p.subscribe('pix_transactions')
+p.subscribe('approved_transactions')
 
-print("Subscribed to 'pix_transactions'. Listening for messages...")
+print("Subscribed to 'approved_transactions'. Listening for messages to ingest...")
 
 try:
     # Create constraints one at a time
@@ -110,13 +70,11 @@ try:
     driver.execute_query("CREATE CONSTRAINT ipAddress_unique IF NOT EXISTS FOR (ip:IPAddress) REQUIRE ip.ip IS UNIQUE;")
     for message in p.listen():
         if message['type'] == 'message':
-            transaction_data = json.loads(message['data'].decode('utf-8'))
-            print(f"Received: {transaction_data}")
-            
-            ingest_transaction(driver, transaction_data)
+            tx_data = json.loads(message['data'])
+            ingest_transaction(driver, tx_data)
             
 except KeyboardInterrupt:
-    print("Stopping ingestion engine...")
+    print("\nShutting down ingestion engine.")
 finally:
     p.close()
     driver.close()
