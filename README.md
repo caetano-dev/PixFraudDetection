@@ -147,30 +147,53 @@ The core infrastructure for generating, streaming, and storing transaction data 
 This phase focuses on building the analytical layer on top of the graph to detect and flag suspicious activity.
 
 -   **Rule-Based Detection (Cypher Queries)**:
-    -   [ ] **Shared Device/IP**: Write a Cypher query to find multiple accounts making transactions from the same device or IP address.
-    -   [ ] **Circular Payments**: Implement a Cypher path-matching query to detect 3-step (or more) payment loops.
-    -   [ ] **Money Mule Profiling**: Develop a query to identify accounts with high "fan-in" (many incoming payments) and low "fan-out" (few outgoing payments).
+    -   [ ] **Shared Infrastructure**:
+        -   [ ] Query for devices linked to > N accounts.
+        -   [ ] Query for IP addresses linked to > N accounts.
+        -   [ ] Refine queries to filter for high-risk or fraudulent transactions from shared infrastructure.
+    -   [ ] **Circular Payments**:
+        -   [ ] Implement a Cypher query for 3-hop circular paths `(a)->(b)->(c)->(a)`.
+        -   [ ] Generalize the query for variable-length paths `(a)-[*3..5]->(a)`.
+        -   [ ] Add filters to only show cycles involving high-risk accounts.
+    -   [ ] **Money Mule Profiling**:
+        -   [ ] Query for accounts with high fan-in (many distinct senders).
+        -   [ ] Query for accounts with high fan-out (many distinct receivers).
+        -   [ ] Combine fan-in/fan-out logic to find accounts that receive from many and send to few.
+        -   [ ] Add time-based constraints (e.g., high velocity fan-in/out within 24 hours).
 
 -   **Community Detection (Graph Data Science)**:
-    -   [ ] Set up a GDS graph projection to analyze relationships between accounts.
-    -   [ ] Implement the **Louvain** algorithm to find densely connected communities that could represent undiscovered fraud rings.
-    -   [ ] Develop analysis queries to profile the detected communities based on size, density, and age.
+    -   [ ] **GDS Setup**: Install the GDS plugin and create an in-memory graph projection of `(:Account)` nodes and `[:MONEY_FLOW]` relationships.
+    -   [ ] **Louvain Algorithm**: Run `gds.louvain.stream` to detect communities and write the results back to the `Account` nodes.
+    -   [ ] **Community Analysis**:
+        -   [ ] Query for communities with a high average `risk_score`.
+        -   [ ] Query for communities with a high number of fraudulent transactions.
+        -   [ ] Analyze the size and density of suspicious communities.
 
 -   **Anomaly Detection (Machine Learning)**:
-    -   [ ] Engineer graph-based features for each account (e.g., degree, PageRank, transaction frequency, average amount).
-    -   [ ] Export features to a Pandas DataFrame.
-    -   [ ] Apply the **Local Outlier Factor (LOF)** algorithm with `scikit-learn` to identify accounts with anomalous behavior compared to their peers.
+    -   [ ] **Feature Engineering**:
+        -   [ ] Create a new script `feature_engineering.py`.
+        -   [ ] Write Cypher queries to calculate graph features (degree, PageRank) and transactional features (frequency, avg/max amount) for each account.
+        -   [ ] Export all features to a CSV file (`account_features.csv`).
+    -   [ ] **Model Training**:
+        -   [ ] Create a new script `anomaly_detection.py`.
+        -   [ ] Load `account_features.csv` and use `scikit-learn` to apply the Local Outlier Factor (LOF) algorithm.
+        -   [ ] Identify outliers and write the results (account ID + anomaly score) back to Neo4j or a new CSV.
 
 ### **Phase 3: Investigation & Visualization (To-Do)**
 
 The final phase is to build an interactive dashboard for investigators to explore alerts and analyze fraud patterns visually.
 
--   **Investigator's Dashboard (Streamlit)**:
-    -   [ ] Set up a Streamlit application (`dashboard.py`) and connect it to the Neo4j database.
-    -   [ ] Create a main overview page to display high-level metrics and fraud alerts from the detection algorithms.
-    -   [ ] Build an interactive "Investigation" tab where an analyst can select a suspicious account or community.
-
--   **Interactive Graph Visualization**:
-    -   [ ] Integrate a graph visualization library (e.g., `neo4j-viz`) into the Streamlit app.
-    -   [ ] On user selection, dynamically query the 2-hop neighborhood of a suspicious account and render it as an interactive graph.
-    -   [ ] Implement a details pane that displays the properties of a node or relationship when it is clicked in the graph.
+-   **Dashboard Setup (Streamlit)**:
+    -   [ ] Create `dashboard.py` with a basic Streamlit layout.
+    -   [ ] Add a Neo4j connection utility to the dashboard.
+    -   [ ] Add `streamlit` to `requirements.txt`.
+-   **High-Level Metrics Page**:
+    -   [ ] Create a "Dashboard" tab to display KPIs: Total Transactions, Total Fraud Amount, Fraud Rate %.
+    -   [ ] Add a bar chart showing fraud counts by type (`fraud_flag`).
+-   **Alerts & Triage View**:
+    -   [ ] Create an "Alerts" tab to display a sortable table of high-risk accounts identified by the ML model or Cypher rules.
+    -   [ ] Allow users to select an account from the table for investigation.
+-   **Interactive Graph Investigation**:
+    -   [ ] Add a graph visualization component (e.g., `streamlit-agraph`) to the investigation view.
+    -   [ ] When an account is selected, query its 1-hop and 2-hop neighborhood and render the subgraph visually.
+    -   [ ] Display properties of a selected node or relationship from the graph.

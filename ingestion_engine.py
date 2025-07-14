@@ -96,8 +96,6 @@ with driver.session() as session:
     session.run("MATCH (n) DETACH DELETE n")
     print("Cleared existing data in Neo4j.")
 
-r.flushdb()
-print("Cleared existing data in Redis.")
 
 p = r.pubsub()
 p.subscribe('pix_transactions')
@@ -105,9 +103,14 @@ p.subscribe('pix_transactions')
 print("Subscribed to 'pix_transactions'. Listening for messages...")
 
 try:
+    # Create constraints one at a time
+    driver.execute_query("CREATE CONSTRAINT accountId_unique IF NOT EXISTS FOR (a:Account) REQUIRE a.accountId IS UNIQUE;")
+    driver.execute_query("CREATE CONSTRAINT transactionId_unique IF NOT EXISTS FOR (t:Transaction) REQUIRE t.transactionId IS UNIQUE;")
+    driver.execute_query("CREATE CONSTRAINT deviceId_unique IF NOT EXISTS FOR (d:Device) REQUIRE d.deviceId IS UNIQUE;")
+    driver.execute_query("CREATE CONSTRAINT ipAddress_unique IF NOT EXISTS FOR (ip:IPAddress) REQUIRE ip.ip IS UNIQUE;")
     for message in p.listen():
         if message['type'] == 'message':
-            transaction_data = json.loads(message['data'])
+            transaction_data = json.loads(message['data'].decode('utf-8'))
             print(f"Received: {transaction_data}")
             
             ingest_transaction(driver, transaction_data)
