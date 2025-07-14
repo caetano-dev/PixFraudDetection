@@ -3,12 +3,8 @@ import pandas as pd
 import os
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+from streamlit_agraph import agraph, Node, Edge, Config
+import plotly.express as px
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -17,80 +13,174 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- Data Loading ---
+# --- Environment and Data Loading ---
+load_dotenv()
+NEO4J_URI = os.getenv("NEO4J_URI")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+
 @st.cache_data
 def load_data(filepath):
     if os.path.exists(filepath):
-        return pd.read_csv(filepath)
+        df = pd.read_csv(filepath)
+        # Ensure fraudTransactionCount exists, fill with 0 if not
+        if 'fraudTransactionCount' not in df.columns:
+            df['fraudTransactionCount'] = 0
+        return df
     return None
 
+@st.cache_resource
+def get_neo4j_driver():
+    return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+
+driver = get_neo4j_driver()
 anomaly_data = load_data("anomaly_scores.csv")
 
-# --- Neo4j Connection ---
+# --- Neo4j Queries ---
 class Neo4jConnection:
-    def __init__(self, uri, user, password):
-        self._driver = GraphDatabase.driver(uri, auth=(user, password))
-
-    def close(self):
-        self._driver.close()
-
-    def get_account_details(self, account_id):
+    def get_kpis(self):
         query = """
-        MATCH (a:Account {accountId: $account_id})
-        RETURN a.accountId as accountId, a.risk_score as riskScore, a.state as state, a.is_verified as isVerified
+        MATCH (t:Transaction)
+        WITH
+            count(t) AS totalTransactions,
+            sum(t.amount) AS totalAmount,
+            sum(CASE WHEN t.fraudFlag STARTS WITH 'SMURFING' OR t.fraudFlag = 'CIRCULAR_PAYMENT' THEN t.amount ELSE 0 END) AS totalFraudAmount,
+            sum(CASE WHEN t.fraudFlag STARTS WITH 'SMURFING' OR t.fraudFlag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END) AS totalFraudTransactions
+        RETURN
+            totalTransactions,
+            totalAmount,
+            totalFraudAmount,
+            totalFraudTransactions
         """
-        with self._driver.session() as session:
-            result = session.run(query, account_id=account_id)
+        with driver.session() as session:
+            result = session.run(query)
             return result.single()
 
-# --- UI Components ---
+    def get_fraud_counts_by_type(self):
+        query = """
+        MATCH (t:Transaction)
+        WHERE t.fraudFlag STARTS WITH 'SMURFING' OR t.fraudFlag = 'CIRCULAR_PAYMENT'
+        RETURN t.fraudFlag AS fraudType, count(t) AS count
+        ORDER BY count DESC
+        """
+        with driver.session() as session:
+            result = session.run(query)
+            return pd.DataFrame([r.data() for r in result])
+
+    def get_account_neighborhood(self, account_id, hop_count=1):
+        query = """
+        MATCH (a:Account {accountId: $account_id})-[r*1..%d]-(neighbor)
+        UNWIND r as rel
+        RETURN DISTINCT
+            startNode(rel).accountId AS source,
+            endNode(rel).accountId AS target,
+            type(rel) as type
+        """ % hop_count
+        with driver.session() as session:
+            result = session.run(query, account_id=account_id)
+            return pd.DataFrame([r.data() for r in result])
+
+# --- UI Rendering ---
 st.title("🕵️ PIX Fraud Detection Dashboard")
 
 if anomaly_data is None:
     st.error("`anomaly_scores.csv` not found. Please run the `feature_engineering.py` and `anomaly_detection.py` scripts first.")
-else:
-    st.header("Anomaly Detection Results")
-    st.write("This table shows accounts flagged as potential outliers by the Isolation Forest model. Lower anomaly scores indicate a higher likelihood of being an outlier.")
+    st.stop()
 
-    # Display top anomalous accounts
-    top_anomalies = anomaly_data[anomaly_data['is_outlier'] == 1].sort_values('anomaly_score')
-    st.dataframe(top_anomalies)
+# Sort by anomaly score to show most suspicious accounts first
+anomaly_data = anomaly_data.sort_values(by="anomaly_score", ascending=False)
 
-    st.header("Account Investigation")
+# --- Main App Logic ---
+conn = Neo4jConnection()
+kpis = conn.get_kpis()
+
+# Create tabs
+tab1, tab2 = st.tabs(["📈 High-Level Metrics", "🚨 Alerts & Investigation"])
+
+with tab1:
+    st.header("Platform-Wide Metrics")
+    if kpis:
+        fraud_rate = (kpis['totalFraudTransactions'] / kpis['totalTransactions']) * 100 if kpis['totalTransactions'] > 0 else 0
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Transactions", f"{kpis['totalTransactions']:,}")
+        col2.metric("Total Volume", f"R$ {kpis['totalAmount']:,.2f}")
+        col3.metric("Fraudulent Transactions", f"{kpis['totalFraudTransactions']:,}")
+        col4.metric("Fraud Rate", f"{fraud_rate:.2f}%")
+
+    st.header("Fraud Breakdown by Type")
+    fraud_counts_df = conn.get_fraud_counts_by_type()
+    if not fraud_counts_df.empty:
+        fig = px.bar(
+            fraud_counts_df,
+            x="fraudType",
+            y="count",
+            title="Count of Fraudulent Transactions by Type",
+            labels={"fraudType": "Fraud Type", "count": "Number of Transactions"},
+            color="fraudType",
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No fraudulent transactions found to display in the chart.")
+
+with tab2:
+    st.header("Anomalous Account Investigation")
+
+    st.subheader("Top Anomalous Accounts")
+    st.write("These accounts have been flagged by the Isolation Forest model as having the most unusual transaction patterns. Investigate their neighborhoods to uncover potential fraud rings.")
     
-    # Search for an account
-    account_id_to_search = st.text_input("Enter Account ID to investigate:", placeholder="e.g., 123.456.789-00")
+    # Display a searchable and sortable table of anomalous accounts
+    st.dataframe(
+        anomaly_data,
+        use_container_width=True,
+        column_config={
+            "accountId": "Account ID",
+            "anomaly_score": st.column_config.NumberColumn(
+                "Anomaly Score",
+                help="Lower scores are more anomalous.",
+                format="%.4f",
+            ),
+        },
+        hide_index=True,
+    )
 
-    if account_id_to_search:
-        account_details_df = anomaly_data[anomaly_data['accountId'] == account_id_to_search]
+    st.subheader("Investigate Account Neighborhood")
+    
+    # Dropdown to select an account to investigate
+    selected_account = st.selectbox(
+        "Select an Account ID to Investigate:",
+        options=anomaly_data["accountId"].unique(),
+        help="Choose an account from the list above to visualize its connections."
+    )
 
-        if not account_details_df.empty:
-            st.subheader(f"Details for Account: {account_id_to_search}")
-            
-            # Connect to Neo4j to get latest details
-            conn = Neo4jConnection(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
-            neo4j_details = conn.get_account_details(account_id_to_search)
-            conn.close()
+    if selected_account:
+        st.write(f"Rendering graph for **{selected_account}**...")
+        
+        # Get neighborhood data
+        neighborhood_df = conn.get_account_neighborhood(selected_account, hop_count=2)
 
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.metric("Anomaly Score", f"{account_details_df.iloc[0]['anomaly_score']:.4f}")
-                st.metric("Calculated Risk Score", f"{account_details_df.iloc[0]['riskScore']:.2f}")
-                st.metric("Total Transaction Amount", f"R$ {account_details_df.iloc[0]['totalAmount']:,.2f}")
+        if not neighborhood_df.empty:
+            nodes = []
+            edges = []
+            unique_accounts = set(neighborhood_df['source']).union(set(neighborhood_df['target']))
 
-            with col2:
-                st.metric("In-Degree", account_details_df.iloc[0]['inDegree'])
-                st.metric("Out-Degree", account_details_df.iloc[0]['outDegree'])
-                st.metric("Total Transactions", account_details_df.iloc[0]['transactionCount'])
+            for acc in unique_accounts:
+                # Highlight the selected node
+                node_color = "#FF4B4B" if acc == selected_account else "#ADD8E6"
+                node_size = 25 if acc == selected_account else 15
+                nodes.append(Node(id=acc, label=acc, size=node_size, color=node_color))
 
-            if neo4j_details:
-                 st.info(f"""
-                    - **State:** {neo4j_details['state']}
-                    - **Verified Account:** {'Yes' if neo4j_details['isVerified'] else 'No'}
-                """)
-            
-            st.dataframe(account_details_df)
+            for index, row in neighborhood_df.iterrows():
+                edges.append(Edge(source=row['source'], target=row['target'], label=row['type']))
 
+            # Configure graph visualization
+            config = Config(width=1000,
+                            height=800,
+                            directed=True,
+                            physics=True,
+                            hierarchical=False,
+                            )
+
+            # Display the graph
+            agraph(nodes=nodes, edges=edges, config=config)
         else:
-            st.warning("Account ID not found in the anomaly results.")
+            st.warning(f"No transaction neighborhood found for account **{selected_account}** within 2 hops.")

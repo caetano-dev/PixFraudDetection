@@ -223,21 +223,21 @@ This phase focuses on building the analytical layer on top of the graph to detec
     -   [x] **Model Training**: Apply anomaly detection models (e.g., Isolation Forest, LOF).
     -   [x] **Model Evaluation**: Score and rank accounts by anomaly score.
 
-### **Phase 3: Investigation & Visualization (To-Do)**
+### **Phase 3: Investigation & Visualization (Completed)**
 
 The final phase is to build an interactive dashboard for investigators to explore alerts and analyze fraud patterns visually.
 
 -   **Dashboard Setup (Streamlit)**:
-    -   [ ] Create `dashboard.py` with a basic Streamlit layout.
-    -   [ ] Add a Neo4j connection utility to the dashboard.
-    -   [ ] Add `streamlit` to `requirements.txt`.
+    -   [X] Create `dashboard.py` with a basic Streamlit layout.
+    -   [X] Add a Neo4j connection utility to the dashboard.
+    -   [X] Add `streamlit` to `requirements.txt`.
 -   **High-Level Metrics Page**:
-    -   [ ] Create a "Dashboard" tab to display KPIs: Total Transactions, Total Fraud Amount, Fraud Rate %.
-    -   [ ] Add a bar chart showing fraud counts by type (`fraud_flag`).
+    -   [X] Create a "Dashboard" tab to display KPIs: Total Transactions, Total Fraud Amount, Fraud Rate %.
+    -   [X] Add a bar chart showing fraud counts by type (`fraud_flag`).
 -   **Alerts & Triage View**:
-    -   [ ] Create an "Alerts" tab to display a sortable table of high-risk accounts identified by the ML model or Cypher rules.
-    -   [ ] Allow users to select an account from the table for investigation.
+    -   [X] Create an "Alerts" tab to display a sortable table of high-risk accounts identified by the ML model or Cypher rules.
+    -   [X] Allow users to select an account from the table for investigation.
 -   **Interactive Graph Investigation**:
-    -   [ ] Add a graph visualization component (e.g., `streamlit-agraph`) to the investigation view.
-    -   [ ] When an account is selected, query its 1-hop and 2-hop neighborhood and render the subgraph visually.
-    -   [ ] Display properties of a selected node or relationship from the graph.
+    -   [X] Add a graph visualization component (e.g., `streamlit-agraph`) to the investigation view.
+    -   [X] When an account is selected, query its 1-hop and 2-hop neighborhood and render the subgraph visually.
+    -   [X] Display properties of a selected node or relationship from the graph.

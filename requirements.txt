@@ -7,3 +7,4 @@ python-dotenv
 scikit-learn
 joblib
 streamlit
+streamlit-agraph
