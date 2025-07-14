@@ -6,9 +6,9 @@ import joblib
 def main():
     # Load features
     try:
-        features_df = pd.read_csv("account_features.csv")
+        features_df = pd.read_csv("src/data/account_features.csv")
     except FileNotFoundError:
-        print("Error: account_features.csv not found.")
+        print("Error: src/data/account_features.csv not found.")
         print("Please run feature_engineering.py first to generate the features.")
         return
 
@@ -48,7 +48,7 @@ def main():
     features_df['is_outlier'] = features_df['is_outlier'].apply(lambda x: 1 if x == -1 else 0)
 
     # Save the results
-    output_path = "anomaly_scores.csv"
+    output_path = "src/data/anomaly_scores.csv"
     features_df.to_csv(output_path, index=False)
     print(f"Anomaly detection complete. Results saved to {output_path}")
 
@@ -59,9 +59,9 @@ def main():
     print(features_df.sort_values('anomaly_score').head(10))
     
     # Save the model and the scaler for later use (e.g., in a real-time pipeline)
-    joblib.dump(model, 'isolation_forest_model.joblib')
-    joblib.dump(scaler, 'scaler.joblib')
-    print("\nModel and scaler saved to 'isolation_forest_model.joblib' and 'scaler.joblib'")
+    joblib.dump(model, 'src/models/isolation_forest_model.joblib')
+    joblib.dump(scaler, 'src/models/scaler.joblib')
+    print("\nModel and scaler saved to 'src/models/isolation_forest_model.joblib' and 'src/models/scaler.joblib'")
 
 
 if __name__ == "__main__":

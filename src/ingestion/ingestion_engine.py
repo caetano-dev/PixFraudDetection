@@ -1,21 +1,9 @@
 import redis
 from neo4j import GraphDatabase
 import json
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
-REDIS_DB = int(os.getenv('REDIS_DB', 0))
-
-NEO4J_URI = os.getenv('NEO4J_URI', 'neo4j://localhost:7687')
-NEO4J_USERNAME = os.getenv('NEO4J_USERNAME', 'neo4j')
-NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'password')
+from src.config.config import REDIS_HOST, REDIS_PORT, REDIS_DB, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
 
 r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
 def ingest_transaction(driver, tx_data):

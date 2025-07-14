@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import os
 from neo4j import GraphDatabase
-from dotenv import load_dotenv
 from streamlit_agraph import agraph, Node, Edge, Config
 import plotly.express as px
+from src.config.config import NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -14,11 +14,6 @@ st.set_page_config(
 )
 
 # --- Environment and Data Loading ---
-load_dotenv()
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
-
 @st.cache_data
 def load_data(filepath):
     if os.path.exists(filepath):
@@ -34,7 +29,7 @@ def get_neo4j_driver():
     return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
 driver = get_neo4j_driver()
-anomaly_data = load_data("anomaly_scores.csv")
+anomaly_data = load_data("src/data/anomaly_scores.csv")
 
 # --- Neo4j Queries ---
 class Neo4jConnection:
@@ -84,7 +79,7 @@ class Neo4jConnection:
 st.title("🕵️ PIX Fraud Detection Dashboard")
 
 if anomaly_data is None:
-    st.error("`anomaly_scores.csv` not found. Please run the `feature_engineering.py` and `anomaly_detection.py` scripts first.")
+    st.error("`src/data/anomaly_scores.csv` not found. Please run the `feature_engineering.py` and `anomaly_detection.py` scripts first.")
     st.stop()
 
 # Sort by anomaly score to show most suspicious accounts first
