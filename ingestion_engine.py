@@ -34,21 +34,33 @@ def ingest_transaction(driver, tx_data):
 def create_transaction_cypher(tx, tx_data):
     """
     A Cypher query to create a transaction and connect it to accounts.
+    This version is updated for the real-time workflow.
     """
     # Cypher query to merge nodes and create the transaction relationship
+    # It uses sender_id and receiver_id from the real-time stream
     query = (
-        "MERGE (sender:Account {accountId: $from_account_id}) "
-        "ON CREATE SET sender.risk_score = $from_risk_score, sender.account_type = $from_account_type "
-        "MERGE (receiver:Account {accountId: $to_account_id}) "
-        "ON CREATE SET receiver.risk_score = $to_risk_score, receiver.account_type = $to_account_type "
+        "MERGE (sender:Account {accountId: $sender_id}) "
+        "ON CREATE SET sender.risk_score = $sender_risk_score, sender.verified = $sender_verified "
+        "ON MATCH SET sender.risk_score = $sender_risk_score, sender.verified = $sender_verified "
+        "MERGE (receiver:Account {accountId: $receiver_id}) "
+        "ON CREATE SET receiver.risk_score = $receiver_risk_score, receiver.verified = $receiver_verified "
+        "ON MATCH SET receiver.risk_score = $receiver_risk_score, receiver.verified = $receiver_verified "
+        "MERGE (device:Device {deviceId: $device_id}) "
+        "MERGE (ip:IPAddress {ip: $ip_address}) "
         "CREATE (sender)-[:SENT]->(t:Transaction { "
         "  transaction_id: $transaction_id, "
         "  amount: $amount, "
         "  timestamp: datetime($timestamp), "
+        "  transaction_type: $transaction_type, "
         "  fraud_flag: $fraud_flag, "
         "  fraud_probability: $fraud_probability, "
-        "  decision: $decision "
-        "})-[:TO]->(receiver)"
+        "  decision: $decision, "
+        "  merchant_category: $merchant_category, "
+        "  hour: $hour, "
+        "  day_of_week: $day_of_week "
+        "})-[:TO]->(receiver), "
+        "(t)-[:USING_DEVICE]->(device), "
+        "(t)-[:FROM_IP]->(ip)"
     )
     tx.run(query, **tx_data)
 
