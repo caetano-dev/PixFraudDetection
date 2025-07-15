@@ -98,26 +98,7 @@ This script connects to Neo4j, extracts graph and transactional features for eac
 python feature_engineering.py
 ```
 
-### Step 5: Anomaly Detection with Local Outlier Factor (LOF)
-The system uses the Local Outlier Factor (LOF) algorithm to identify accounts whose behavior is highly dissimilar from their peers within the same community. LOF is particularly effective at finding outliers that might be missed by global anomaly detection methods.
-
-```bash
-python anomaly_detection.py --algorithm lof
-```
-
-Alternatively, you can still use Isolation Forest:
-```bash
-python anomaly_detection.py --algorithm isolation_forest
-```
-
-### Step 6: Community Detection with Louvain Algorithm
-The Louvain algorithm detects communities in the transaction graph, helping identify clusters of accounts that frequently transact with each other. This is useful for finding organized fraud rings.
-
-```bash
-python community_detection.py
-```
-
-### Step 6: Production-Ready Feature Engineering
+### Step 5: Production-Ready Feature Engineering
 Extract behavioral features without using fraud flags (production deployment ready):
 
 ```bash
@@ -128,7 +109,7 @@ This creates:
 - `account_features.csv` - Production features (39 behavioral patterns)
 - `evaluation_dataset.csv` - Evaluation dataset with ground truth labels
 
-### Step 7: Anomaly Detection
+### Step 6: Anomaly Detection
 Apply machine learning algorithms to detect fraud patterns:
 
 ```bash
@@ -139,21 +120,21 @@ python anomaly_detection.py --algorithm lof --contamination 0.05
 python anomaly_detection.py --algorithm isolation_forest
 ```
 
-### Step 8: Community Detection
+### Step 7: Community Detection
 Identify suspicious account clusters using Louvain algorithm:
 
 ```bash
 python community_detection.py
 ```
 
-### Step 9: Local Outlier Factor within Communities
+### Step 8: Local Outlier Factor within Communities
 Apply targeted anomaly detection within each community:
 
 ```bash
 python local_outlier_factor.py
 ```
 
-### Step 10: Launch the Investigation Dashboard
+### Step 9: Launch the Investigation Dashboard
 Interactive fraud investigation interface:
 
 ```bash
@@ -342,11 +323,6 @@ For large datasets, consider:
 **Neo4j Password Reset:**
 ```bash
 cypher-shell -u neo4j -p neo4j "ALTER USER neo4j SET PASSWORD 'password'"
-```
-
-**Check Connections:**
-```bash
-python test_setup.py
 ```
 
 ## Project Roadmap & Status
