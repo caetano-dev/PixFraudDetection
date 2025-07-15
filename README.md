@@ -50,95 +50,41 @@ REDIS_DB=0
 
 ## Running the System
 
-The system can be run in two modes: **Batch Analysis Mode** (for data exploration) or **Real-Time Detection Mode** (for live fraud prevention).
-
-### Batch Analysis Mode (Original Workflow)
-
-This mode focuses on post-transaction analysis and investigation of suspicious patterns.
-
-#### Step 1: Generate Data
+### Step 1: Generate Data
 ```bash
 python data_generator.py
 ```
 Creates 10,000 accounts and 300,000 transactions with realistic behavioral patterns.
 
-#### Step 2: Start Ingestion Engine
+### Step 2: Start Ingestion Engine
 ```bash
 python ingestion_engine.py
 ```
 Connects to Redis and Neo4j, ready to process transactions.
 
-#### Step 3: Stream Transactions (new terminal)
+### Step 3: Stream Transactions (new terminal)
 ```bash
 python stream_simulator.py
 ```
 Simulates real-time transaction flow.
 
-#### Step 4: Feature Engineering
+### Step 4: Feature Engineering
 This script connects to Neo4j, extracts graph and transactional features for each account, and saves them to a CSV file.
 
 ```bash
 python feature_engineering.py
 ```
 
-#### Step 5: Anomaly Detection
+### Step 5: Anomaly Detection
 This script loads the features, applies an Isolation Forest model to identify outliers, and saves the results with anomaly scores.
 
 ```bash
 python anomaly_detection.py
 ```
 
-#### Step 6: Launch the Investigation Dashboard
+### Step 6: Launch the Investigation Dashboard
 This command starts the Streamlit application, providing an interactive dashboard to view and investigate anomalous accounts.
 
-```bash
-streamlit run dashboard.py
-```
-
-### Real-Time Detection Mode (New Workflow)
-
-This mode implements live fraud detection with automatic transaction approval/denial.
-
-#### Prerequisites
-Make sure you have the data files ready (run Steps 1 and 4 from Batch Mode first):
-```bash
-python data_generator.py
-python feature_engineering.py
-```
-
-#### Step 1: Train the Supervised Model (One-time)
-```bash
-python model_training.py
-```
-Trains a RandomForestClassifier on historical data and saves the model files for real-time use.
-
-#### Step 2: Start Real-Time Services (3 terminals required)
-
-**Terminal 1 - Start the Real-Time Fraud Detector:**
-```bash
-python realtime_fraud_detector.py
-```
-This service listens for raw transactions, enriches them with features, and makes fraud predictions.
-
-**Terminal 2 - Start the Enhanced Ingestion Engine:**
-```bash
-python ingestion_engine.py
-```
-This modified engine only ingests transactions that have been approved by the fraud detector.
-
-**Terminal 3 - Start the Transaction Stream:**
-```bash
-python stream_simulator.py
-```
-Simulates real-time transaction flow to feed the pipeline.
-
-#### What to Expect
-- **Terminal 1:** Shows real-time decisions like `✅ APPROVED` or `🚨 DENIED` with fraud probability scores.
-- **Terminal 2:** Only processes approved transactions for storage in Neo4j.
-- **Terminal 3:** Publishes transaction messages to Redis.
-
-#### Step 3: Monitor Results
-You can still use the investigation dashboard to analyze the processed data:
 ```bash
 streamlit run dashboard.py
 ```
@@ -151,8 +97,6 @@ streamlit run dashboard.py
 - `feature_engineering.py` - Extracts graph and transactional features for accounts
 - `anomaly_detection.py` - Applies machine learning models to detect anomalies
 - `dashboard.py` - A Streamlit dashboard for investigating anomalies
-- `model_training.py` - Trains a supervised model for real-time fraud detection
-- `realtime_fraud_detector.py` - Service to predict fraud in real-time
 - `test_setup.py` - Verifies system connectivity
 - `requirements.txt` - Python dependencies
 - `.env` - Database configuration
@@ -297,26 +241,3 @@ The final phase is to build an interactive dashboard for investigators to explor
     -   [X] Add a graph visualization component (e.g., `streamlit-agraph`) to the investigation view.
     -   [X] When an account is selected, query its 1-hop and 2-hop neighborhood and render the subgraph visually.
     -   [X] Display properties of a selected node or relationship from the graph.
-
-### **Phase 4: Real-Time Fraud Detection (New)**
-
-This phase implements a supervised machine learning model to detect and block fraudulent transactions in real-time before they are fully processed.
-
--   **Supervised Model Training** (`model_training.py`):
-    -   [X] Create a labeled dataset by joining transaction data with pre-calculated account features.
-    -   [X] Train a `RandomForestClassifier` to distinguish between fraudulent and legitimate transactions.
-    -   [X] Evaluate the model's performance using classification reports and ROC AUC scores.
-    -   [X] Save the trained model and feature scaler for real-time use.
-
--   **Real-Time Detection Service** (`realtime_fraud_detector.py`):
-    -   [X] Create a new service that subscribes to the raw transaction stream from Redis.
-    -   [X] For each transaction, enrich it with real-time features fetched from Neo4j.
-    -   [X] Use the trained model to predict the fraud probability in milliseconds.
-    -   [X] Implement a decision engine:
-        -   Transactions with high probability are **denied** and published to a `fraud_alerts` channel.
-        -   Transactions with low probability are **approved** and published to an `approved_transactions` channel.
-
--   **Updated Ingestion Engine** (`ingestion_engine.py`):
-    -   [X] Modify the engine to subscribe to the `approved_transactions` channel.
-    -   [X] Ensure only approved transactions are written to the Neo4j database.
-    -   [X] Enhance the graph schema to store the `fraud_probability` and `decision` for every transaction.

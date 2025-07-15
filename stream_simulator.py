@@ -15,6 +15,6 @@ for index, row in df_transactions.iterrows():
     message_json = json.dumps(message)
     r.publish(channel_name, message_json)
     print(f"Published: {message_json}")
-    time.sleep(np.random.uniform(0.01, 0.02))
+#    time.sleep(np.random.uniform(0.02, 0.06))
 
 print("Finished publishing all transactions.")
