@@ -23,8 +23,8 @@ def apply_isolation_forest(features_df, features_list):
     features_df['is_outlier'] = (predictions == -1).astype(int)
     
     # Save the model and the scaler for later use
-    joblib.dump(model, 'isolation_forest_model.joblib')
-    joblib.dump(scaler, 'scaler.joblib')
+    joblib.dump(model, './models/isolation_forest_model.joblib')
+    joblib.dump(scaler, './models/scaler.joblib')
     
     return features_df
 
@@ -49,7 +49,7 @@ def apply_local_outlier_factor(features_df, features_list, n_neighbors=20, conta
     features_df['is_outlier'] = (predictions == -1).astype(int)
     
     # Save the scaler for later use (LOF doesn't have a save method as it doesn't support predict)
-    joblib.dump(scaler, 'lof_scaler.joblib')
+    joblib.dump(scaler, './models/lof_scaler.joblib')
     
     return features_df
 
@@ -67,7 +67,7 @@ def main():
     
     # Load features
     try:
-        features_df = pd.read_csv("account_features.csv")
+        features_df = pd.read_csv("./data/account_features.csv")
     except FileNotFoundError:
         print("Error: account_features.csv not found.")
         print("Please run feature_engineering.py first to generate the features.")
@@ -125,7 +125,7 @@ def main():
         model_name = "Local Outlier Factor"
 
     # Save the results
-    output_path = "anomaly_scores.csv"
+    output_path = "./data/anomaly_scores.csv"
     features_df.to_csv(output_path, index=False)
     print(f"{model_name} anomaly detection complete. Results saved to {output_path}")
 

@@ -8,17 +8,17 @@ def load_analysis_results():
     results = {}
     
     # Load community analysis
-    if os.path.exists("community_analysis.csv"):
-        results['community_analysis'] = pd.read_csv("community_analysis.csv")
+    if os.path.exists("./data/community_analysis.csv"):
+        results['community_analysis'] = pd.read_csv("./data/community_analysis.csv")
     
     # Load LOF analysis
-    if os.path.exists("lof_analysis.csv"):
-        results['lof_analysis'] = pd.read_csv("lof_analysis.csv")
+    if os.path.exists("./data/lof_analysis.csv"):
+        results['lof_analysis'] = pd.read_csv("./data/lof_analysis.csv")
     
     # Load anomaly detection results
-    if os.path.exists("anomaly_scores.csv"):
-        results['anomaly_scores'] = pd.read_csv("anomaly_scores.csv")
-    
+    if os.path.exists("./data/anomaly_scores.csv"):
+        results['anomaly_scores'] = pd.read_csv("./data/anomaly_scores.csv")
+
     return results
 
 def evaluate_community_fraud_detection(community_df):
@@ -120,7 +120,7 @@ def evaluate_global_anomaly_detection(anomaly_df):
     
     # We need to load the evaluation dataset to get ground truth
     try:
-        eval_df = pd.read_csv("evaluation_dataset.csv")
+        eval_df = pd.read_csv("./data/evaluation_dataset.csv")
         print("Using evaluation dataset with ground truth labels.")
         
         # Merge with anomaly scores

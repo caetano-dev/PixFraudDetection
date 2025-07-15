@@ -31,9 +31,9 @@ def load_data(filepath):
 
 @st.cache_data
 def load_community_data():
-    community_analysis = load_data("community_analysis.csv")
-    lof_analysis = load_data("lof_analysis.csv")
-    lof_community_summary = load_data("lof_community_summary.csv")
+    community_analysis = load_data("./data/community_analysis.csv")
+    lof_analysis = load_data("./data/lof_analysis.csv")
+    lof_community_summary = load_data("./data/lof_community_summary.csv")
     return community_analysis, lof_analysis, lof_community_summary
 
 @st.cache_resource
@@ -41,7 +41,7 @@ def get_neo4j_driver():
     return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
 driver = get_neo4j_driver()
-anomaly_data = load_data("anomaly_scores.csv")
+anomaly_data = load_data("./data/anomaly_scores.csv")
 community_analysis, lof_analysis, lof_community_summary = load_community_data()
 
 # --- Neo4j Queries ---
