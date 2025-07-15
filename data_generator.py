@@ -50,7 +50,7 @@ def calculate_initial_risk(account_info):
     return min(round(random.uniform(0.1, 0.3) + risk, 2), 1.0)
 
 # Enhanced account generation with more realistic features
-NUM_ACCOUNTS = 4000
+NUM_ACCOUNTS = 6000
 print(f"Generating {NUM_ACCOUNTS} accounts...")
 accounts_data = []
 
@@ -141,14 +141,18 @@ def create_normal_transaction(accounts_df, date):
     }
 
 def create_smurfing_ring(accounts_df, date):
-    """Simulates a smurfing ring with realistic fraud patterns."""
+    """Simulates a smurfing ring with realistic fraud patterns, including rapid distribution and cash-out."""
     ring_transactions = []
     
     high_risk_accounts = accounts_df[accounts_df['risk_score'] > 0.5]
     if len(high_risk_accounts) < 5:
         return []
 
-    victim_id = np.random.choice(accounts_df['account_id'])
+    # A victim with a low-to-medium risk score is more realistic
+    victim_pool = accounts_df[accounts_df['risk_score'] < 0.4]
+    if victim_pool.empty:
+        return []
+    victim_id = np.random.choice(victim_pool['account_id'])
     victim_info = accounts_df[accounts_df['account_id'] == victim_id].iloc[0]
     
     potential_mules = high_risk_accounts[high_risk_accounts['account_id'] != victim_id]
@@ -163,8 +167,9 @@ def create_smurfing_ring(accounts_df, date):
 
     fraud_device, fraud_ip = str(uuid.uuid4()), generate_ip_address()
 
-    stolen_amount = round(np.random.uniform(10000.0, 50000.0), 2)
-    transaction_time = date + timedelta(minutes=np.random.randint(1, 5))
+    # Fraudulent amounts are often just below common thresholds
+    stolen_amount = round(np.random.uniform(8000.0, 9990.0), 2)
+    transaction_time = date + timedelta(seconds=np.random.randint(10, 60)) # Faster initial transfer
     victim_device, victim_ip = get_account_details(accounts_df, victim_id)
     
     ring_transactions.append({
@@ -194,9 +199,10 @@ def create_smurfing_ring(accounts_df, date):
     if not secondary_mules.any():
         return ring_transactions
 
+    # Rapid distribution to secondary mules
     amount_per_mule = round(stolen_amount / len(secondary_mules), 2)
     for mule in secondary_mules:
-        transaction_time += timedelta(seconds=np.random.randint(30, 120))
+        transaction_time += timedelta(seconds=np.random.randint(20, 90)) # Very fast distribution
         mule_info = accounts_df[accounts_df['account_id'] == mule].iloc[0]
         
         ring_transactions.append({
@@ -222,6 +228,37 @@ def create_smurfing_ring(accounts_df, date):
             'sender_risk_score': central_mule_info['risk_score'],
             'receiver_risk_score': mule_info['risk_score']
         })
+
+        # Add a final "cash-out" transaction for each secondary mule
+        cash_out_time = transaction_time + timedelta(minutes=np.random.randint(1, 10))
+        cash_out_receiver_pool = high_risk_accounts[~high_risk_accounts['account_id'].isin(mules)]
+        if not cash_out_receiver_pool.empty:
+            cash_out_receiver_id = np.random.choice(cash_out_receiver_pool['account_id'])
+            cash_out_receiver_info = accounts_df[accounts_df['account_id'] == cash_out_receiver_id].iloc[0]
+            
+            ring_transactions.append({
+                'transaction_id': str(uuid.uuid4()),
+                'sender_id': mule,
+                'receiver_id': cash_out_receiver_id,
+                'amount': round(amount_per_mule * np.random.uniform(0.9, 0.98), 2), # Slightly less to leave dust
+                'timestamp': cash_out_time.isoformat(),
+                'fraud_flag': 'SMURFING_CASH_OUT',
+                'device_id': fraud_device,
+                'ip_address': fraud_ip,
+                'transaction_type': 'payment',
+                'channel': 'web',
+                'merchant_category': 'digital_wallet',
+                'hour_of_day': cash_out_time.hour,
+                'day_of_week': cash_out_time.weekday(),
+                'is_weekend': cash_out_time.weekday() >= 5,
+                'same_state': mule_info['state'] == cash_out_receiver_info['state'],
+                'sender_verified': mule_info['is_verified'],
+                'receiver_verified': cash_out_receiver_info['is_verified'],
+                'sender_state': mule_info['state'],
+                'receiver_state': cash_out_receiver_info['state'],
+                'sender_risk_score': mule_info['risk_score'],
+                'receiver_risk_score': cash_out_receiver_info['risk_score']
+            })
     
     return ring_transactions
 
@@ -238,13 +275,51 @@ def create_circular_payment_ring(accounts_df, date):
 
     fraud_device, fraud_ip = str(uuid.uuid4()), generate_ip_address()
 
-    base_amount = round(np.random.uniform(1000.0, 5000.0), 2)
+    # Use amounts that look less suspicious (not perfect round numbers)
+    base_amount = round(np.random.uniform(1000.0, 5000.0) / 100) * 100 * np.random.uniform(0.95, 1.05)
     transaction_time = date
     
+    # Add "warm-up" transactions for one of the accounts in the cycle
+    warmup_account_id = cycle_accounts[0]
+    for _ in range(np.random.randint(1, 4)):
+        warmup_receiver = np.random.choice(accounts_df[accounts_df['risk_score'] < 0.3]['account_id'])
+        if warmup_receiver == warmup_account_id: continue
+        
+        warmup_time = transaction_time - timedelta(days=np.random.randint(1, 5), hours=np.random.randint(1,12))
+        warmup_amount = round(np.random.uniform(20.0, 150.0), 2)
+        sender_info = accounts_df[accounts_df['account_id'] == warmup_account_id].iloc[0]
+        receiver_info = accounts_df[accounts_df['account_id'] == warmup_receiver].iloc[0]
+        device_id, ip_address = get_account_details(accounts_df, warmup_account_id)
+
+        ring_transactions.append({
+            'transaction_id': str(uuid.uuid4()),
+            'sender_id': warmup_account_id,
+            'receiver_id': warmup_receiver,
+            'amount': warmup_amount,
+            'timestamp': warmup_time.isoformat(),
+            'fraud_flag': 'NORMAL', # Disguised as normal activity
+            'device_id': device_id,
+            'ip_address': ip_address,
+            'transaction_type': 'payment',
+            'channel': 'mobile_app',
+            'merchant_category': 'retail',
+            'hour_of_day': warmup_time.hour,
+            'day_of_week': warmup_time.weekday(),
+            'is_weekend': warmup_time.weekday() >= 5,
+            'same_state': sender_info['state'] == receiver_info['state'],
+            'sender_verified': sender_info['is_verified'],
+            'receiver_verified': receiver_info['is_verified'],
+            'sender_state': sender_info['state'],
+            'receiver_state': receiver_info['state'],
+            'sender_risk_score': sender_info['risk_score'],
+            'receiver_risk_score': receiver_info['risk_score']
+        })
+
+
     for i in range(num_in_cycle):
         sender_id = cycle_accounts[i]
         receiver_id = cycle_accounts[(i + 1) % num_in_cycle]
-        transaction_time += timedelta(minutes=np.random.randint(5, 30))
+        transaction_time += timedelta(minutes=np.random.randint(1, 15)) # Faster cycles
         
         sender_info = accounts_df[accounts_df['account_id'] == sender_id].iloc[0]
         receiver_info = accounts_df[accounts_df['account_id'] == receiver_id].iloc[0]
@@ -395,7 +470,7 @@ def create_business_transaction(accounts_df, date):
     }
 
 # Generate transactions with realistic patterns and fraud rates
-TOTAL_TRANSACTIONS = 40000
+TOTAL_TRANSACTIONS = 500000
 current_date = start_date
 
 print(f"Generating {TOTAL_TRANSACTIONS} transactions... This is going to take a few seconds.")
@@ -422,8 +497,8 @@ while len(transactions) < TOTAL_TRANSACTIONS:
         0.0,    
         0.10,   
         0.25,   
-        0.0005, 
-        0.0005, 
+        0.001,  # Slightly increased fraud probability
+        0.001,  # Slightly increased fraud probability
         0.65    
     ]
 

@@ -8,3 +8,4 @@ scikit-learn
 joblib
 streamlit
 streamlit-agraph
+plotly

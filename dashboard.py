@@ -29,12 +29,20 @@ def load_data(filepath):
         return df
     return None
 
+@st.cache_data
+def load_community_data():
+    community_analysis = load_data("community_analysis.csv")
+    lof_analysis = load_data("lof_analysis.csv")
+    lof_community_summary = load_data("lof_community_summary.csv")
+    return community_analysis, lof_analysis, lof_community_summary
+
 @st.cache_resource
 def get_neo4j_driver():
     return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
 
 driver = get_neo4j_driver()
 anomaly_data = load_data("anomaly_scores.csv")
+community_analysis, lof_analysis, lof_community_summary = load_community_data()
 
 # --- Neo4j Queries ---
 class Neo4jConnection:
@@ -95,7 +103,7 @@ conn = Neo4jConnection()
 kpis = conn.get_kpis()
 
 # Create tabs
-tab1, tab2 = st.tabs(["📈 High-Level Metrics", "🚨 Alerts & Investigation"])
+tab1, tab2, tab3 = st.tabs(["📈 High-Level Metrics", "🚨 Alerts & Investigation", "🔍 Community Analysis"])
 
 with tab1:
     st.header("Platform-Wide Metrics")
@@ -184,3 +192,106 @@ with tab2:
             agraph(nodes=nodes, edges=edges, config=config)
         else:
             st.warning(f"No transaction neighborhood found for account **{selected_account}** within 2 hops.")
+
+with tab3:
+    st.header("Community Analysis (Louvain + LOF)")
+    
+    if community_analysis is not None and not community_analysis.empty:
+        st.subheader("Community Overview")
+        st.write("Communities detected using the Louvain algorithm, sorted by fraud risk.")
+        
+        # Display community analysis table
+        st.dataframe(
+            community_analysis.head(20),
+            use_container_width=True,
+            column_config={
+                "communityId": "Community ID",
+                "communitySize": "Size",
+                "avgRiskScore": st.column_config.NumberColumn(
+                    "Avg Risk Score",
+                    format="%.3f",
+                ),
+                "fraudRate": st.column_config.NumberColumn(
+                    "Fraud Rate",
+                    format="%.3f",
+                ),
+                "totalFraudTransactions": "Fraud Transactions",
+                "totalAmount": st.column_config.NumberColumn(
+                    "Total Amount",
+                    format="R$ %.2f",
+                ),
+            },
+            hide_index=True,
+        )
+        
+        # Community fraud rate chart
+        if 'fraudRate' in community_analysis.columns:
+            fig_community = px.bar(
+                community_analysis.head(10),
+                x="communityId",
+                y="fraudRate",
+                title="Top 10 Communities by Fraud Rate",
+                labels={"communityId": "Community ID", "fraudRate": "Fraud Rate"},
+                color="fraudRate",
+                color_continuous_scale="Reds"
+            )
+            st.plotly_chart(fig_community, use_container_width=True)
+    else:
+        st.info("Community analysis data not found. Run `python community_detection.py` first.")
+    
+    if lof_analysis is not None and not lof_analysis.empty:
+        st.subheader("Local Outlier Factor (LOF) Results")
+        st.write("Accounts that are outliers within their own communities.")
+        
+        # Show top LOF outliers
+        lof_outliers = lof_analysis[lof_analysis['is_lof_outlier'] == 1].sort_values('lof_score').head(20)
+        
+        if not lof_outliers.empty:
+            st.dataframe(
+                lof_outliers[['accountId', 'community', 'lof_score', 'riskScore', 'fraudulentTransactions', 'totalTransactionAmount']],
+                use_container_width=True,
+                column_config={
+                    "accountId": "Account ID",
+                    "community": "Community",
+                    "lof_score": st.column_config.NumberColumn(
+                        "LOF Score",
+                        help="Lower (more negative) scores are more anomalous.",
+                        format="%.4f",
+                    ),
+                    "riskScore": st.column_config.NumberColumn(
+                        "Risk Score",
+                        format="%.3f",
+                    ),
+                    "fraudulentTransactions": "Fraud Transactions",
+                    "totalTransactionAmount": st.column_config.NumberColumn(
+                        "Total Amount",
+                        format="R$ %.2f",
+                    ),
+                },
+                hide_index=True,
+            )
+        else:
+            st.info("No LOF outliers detected.")
+        
+        if lof_community_summary is not None and not lof_community_summary.empty:
+            st.subheader("Community LOF Summary")
+            st.dataframe(
+                lof_community_summary.head(15),
+                use_container_width=True,
+                column_config={
+                    "community": "Community ID",
+                    "total_members": "Members",
+                    "outlier_count": "Outliers",
+                    "outlier_rate": st.column_config.NumberColumn(
+                        "Outlier Rate",
+                        format="%.2%",
+                    ),
+                    "avg_risk_score": st.column_config.NumberColumn(
+                        "Avg Risk Score",
+                        format="%.3f",
+                    ),
+                },
+                hide_index=True,
+            )
+    else:
+        st.info("LOF analysis data not found. Run `python local_outlier_factor.py` first.")

@@ -20,81 +20,341 @@ class Neo4jConnection:
 
 def get_graph_features(conn):
     """
-    Calculates graph-based features for each account.
-    - Total degree (in + out)
-    - In-degree
-    - Out-degree
+    Calculates comprehensive graph-based features for each account.
+    - Transaction degree (in + out)
+    - Account degree via MONEY_FLOW relationships
+    - In-degree and out-degree separately
     """
-    print("Calculating graph features (degree)...")
+    print("Calculating graph features...")
     query = """
     MATCH (a:Account)
+    
+    // Transaction-based degree (via SENT and RECEIVED_BY relationships)
+    OPTIONAL MATCH (a)-[:SENT]->(t:Transaction)
+    WITH a, count(t) AS sentTransactions
+    
+    OPTIONAL MATCH (t2:Transaction)-[:RECEIVED_BY]->(a)
+    WITH a, sentTransactions, count(t2) AS receivedTransactions
+    
+    // Account-to-account degree (via MONEY_FLOW relationships)
+    OPTIONAL MATCH (a)-[:MONEY_FLOW]->(other:Account)
+    WITH a, sentTransactions, receivedTransactions, count(other) AS outFlowDegree
+    
+    OPTIONAL MATCH (other2:Account)-[:MONEY_FLOW]->(a)
+    WITH a, sentTransactions, receivedTransactions, outFlowDegree, count(other2) AS inFlowDegree
+    
     RETURN a.accountId AS accountId,
-           COUNT { (a)<--(:Transaction) } AS inDegree,
-           COUNT { (a)-->(:Transaction) } AS outDegree,
-           COUNT { (a)--(:Transaction) } AS totalDegree
+           sentTransactions AS outDegree,
+           receivedTransactions AS inDegree,
+           sentTransactions + receivedTransactions AS totalDegree,
+           outFlowDegree,
+           inFlowDegree,
+           outFlowDegree + inFlowDegree AS totalFlowDegree
     """
     return conn.query(query)
 
 def get_transactional_features(conn):
     """
-    Calculates transaction-based features for each account.
-    - Total transaction amount
-    - Average transaction amount
-    - Maximum transaction amount
-    - Total number of transactions
-    - Number of fraudulent transactions linked to the account
+    Calculates comprehensive transaction-based features for each account.
+    NOTE: No fraud flags used - only observable behavioral patterns
     """
     print("Calculating transactional features...")
     query = """
-    MATCH (a:Account)-[:SENT]->(t:Transaction)
+    MATCH (a:Account)
+    
+    // Sent transactions features
+    OPTIONAL MATCH (a)-[:SENT]->(t:Transaction)
+    WITH a, 
+         count(t) AS sentCount,
+         COALESCE(sum(t.amount), 0) AS totalSentAmount,
+         COALESCE(avg(t.amount), 0) AS avgSentAmount,
+         COALESCE(max(t.amount), 0) AS maxSentAmount,
+         COALESCE(min(t.amount), 0) AS minSentAmount,
+         COALESCE(stdev(t.amount), 0) AS amountVariance,
+         collect(t.deviceId) AS sentDevices,
+         collect(t.channel) AS sentChannels,
+         count(CASE WHEN t.isWeekend = true THEN 1 END) AS weekendSentTransactions,
+         count(CASE WHEN t.hourOfDay >= 22 OR t.hourOfDay <= 5 THEN 1 END) AS nightSentTransactions
+    
+    // Received transactions features
+    OPTIONAL MATCH (t2:Transaction)-[:RECEIVED_BY]->(a)
+    WITH a, sentCount, totalSentAmount, avgSentAmount, maxSentAmount, minSentAmount, amountVariance,
+         sentDevices, sentChannels, weekendSentTransactions, nightSentTransactions,
+         count(t2) AS receivedCount,
+         COALESCE(sum(t2.amount), 0) AS totalReceivedAmount,
+         COALESCE(avg(t2.amount), 0) AS avgReceivedAmount,
+         COALESCE(max(t2.amount), 0) AS maxReceivedAmount,
+         COALESCE(min(t2.amount), 0) AS minReceivedAmount,
+         COALESCE(stdev(t2.amount), 0) AS receivedAmountVariance,
+         collect(t2.deviceId) AS receivedDevices,
+         collect(t2.channel) AS receivedChannels,
+         count(CASE WHEN t2.isWeekend = true THEN 1 END) AS weekendReceivedTransactions,
+         count(CASE WHEN t2.hourOfDay >= 22 OR t2.hourOfDay <= 5 THEN 1 END) AS nightReceivedTransactions
+    
+    // Count unique counterparties
+    OPTIONAL MATCH (a)-[:SENT]->(t3:Transaction)-[:RECEIVED_BY]->(counterparty:Account)
+    WITH a, sentCount, totalSentAmount, avgSentAmount, maxSentAmount, minSentAmount, amountVariance,
+         sentDevices, sentChannels, weekendSentTransactions, nightSentTransactions,
+         receivedCount, totalReceivedAmount, avgReceivedAmount, maxReceivedAmount, minReceivedAmount, receivedAmountVariance,
+         receivedDevices, receivedChannels, weekendReceivedTransactions, nightReceivedTransactions,
+         count(DISTINCT counterparty) AS uniqueCounterparties
+    
     RETURN a.accountId AS accountId,
-           sum(t.amount) AS totalAmount,
-           avg(t.amount) AS avgAmount,
-           max(t.amount) AS maxAmount,
-           count(t) AS transactionCount,
-           sum(CASE WHEN t.fraudFlag STARTS WITH 'SMURFING' OR t.fraudFlag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END) as fraudTransactionCount
+           sentCount,
+           receivedCount,
+           sentCount + receivedCount AS totalTransactions,
+           uniqueCounterparties,
+           totalSentAmount,
+           totalReceivedAmount,
+           totalSentAmount + totalReceivedAmount AS totalAmount,
+           avgSentAmount,
+           avgReceivedAmount,
+           (totalSentAmount + totalReceivedAmount) / CASE WHEN (sentCount + receivedCount) > 0 THEN (sentCount + receivedCount) ELSE 1 END AS avgTransactionAmount,
+           maxSentAmount,
+           maxReceivedAmount,
+           CASE WHEN maxSentAmount > maxReceivedAmount THEN maxSentAmount ELSE maxReceivedAmount END AS maxTransactionAmount,
+           minSentAmount,
+           minReceivedAmount,
+           CASE WHEN minSentAmount < minReceivedAmount AND minSentAmount > 0 THEN minSentAmount ELSE minReceivedAmount END AS minTransactionAmount,
+           CASE WHEN receivedCount > 0 THEN toFloat(sentCount) / receivedCount ELSE 0 END AS sentToReceivedRatio,
+           amountVariance,
+           
+           // Device and channel diversity (simplified - no APOC needed)
+           size([x IN sentDevices + receivedDevices WHERE x IS NOT NULL]) AS uniqueDevices,
+           size([x IN sentChannels + receivedChannels WHERE x IS NOT NULL]) AS uniqueChannels,
+           CASE WHEN (sentCount + receivedCount) > 0 
+                THEN toFloat(size([x IN sentDevices + receivedDevices WHERE x IS NOT NULL])) / (sentCount + receivedCount) 
+                ELSE 0 END AS deviceDiversityRatio,
+           CASE WHEN (sentCount + receivedCount) > 0 
+                THEN toFloat(size([x IN sentChannels + receivedChannels WHERE x IS NOT NULL])) / (sentCount + receivedCount) 
+                ELSE 0 END AS channelDiversityRatio,
+           
+           // Temporal patterns (fraud indicators)
+           weekendSentTransactions + weekendReceivedTransactions AS weekendTransactions,
+           nightSentTransactions + nightReceivedTransactions AS nightTransactions,
+           CASE WHEN (sentCount + receivedCount) > 0 
+                THEN toFloat(weekendSentTransactions + weekendReceivedTransactions) / (sentCount + receivedCount) 
+                ELSE 0 END AS weekendTransactionRatio,
+           CASE WHEN (sentCount + receivedCount) > 0 
+                THEN toFloat(nightSentTransactions + nightReceivedTransactions) / (sentCount + receivedCount) 
+                ELSE 0 END AS nightTransactionRatio
     """
     return conn.query(query)
 
 def get_account_risk_features(conn):
     """
-    Retrieves the pre-calculated risk score from the account node.
+    Retrieves account-level features including risk scores and verification status.
     """
-    print("Retrieving account risk scores...")
+    print("Retrieving account features...")
     query = """
     MATCH (a:Account)
-    RETURN a.accountId AS accountId, a.risk_score as riskScore
+    RETURN a.accountId AS accountId, 
+           COALESCE(a.risk_score, 0) AS riskScore,
+           CASE WHEN a.is_verified = true THEN 1 ELSE 0 END AS isVerified
     """
     return conn.query(query)
+
+def get_money_flow_features(conn):
+    """
+    Calculates money flow features between accounts (observable patterns).
+    No fraud flags used - focuses on network behavior patterns.
+    """
+    print("Calculating money flow features...")
+    query = """
+    MATCH (a:Account)
+    
+    // Outgoing money flows
+    OPTIONAL MATCH (a)-[flow_out:MONEY_FLOW]->(other:Account)
+    WITH a, 
+         count(flow_out) AS outFlowCount,
+         COALESCE(sum(flow_out.totalAmount), 0) AS totalOutFlowAmount,
+         COALESCE(avg(flow_out.totalAmount), 0) AS avgOutFlowAmount,
+         COALESCE(max(flow_out.totalAmount), 0) AS maxOutFlowAmount,
+         count(DISTINCT other) AS uniqueOutFlowPartners
+    
+    // Incoming money flows  
+    OPTIONAL MATCH (other2:Account)-[flow_in:MONEY_FLOW]->(a)
+    WITH a, outFlowCount, totalOutFlowAmount, avgOutFlowAmount, maxOutFlowAmount, uniqueOutFlowPartners,
+         count(flow_in) AS inFlowCount,
+         COALESCE(sum(flow_in.totalAmount), 0) AS totalInFlowAmount,
+         COALESCE(avg(flow_in.totalAmount), 0) AS avgInFlowAmount,
+         COALESCE(max(flow_in.totalAmount), 0) AS maxInFlowAmount,
+         count(DISTINCT other2) AS uniqueInFlowPartners
+    
+    // Circular flow detection (potential money laundering indicator)
+    OPTIONAL MATCH (a)-[flow1:MONEY_FLOW]->(intermediate:Account)-[flow2:MONEY_FLOW]->(a)
+    WITH a, outFlowCount, totalOutFlowAmount, avgOutFlowAmount, maxOutFlowAmount, uniqueOutFlowPartners,
+         inFlowCount, totalInFlowAmount, avgInFlowAmount, maxInFlowAmount, uniqueInFlowPartners,
+         count(DISTINCT intermediate) AS circularFlowPartners
+    
+    RETURN a.accountId AS accountId,
+           outFlowCount,
+           inFlowCount,
+           outFlowCount + inFlowCount AS totalFlowCount,
+           totalOutFlowAmount,
+           totalInFlowAmount,
+           totalOutFlowAmount + totalInFlowAmount AS totalFlowAmount,
+           avgOutFlowAmount,
+           avgInFlowAmount,
+           maxOutFlowAmount,
+           maxInFlowAmount,
+           uniqueOutFlowPartners,
+           uniqueInFlowPartners,
+           uniqueOutFlowPartners + uniqueInFlowPartners AS totalUniquePartners,
+           circularFlowPartners,
+           
+           // Flow behavior ratios (fraud indicators)
+           CASE WHEN (outFlowCount + inFlowCount) > 0 
+                THEN toFloat(inFlowCount) / (outFlowCount + inFlowCount) 
+                ELSE 0 END AS inFlowRatio,
+           CASE WHEN totalInFlowAmount > 0 
+                THEN totalOutFlowAmount / totalInFlowAmount 
+                ELSE 0 END AS outToInFlowAmountRatio,
+           CASE WHEN (uniqueOutFlowPartners + uniqueInFlowPartners) > 0 
+                THEN toFloat(circularFlowPartners) / (uniqueOutFlowPartners + uniqueInFlowPartners) 
+                ELSE 0 END AS circularityRatio
+    """
+    return conn.query(query)
+
+def get_velocity_features(conn):
+    """
+    Calculates transaction velocity features (time-based patterns).
+    High velocity can indicate automated fraud or money laundering.
+    """
+    print("Calculating velocity features...")
+    query = """
+    MATCH (a:Account)
+    
+    // Transaction timing analysis
+    OPTIONAL MATCH (a)-[:SENT]->(t:Transaction)
+    WITH a, collect(t.timestamp) AS sentTimestamps
+    
+    OPTIONAL MATCH (t2:Transaction)-[:RECEIVED_BY]->(a)
+    WITH a, sentTimestamps, collect(t2.timestamp) AS receivedTimestamps
+    
+    // Calculate time differences between consecutive transactions
+    WITH a, sentTimestamps + receivedTimestamps AS allTimestamps
+    WHERE size(allTimestamps) > 1
+    
+    WITH a, allTimestamps,
+         [i in range(0, size(allTimestamps)-2) | 
+          duration.between(datetime(allTimestamps[i]), datetime(allTimestamps[i+1])).seconds] AS timeDifferences
+    
+    RETURN a.accountId AS accountId,
+           size(allTimestamps) AS totalTransactions,
+           CASE WHEN size(timeDifferences) > 0 
+                THEN reduce(sum = 0, diff IN timeDifferences | sum + diff) / size(timeDifferences) 
+                ELSE 0 END AS avgTimeBetweenTransactions,
+           CASE WHEN size(timeDifferences) > 0 
+                THEN reduce(min = timeDifferences[0], diff IN timeDifferences | 
+                     CASE WHEN diff < min THEN diff ELSE min END) 
+                ELSE 0 END AS minTimeBetweenTransactions,
+           size([diff IN timeDifferences WHERE diff < 60]) AS transactionsWithin1Min,
+           size([diff IN timeDifferences WHERE diff < 300]) AS transactionsWithin5Min,
+           
+           // Velocity ratios
+           CASE WHEN size(timeDifferences) > 0 
+                THEN toFloat(size([diff IN timeDifferences WHERE diff < 60])) / size(timeDifferences) 
+                ELSE 0 END AS rapidTransactionRatio
+    """
+    return conn.query(query)
+
+def create_evaluation_dataset(conn, features_df):
+    """
+    Creates a separate dataset with fraud labels for evaluation purposes only.
+    In a real system, this would be used to measure model performance against known fraud cases.
+    """
+    print("Creating evaluation dataset with ground truth labels...")
+    
+    query = """
+    MATCH (a:Account)
+    
+    // Count actual fraud transactions (for evaluation only)
+    OPTIONAL MATCH (a)-[:SENT]->(t:Transaction)
+    WITH a, count(CASE WHEN t.fraudFlag STARTS WITH 'SMURFING' OR t.fraudFlag = 'CIRCULAR_PAYMENT' THEN 1 END) AS sentFraudCount
+    
+    OPTIONAL MATCH (t2:Transaction)-[:RECEIVED_BY]->(a)
+    WITH a, sentFraudCount, count(CASE WHEN t2.fraudFlag STARTS WITH 'SMURFING' OR t2.fraudFlag = 'CIRCULAR_PAYMENT' THEN 1 END) AS receivedFraudCount
+    
+    RETURN a.accountId AS accountId,
+           sentFraudCount,
+           receivedFraudCount,
+           sentFraudCount + receivedFraudCount AS totalFraudCount,
+           CASE WHEN sentFraudCount + receivedFraudCount > 0 THEN 1 ELSE 0 END AS isFraudulent
+    """
+    
+    fraud_labels = conn.query(query)
+    fraud_df = pd.DataFrame(fraud_labels)
+    
+    # Merge with features for evaluation
+    evaluation_df = features_df.merge(fraud_df, on='accountId', how='left')
+    evaluation_df = evaluation_df.fillna(0)
+    
+    evaluation_df.to_csv("evaluation_dataset.csv", index=False)
+    print(f"Evaluation dataset saved to evaluation_dataset.csv")
+    
+    # Print fraud statistics for reference
+    fraud_accounts = evaluation_df[evaluation_df['isFraudulent'] == 1]
+    print(f"Ground truth: {len(fraud_accounts)} fraudulent accounts out of {len(evaluation_df)} total accounts")
 
 
 def main():
     # Database connection
     uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USERNAME")
+    user = os.getenv("NEO4J_USERNAME") 
     password = os.getenv("NEO4J_PASSWORD")
     conn = Neo4jConnection(uri, user, password)
-
-    # Feature extraction
-    graph_features = get_graph_features(conn)
-    transactional_features = get_transactional_features(conn)
-    risk_features = get_account_risk_features(conn)
-
-    # Merge features into a single DataFrame
-    print("Merging features...")
-    features_df = pd.merge(graph_features, transactional_features, on="accountId", how="outer")
-    features_df = pd.merge(features_df, risk_features, on="accountId", how="outer")
-
-    # Fill NaN values for accounts that might not have transactions
-    features_df.fillna(0, inplace=True)
-
-    # Save to CSV
-    output_path = "account_features.csv"
-    features_df.to_csv(output_path, index=False)
-    print(f"Feature engineering complete. Data saved to {output_path}")
-
-    # Close the connection
-    conn.close()
+    
+    print("Starting production-ready feature engineering...")
+    print("(No fraud flags used - features based on observable behavioral patterns only)")
+    
+    try:
+        # Extract behavioral features (production-ready)
+        transactional_features = get_transactional_features(conn)
+        money_flow_features = get_money_flow_features(conn)
+        velocity_features = get_velocity_features(conn)
+        
+        # Convert to DataFrames
+        transactional_df = pd.DataFrame(transactional_features)
+        money_flow_df = pd.DataFrame(money_flow_features)
+        velocity_df = pd.DataFrame(velocity_features)
+        
+        print(f"Extracted features for {len(transactional_df)} accounts")
+        
+        # Merge all features on accountId
+        features_df = transactional_df.merge(money_flow_df, on='accountId', how='outer')
+        features_df = features_df.merge(velocity_df, on='accountId', how='outer')
+        
+        # Fill NaN values with 0 (accounts with no activity)
+        features_df = features_df.fillna(0)
+        
+        # Save production features (no fraud labels)
+        features_df.to_csv("account_features.csv", index=False)
+        print(f"Production features saved to account_features.csv")
+        
+        # Create separate evaluation dataset with ground truth
+        create_evaluation_dataset(conn, features_df)
+        
+        print("\nFeature Summary:")
+        print(f"- Total accounts: {len(features_df)}")
+        print(f"- Total features: {len(features_df.columns) - 1}")  # Excluding accountId
+        print("- Features focus on observable behavioral patterns")
+        print("- No fraud flags used (production-ready)")
+        print("- Evaluation dataset created separately for model validation")
+        
+        # Display basic feature statistics
+        print("\nKey Feature Ranges:")
+        numeric_cols = features_df.select_dtypes(include=['number']).columns
+        for col in numeric_cols[:10]:  # Show first 10 numeric features
+            if col != 'accountId':
+                print(f"  {col}: {features_df[col].min():.2f} - {features_df[col].max():.2f}")
+        
+    except Exception as e:
+        print(f"Error during feature extraction: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     main()
