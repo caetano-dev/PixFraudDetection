@@ -110,12 +110,11 @@ def apply_lof_within_communities(features_df, n_neighbors=5, contamination=0.1):
     """
     print("Applying Local Outlier Factor within communities...")
     
-    # Features to use for LOF
+    # Features to use for LOF (production-ready features only - NO FRAUD FLAGS)
     feature_columns = [
         'riskScore', 'isVerified', 'sentTransactions', 'receivedTransactions',
         'totalTransactionAmount', 'avgSentAmount', 'avgReceivedAmount', 'maxSentAmount',
-        'fraudulentTransactions', 'totalFraudAmount', 'totalConnections',
-        'internalConnectionRatio', 'internalAmountRatio'
+        'totalConnections', 'internalConnectionRatio', 'internalAmountRatio'
     ]
     
     results = []
@@ -175,6 +174,10 @@ def analyze_lof_results(lof_results):
     print(f"Outlier rate: {(total_outliers/total_accounts)*100:.2f}%")
     print(f"Communities with outliers: {communities_with_outliers}")
     
+    # Fraud detection performance evaluation
+    if 'fraudulentTransactions' in lof_results.columns:
+        evaluate_fraud_detection_performance(lof_results)
+    
     # Top outliers by LOF score (most negative scores are most anomalous)
     top_outliers = lof_results.sort_values('lof_score').head(20)
     print(f"\nTop 20 most anomalous accounts (by LOF score):")
@@ -201,6 +204,94 @@ def analyze_lof_results(lof_results):
     print(community_summary.to_string(index=False))
     
     return top_outliers, community_summary
+
+def evaluate_fraud_detection_performance(lof_results):
+    """
+    Evaluates how well LOF detects accounts with fraudulent transactions.
+    This is for evaluation only - fraud flags would not be available in production.
+    """
+    print("\n" + "="*60)
+    print("FRAUD DETECTION PERFORMANCE EVALUATION")
+    print("(Note: Uses fraud flags for evaluation only - not used in model)")
+    print("="*60)
+    
+    # Create binary fraud labels (1 if account has any fraudulent transactions, 0 otherwise)
+    has_fraud = (lof_results['fraudulentTransactions'] > 0).astype(int)
+    is_outlier = lof_results['is_lof_outlier']
+    
+    # Calculate confusion matrix elements
+    true_positives = ((has_fraud == 1) & (is_outlier == 1)).sum()
+    false_positives = ((has_fraud == 0) & (is_outlier == 1)).sum()
+    true_negatives = ((has_fraud == 0) & (is_outlier == 0)).sum()
+    false_negatives = ((has_fraud == 1) & (is_outlier == 0)).sum()
+    
+    # Calculate metrics
+    precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
+    recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
+    f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+    accuracy = (true_positives + true_negatives) / len(lof_results)
+    
+    # Fraud detection statistics
+    total_fraud_accounts = has_fraud.sum()
+    detected_fraud_accounts = true_positives
+    fraud_detection_rate = detected_fraud_accounts / total_fraud_accounts if total_fraud_accounts > 0 else 0
+    
+    print(f"Fraud Detection Performance:")
+    print(f"  Total accounts with fraud: {total_fraud_accounts}")
+    print(f"  Fraud accounts detected by LOF: {detected_fraud_accounts}")
+    print(f"  Fraud detection rate: {fraud_detection_rate:.2%}")
+    print(f"  Precision: {precision:.3f}")
+    print(f"  Recall: {recall:.3f}")
+    print(f"  F1-Score: {f1_score:.3f}")
+    print(f"  Accuracy: {accuracy:.3f}")
+    
+    print(f"\nConfusion Matrix:")
+    print(f"                    Predicted")
+    print(f"                Normal  Outlier")
+    print(f"Actual Normal     {true_negatives:6d}   {false_positives:6d}")
+    print(f"Actual Fraud      {false_negatives:6d}   {true_positives:6d}")
+    
+    # Top performing communities for fraud detection
+    community_fraud_performance = lof_results.groupby('community').agg({
+        'fraudulentTransactions': lambda x: (x > 0).sum(),  # Count of accounts with fraud
+        'is_lof_outlier': 'sum',  # Count of detected outliers
+        'accountId': 'count'  # Total accounts in community
+    }).reset_index()
+    
+    community_fraud_performance['fraud_accounts'] = community_fraud_performance['fraudulentTransactions'] 
+    community_fraud_performance['detected_outliers'] = community_fraud_performance['is_lof_outlier']
+    community_fraud_performance['total_accounts'] = community_fraud_performance['accountId']
+    
+    # Calculate hit rate per community (how many fraud accounts were detected as outliers)
+    community_fraud_performance['fraud_hit_rate'] = 0
+    for _, row in community_fraud_performance.iterrows():
+        community_id = row['community']
+        community_data = lof_results[lof_results['community'] == community_id]
+        fraud_accounts = community_data[community_data['fraudulentTransactions'] > 0]
+        if len(fraud_accounts) > 0:
+            detected_frauds = fraud_accounts[fraud_accounts['is_lof_outlier'] == 1]
+            community_fraud_performance.loc[community_fraud_performance['community'] == community_id, 'fraud_hit_rate'] = len(detected_frauds) / len(fraud_accounts)
+    
+    # Show top communities by fraud detection performance
+    top_fraud_detection = community_fraud_performance[
+        community_fraud_performance['fraud_accounts'] > 0
+    ].sort_values('fraud_hit_rate', ascending=False).head(10)
+    
+    if not top_fraud_detection.empty:
+        print(f"\nTop 10 Communities by Fraud Detection Rate:")
+        print(top_fraud_detection[['community', 'fraud_accounts', 'detected_outliers', 'fraud_hit_rate']].to_string(index=False))
+    
+    return {
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1_score,
+        'accuracy': accuracy,
+        'fraud_detection_rate': fraud_detection_rate,
+        'true_positives': true_positives,
+        'false_positives': false_positives,
+        'true_negatives': true_negatives,
+        'false_negatives': false_negatives
+    }
 
 def update_neo4j_with_lof_results(conn, lof_results):
     """
