@@ -30,7 +30,7 @@ def get_community_features(conn):
     
     query = """
     MATCH (a:Account)
-    WHERE a.community IS NOT NULL
+    WHERE a.communityId IS NOT NULL
     
     // Get basic account features
     OPTIONAL MATCH (a)-[:SENT]->(t:Transaction)
@@ -57,7 +57,7 @@ def get_community_features(conn):
     
     // Get community connections (internal vs external)
     OPTIONAL MATCH (a)-[r:MONEY_FLOW]->(other:Account)
-    WHERE other.community = a.community
+    WHERE other.communityId = a.communityId
     WITH a, sentTransactions, totalSentAmount, avgSentAmount, maxSentAmount,
          receivedTransactions, totalReceivedAmount, avgReceivedAmount,
          fraudulentTransactions, totalFraudAmount,
@@ -65,7 +65,7 @@ def get_community_features(conn):
          COALESCE(sum(r.totalAmount), 0) AS internalTransactionAmount
     
     OPTIONAL MATCH (a)-[r2:MONEY_FLOW]->(external:Account)
-    WHERE external.community <> a.community
+    WHERE external.communityId <> a.communityId
     WITH a, sentTransactions, totalSentAmount, avgSentAmount, maxSentAmount,
          receivedTransactions, totalReceivedAmount, avgReceivedAmount,
          fraudulentTransactions, totalFraudAmount,
@@ -74,9 +74,9 @@ def get_community_features(conn):
          COALESCE(sum(r2.totalAmount), 0) AS externalTransactionAmount
     
     RETURN a.accountId AS accountId,
-           a.community AS community,
-           a.risk_score AS riskScore,
-           CASE WHEN a.is_verified THEN 1 ELSE 0 END AS isVerified,
+           a.communityId AS community,
+           a.riskScore AS riskScore,
+           CASE WHEN a.isVerified THEN 1 ELSE 0 END AS isVerified,
            sentTransactions,
            receivedTransactions,
            sentTransactions + receivedTransactions AS totalTransactions,
@@ -99,7 +99,7 @@ def get_community_features(conn):
            CASE WHEN (internalTransactionAmount + externalTransactionAmount) > 0 
                 THEN toFloat(internalTransactionAmount) / (internalTransactionAmount + externalTransactionAmount) 
                 ELSE 0 END AS internalAmountRatio
-    ORDER BY a.community, a.risk_score DESC
+    ORDER BY a.communityId, a.riskScore DESC
     """
     
     return conn.query(query)
@@ -235,7 +235,7 @@ def main():
 
     try:
         # Check if community detection has been run
-        community_check = conn.query("MATCH (a:Account) WHERE a.community IS NOT NULL RETURN count(a) as count")
+        community_check = conn.query("MATCH (a:Account) WHERE a.communityId IS NOT NULL RETURN count(a) as count")
         if community_check.iloc[0]['count'] == 0:
             print("Error: No communities found. Please run community_detection.py first.")
             return
