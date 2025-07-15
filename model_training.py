@@ -16,10 +16,10 @@ def main():
     # --- 1. Data Loading and Preparation ---
     try:
         # Use low_memory=False to handle mixed types more efficiently
-        transactions_df = pd.read_csv("src/data/pix_transactions.csv", low_memory=False)
-        account_features_df = pd.read_csv("src/data/account_features.csv")
+        transactions_df = pd.read_csv("pix_transactions.csv", low_memory=False)
+        account_features_df = pd.read_csv("account_features.csv")
     except FileNotFoundError as e:
-        print(f"Error: {e}. Make sure 'src/data/pix_transactions.csv' and 'src/data/account_features.csv' exist.")
+        print(f"Error: {e}. Make sure 'pix_transactions.csv' and 'account_features.csv' exist.")
         print("Please run data_generator.py and feature_engineering.py first.")
         return
 
@@ -110,9 +110,9 @@ def main():
     print(f"ROC AUC Score: {auc_score:.4f}")
 
     # --- 5. Save the Model, Scaler, and Feature List ---
-    model_path = 'src/models/realtime_fraud_model.joblib'
-    scaler_path = 'src/models/realtime_scaler.joblib'
-    features_path = 'src/models/realtime_features.joblib'
+    model_path = 'realtime_fraud_model.joblib'
+    scaler_path = 'realtime_scaler.joblib'
+    features_path = 'realtime_features.joblib'
     
     joblib.dump(model, model_path)
     joblib.dump(scaler, scaler_path)

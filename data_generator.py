@@ -92,8 +92,8 @@ for _ in range(NUM_ACCOUNTS):
     })
 
 accounts_df = pd.DataFrame(accounts_data)
-accounts_df.to_csv('src/data/pix_accounts.csv', index=False)
-print("Accounts generated and saved to src/data/pix_accounts.csv.")
+accounts_df.to_csv('pix_accounts.csv', index=False, mode='a')
+print("Accounts generated and saved to pix_accounts.csv.")
 
 # Transaction generation with time-based patterns and realistic fraud rates
 transactions = []
@@ -468,9 +468,9 @@ while len(transactions) < TOTAL_TRANSACTIONS:
 print("Generation complete. Preparing final CSV...")
 transactions_df = pd.DataFrame(transactions)
 transactions_df = transactions_df.sample(frac=1).reset_index(drop=True)  
-transactions_df.to_csv('src/data/pix_transactions.csv', index=False)
+transactions_df.to_csv('pix_transactions.csv', index=False, mode='a')
 
-print(f"Successfully created src/data/pix_transactions.csv with {len(transactions_df)} rows.")
+print(f"Successfully created pix_transactions.csv with {len(transactions_df)} rows.")
 
 fraud_counts = transactions_df['fraud_flag'].value_counts()
 normal_flags = ['NORMAL', 'NORMAL_MICRO', 'NORMAL_SALARY', 'NORMAL_B2B']

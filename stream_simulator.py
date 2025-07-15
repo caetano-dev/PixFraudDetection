@@ -3,10 +3,9 @@ import pandas as pd
 import numpy as np
 import json
 import time
-from src.config.config import REDIS_HOST, REDIS_PORT, REDIS_DB
 
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
-df_transactions = pd.read_csv('src/data/pix_transactions.csv')
+r = redis.Redis(host='localhost', port=6379, db=0)
+df_transactions = pd.read_csv('pix_transactions.csv')
 channel_name = 'pix_transactions'
 
 print(f"Starting to publish transactions to channel '{channel_name}'...")

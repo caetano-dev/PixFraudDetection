@@ -1,7 +1,10 @@
 import os
 import pandas as pd
 from neo4j import GraphDatabase
-from src.config.config import NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class Neo4jConnection:
     def __init__(self, uri, user, password):
@@ -67,7 +70,10 @@ def get_account_risk_features(conn):
 
 def main():
     # Database connection
-    conn = Neo4jConnection(NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD)
+    uri = os.getenv("NEO4J_URI")
+    user = os.getenv("NEO4J_USERNAME")
+    password = os.getenv("NEO4J_PASSWORD")
+    conn = Neo4jConnection(uri, user, password)
 
     # Feature extraction
     graph_features = get_graph_features(conn)
@@ -83,7 +89,7 @@ def main():
     features_df.fillna(0, inplace=True)
 
     # Save to CSV
-    output_path = "src/data/account_features.csv"
+    output_path = "account_features.csv"
     features_df.to_csv(output_path, index=False)
     print(f"Feature engineering complete. Data saved to {output_path}")
 

@@ -1,22 +1,32 @@
 import redis
 import json
+import os
+from neo4j import GraphDatabase
+from dotenv import load_dotenv
 import joblib
 import pandas as pd
-from neo4j import GraphDatabase
-from src.config.config import (
-    REDIS_HOST, REDIS_PORT, REDIS_DB,
-    NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD
-)
+import numpy as np
 
-# --- Configuration ---
+# --- Load Environment and Configuration ---
+load_dotenv()
+
+# Redis Config
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
+REDIS_DB = int(os.getenv('REDIS_DB', 0))
 TRANSACTION_CHANNEL = 'pix_transactions'
 APPROVED_CHANNEL = 'approved_transactions'
 ALERTS_CHANNEL = 'fraud_alerts'
 
+# Neo4j Config
+NEO4J_URI = os.getenv('NEO4J_URI', 'neo4j://localhost:7687')
+NEO4J_USERNAME = os.getenv('NEO4J_USERNAME', 'neo4j')
+NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'password')
+
 # Model Config
-MODEL_PATH = 'src/models/realtime_fraud_model.joblib'
-SCALER_PATH = 'src/models/realtime_scaler.joblib'
-FEATURES_PATH = 'src/models/realtime_features.joblib'
+MODEL_PATH = 'realtime_fraud_model.joblib'
+SCALER_PATH = 'realtime_scaler.joblib'
+FEATURES_PATH = 'realtime_features.joblib'
 PREDICTION_THRESHOLD = 0.75 # Probability score to flag as fraud
 
 # --- Load Models and Connect to Services ---
