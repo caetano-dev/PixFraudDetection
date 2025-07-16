@@ -1,10 +1,7 @@
 import os
 import pandas as pd
 from neo4j import GraphDatabase
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
+from config import config
 
 class Neo4jConnection:
     def __init__(self, uri, user, password):
@@ -73,8 +70,8 @@ def get_transactional_features(conn):
          COALESCE(stdev(t.amount), 0) AS amountVariance,
          collect(t.deviceId) AS sentDevices,
          collect(t.channel) AS sentChannels,
-         count(CASE WHEN t.isWeekend = true THEN 1 END) AS weekendSentTransactions,
-         count(CASE WHEN t.hourOfDay >= 22 OR t.hourOfDay <= 5 THEN 1 END) AS nightSentTransactions
+         count(CASE WHEN t.is_weekend = true THEN 1 END) AS weekendSentTransactions,
+         count(CASE WHEN t.hour_of_day >= 22 OR t.hour_of_day <= 5 THEN 1 END) AS nightSentTransactions
     
     // Received transactions features
     OPTIONAL MATCH (t2:Transaction)-[:RECEIVED_BY]->(a)
@@ -88,8 +85,8 @@ def get_transactional_features(conn):
          COALESCE(stdev(t2.amount), 0) AS receivedAmountVariance,
          collect(t2.deviceId) AS receivedDevices,
          collect(t2.channel) AS receivedChannels,
-         count(CASE WHEN t2.isWeekend = true THEN 1 END) AS weekendReceivedTransactions,
-         count(CASE WHEN t2.hourOfDay >= 22 OR t2.hourOfDay <= 5 THEN 1 END) AS nightReceivedTransactions
+         count(CASE WHEN t2.is_weekend = true THEN 1 END) AS weekendReceivedTransactions,
+         count(CASE WHEN t2.hour_of_day >= 22 OR t2.hour_of_day <= 5 THEN 1 END) AS nightReceivedTransactions
     
     // Count unique counterparties
     OPTIONAL MATCH (a)-[:SENT]->(t3:Transaction)-[:RECEIVED_BY]->(counterparty:Account)
@@ -299,11 +296,13 @@ def create_evaluation_dataset(conn, features_df):
 
 
 def main():
-    # Database connection
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USERNAME") 
-    password = os.getenv("NEO4J_PASSWORD")
-    conn = Neo4jConnection(uri, user, password)
+    # Database connection from config
+    neo4j_config = config['neo4j']
+    conn = Neo4jConnection(
+        uri=neo4j_config['uri'], 
+        user=neo4j_config['user'], 
+        password=neo4j_config['password']
+    )
     
     print("Starting production-ready feature engineering...")
     print("(No fraud flags used - features based on observable behavioral patterns only)")
