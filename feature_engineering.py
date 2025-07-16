@@ -221,39 +221,52 @@ def get_velocity_features(conn):
     print("Calculating velocity features...")
     query = """
     MATCH (a:Account)
-    
-    // Transaction timing analysis
-    OPTIONAL MATCH (a)-[:SENT]->(t:Transaction)
-    WITH a, collect(t.timestamp) AS sentTimestamps
-    
-    OPTIONAL MATCH (t2:Transaction)-[:RECEIVED_BY]->(a)
-    WITH a, sentTimestamps, collect(t2.timestamp) AS receivedTimestamps
-    
-    // Calculate time differences between consecutive transactions
-    WITH a, sentTimestamps + receivedTimestamps AS allTimestamps
-    WHERE size(allTimestamps) > 1
-    
-    WITH a, allTimestamps,
-         [i in range(0, size(allTimestamps)-2) | 
-          duration.between(datetime(allTimestamps[i]), datetime(allTimestamps[i+1])).seconds] AS timeDifferences
-    
-    RETURN a.accountId AS accountId,
-           size(allTimestamps) AS totalTransactions,
-           CASE WHEN size(timeDifferences) > 0 
-                THEN reduce(sum = 0, diff IN timeDifferences | sum + diff) / size(timeDifferences) 
-                ELSE 0 END AS avgTimeBetweenTransactions,
-           CASE WHEN size(timeDifferences) > 0 
-                THEN reduce(min = timeDifferences[0], diff IN timeDifferences | 
-                     CASE WHEN diff < min THEN diff ELSE min END) 
-                ELSE 0 END AS minTimeBetweenTransactions,
-           size([diff IN timeDifferences WHERE diff < 60]) AS transactionsWithin1Min,
-           size([diff IN timeDifferences WHERE diff < 300]) AS transactionsWithin5Min,
-           
-           // Velocity ratios
-           CASE WHEN size(timeDifferences) > 0 
-                THEN toFloat(size([diff IN timeDifferences WHERE diff < 60])) / size(timeDifferences) 
-                ELSE 0 END AS rapidTransactionRatio
-    """
+
+// Collect all transaction details first
+OPTIONAL MATCH (a)-[:SENT]->(t:Transaction)
+WITH a, collect(t.timestamp) AS sentTimestamps, collect(t.hour_of_day) AS sentHours, collect(t.day_of_week) AS sentDays
+
+OPTIONAL MATCH (t2:Transaction)-[:RECEIVED_BY]->(a)
+WITH a, sentTimestamps, sentHours, sentDays,
+     collect(t2.timestamp) AS receivedTimestamps, collect(t2.hour_of_day) AS receivedHours, collect(t2.day_of_week) AS receivedDays
+
+// Combine and create base collections
+WITH a,
+     sentTimestamps + receivedTimestamps AS allTimestamps,
+     sentHours + receivedHours AS allHours,
+     sentDays + receivedDays AS allDays
+WHERE size(allTimestamps) > 1
+
+// Pre-calculate time differences and counts for entropy
+WITH a, allTimestamps, allHours, allDays,
+     [i IN range(0, size(allTimestamps)-2) | duration.between(allTimestamps[i], allTimestamps[i+1]).seconds] AS timeDifferences,
+     [h IN allHours | {hour: h, count: size([x IN allHours WHERE x = h])}] AS hourCounts,
+     [d IN allDays | {day: d, count: size([x IN allDays WHERE x = d])}] AS dayCounts
+
+WITH a, allTimestamps, timeDifferences, hourCounts, dayCounts,
+     size(allTimestamps) AS totalTransactions,
+     CASE WHEN size(timeDifferences) > 0 THEN reduce(s = 0, diff IN timeDifferences | s + diff) / toFloat(size(timeDifferences)) ELSE 0 END AS avgTimeBetweenTransactions,
+     CASE WHEN size(timeDifferences) > 0 THEN reduce(m = timeDifferences[0], diff IN timeDifferences | CASE WHEN diff < m THEN diff ELSE m END) ELSE 0 END AS minTimeBetweenTransactions,
+     // Compute earliest and latest timestamps for spread
+     reduce(minTS = allTimestamps[0], ts IN allTimestamps | CASE WHEN ts < minTS THEN ts ELSE minTS END) AS earliestTimestamp,
+     reduce(maxTS = allTimestamps[0], ts IN allTimestamps | CASE WHEN ts > maxTS THEN ts ELSE maxTS END) AS latestTimestamp,
+     size([diff IN timeDifferences WHERE diff < 60]) AS transactionsWithin1Min,
+     size([diff IN timeDifferences WHERE diff < 300]) AS transactionsWithin5Min,
+     reduce(entropy = 0.0, item IN hourCounts | entropy - (toFloat(item.count) / size(allHours)) * (log(toFloat(item.count) / size(allHours)) / log(2))) AS hourOfDayEntropy,
+     reduce(entropy = 0.0, item IN dayCounts | entropy - (toFloat(item.count) / size(allDays)) * (log(toFloat(item.count) / size(allDays)) / log(2))) AS dayOfWeekEntropy
+
+RETURN a.accountId AS accountId,
+       totalTransactions,
+       avgTimeBetweenTransactions,
+       minTimeBetweenTransactions,
+       // Duration between earliest and latest transactions
+       duration.between(earliestTimestamp, latestTimestamp).seconds AS transactionTimeSpread,
+       transactionsWithin1Min,
+       transactionsWithin5Min,
+       CASE WHEN size(timeDifferences) > 0 THEN toFloat(transactionsWithin1Min) / size(timeDifferences) ELSE 0 END AS rapidTransactionRatio,
+       hourOfDayEntropy,
+       dayOfWeekEntropy
+"""
     return conn.query(query)
 
 def create_evaluation_dataset(conn, features_df):
@@ -286,8 +299,8 @@ def create_evaluation_dataset(conn, features_df):
     # Merge with features for evaluation
     evaluation_df = features_df.merge(fraud_df, on='accountId', how='left')
     evaluation_df = evaluation_df.fillna(0)
-    
-    evaluation_df.to_csv("evaluation_dataset.csv", index=False)
+
+    evaluation_df.to_csv("./data/evaluation_dataset.csv", index=False)
     print(f"Evaluation dataset saved to evaluation_dataset.csv")
     
     # Print fraud statistics for reference
@@ -328,7 +341,7 @@ def main():
         features_df = features_df.fillna(0)
         
         # Save production features (no fraud labels)
-        features_df.to_csv("account_features.csv", index=False)
+        features_df.to_csv("./data/account_features.csv", index=False)
         print(f"Production features saved to account_features.csv")
         
         # Create separate evaluation dataset with ground truth
