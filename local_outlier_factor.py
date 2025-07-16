@@ -75,8 +75,8 @@ def get_community_features(conn):
     
     RETURN a.accountId AS accountId,
            a.communityId AS community,
-           a.riskScore AS riskScore,
-           CASE WHEN a.isVerified THEN 1 ELSE 0 END AS isVerified,
+           a.risk_score AS riskScore,
+           CASE WHEN a.is_verified THEN 1 ELSE 0 END AS isVerified,
            sentTransactions,
            receivedTransactions,
            sentTransactions + receivedTransactions AS totalTransactions,
@@ -99,7 +99,7 @@ def get_community_features(conn):
            CASE WHEN (internalTransactionAmount + externalTransactionAmount) > 0 
                 THEN toFloat(internalTransactionAmount) / (internalTransactionAmount + externalTransactionAmount) 
                 ELSE 0 END AS internalAmountRatio
-    ORDER BY a.communityId, a.riskScore DESC
+    ORDER BY a.communityId, a.risk_score DESC
     """
     
     return conn.query(query)
@@ -345,8 +345,8 @@ def main():
         top_outliers, community_summary = analyze_lof_results(lof_results)
         
         # Save results
-        lof_results.to_csv("lof_analysis.csv", index=False)
-        community_summary.to_csv("lof_community_summary.csv", index=False)
+        lof_results.to_csv("./data/lof_analysis.csv", index=False)
+        community_summary.to_csv("./data/lof_community_summary.csv", index=False)
         print(f"\nLOF analysis saved to lof_analysis.csv and lof_community_summary.csv")
         
         # Update Neo4j with results

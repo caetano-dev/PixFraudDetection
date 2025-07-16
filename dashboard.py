@@ -145,7 +145,7 @@ with tab1:
     st.caption("How well our fraud detection models identify actual fraud")
     
     # Load model evaluation metrics if available
-    model_metrics_file = "fraud_detection_metrics.csv"
+    model_metrics_file = "./data/fraud_detection_metrics.csv"
     if os.path.exists(model_metrics_file):
         metrics_df = pd.read_csv(model_metrics_file)
         
@@ -353,7 +353,7 @@ with tab3:
                     "outlier_rate": st.column_config.NumberColumn(
                         "🤖 Outlier Rate (Model)",
                         help="Model prediction: Percentage of members flagged as outliers",
-                        format="%.2%",
+                        format="%.2f%%",
                     ),
                     "avg_risk_score": st.column_config.NumberColumn(
                         "📊 Avg Risk Score (Dataset)",

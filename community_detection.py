@@ -142,7 +142,7 @@ def analyze_communities(conn):
     WITH communityId, communitySize,
          collect({
              accountId: account.accountId,
-             riskScore: account.riskScore,
+             riskScore: account.risk_score,
              totalTransactions: sentTransactions + receivedTransactions,
              totalAmount: totalSentAmount + totalReceivedAmount,
              fraudTransactions: fraudTransactions + receivedFraudTransactions
@@ -171,7 +171,7 @@ def analyze_communities(conn):
     
     if results:
         df = pd.DataFrame(results)
-        df.to_csv("community_analysis.csv", index=False)
+        df.to_csv("./data/community_analysis.csv", index=False)
         print(f"Community analysis saved to community_analysis.csv")
         
         # Print summary
