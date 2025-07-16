@@ -2,26 +2,50 @@ import redis
 from neo4j import GraphDatabase
 import json
 import os
-from dotenv import load_dotenv
+import logging
+from config import config
 
-load_dotenv()
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
-REDIS_DB = int(os.getenv('REDIS_DB', 0))
+# Load configuration
+redis_config = config['redis']
+neo4j_config = config['neo4j']
+app_config = config['app']
 
-NEO4J_URI = os.getenv('NEO4J_URI', 'neo4j://localhost:7687')
-NEO4J_USERNAME = os.getenv('NEO4J_USERNAME', 'neo4j')
-NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'password')
+def init_redis() -> redis.Redis:
+    """Initialize and return Redis client."""
+    try:
+        client = redis.Redis(
+            host=redis_config['host'],
+            port=redis_config['port'],
+            db=redis_config['db']
+        )
+        client.ping()
+        logger.info(f"Connected to Redis at {redis_config['host']}:{redis_config['port']}/{redis_config['db']}")
+        return client
+    except Exception as e:
+        logger.exception("Failed to connect to Redis")
+        raise
 
-r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB)
+def init_neo4j() -> GraphDatabase:
+    """Initialize and return Neo4j driver."""
+    try:
+        driver = GraphDatabase.driver(
+            neo4j_config['uri'],
+            auth=(neo4j_config['user'], neo4j_config['password'])
+        )
+        with driver.session() as session:
+            session.run("RETURN 1")
+        logger.info(f"Connected to Neo4j at {neo4j_config['uri']}")
+        return driver
+    except Exception as e:
+        logger.exception("Failed to connect to Neo4j")
+        raise
 
-driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
-
-def ingest_transaction(driver, tx_data):
-    """
-    Ingests a single transaction into Neo4j, enriching nodes with all available data.
-    """
+def ingest_transaction(driver, tx_data: dict) -> None:
+    """Ingest a single transaction into Neo4j with optimized Cypher."""
     query = """
     // Find or create the source account and set its properties
     MERGE (src:Account {accountId: $sender_id})
@@ -84,40 +108,53 @@ def ingest_transaction(driver, tx_data):
         flow.transactionCount = flow.transactionCount + 1,
         flow.fraudTransactionCount = flow.fraudTransactionCount + CASE WHEN $fraud_flag STARTS WITH 'SMURFING' OR $fraud_flag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END
     """
-    
-    # We need to get the state for sender and receiver to pass to the query
-    # This is a simplification; in a real system, this data would be joined
-    # before hitting the ingestion engine. For now, we'll assume it's in the tx_data.
-    
-    driver.execute_query(query, **tx_data)
-    print(f"Ingested transaction: {tx_data['transaction_id']}")
+    try:
+        driver.execute_query(query, **tx_data)
+        logger.debug(f"Ingested transaction: {tx_data['transaction_id']}")
+    except Exception:
+        logger.exception(f"Error ingesting transaction {tx_data.get('transaction_id')}")
 
-with driver.session() as session:
-    session.run("MATCH (n) DETACH DELETE n")
-    print("Cleared existing data in Neo4j.")
+def main() -> None:
+    """Main loop: initialize connections, optionally clear DB, subscribe to Redis, and ingest messages."""
+    redis_client = init_redis()
+    driver = init_neo4j()
 
+    # Optionally clear DB on startup
+    if app_config.get('clear_on_start', False):
+        with driver.session() as session:
+            session.run("MATCH (n) DETACH DELETE n")
+        logger.info("Cleared existing data in Neo4j.")
 
-p = r.pubsub()
-p.subscribe('pix_transactions')
+    # Apply constraints
+    constraints = [
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (a:Account) REQUIRE a.accountId IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (t:Transaction) REQUIRE t.transactionId IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (d:Device) REQUIRE d.deviceId IS UNIQUE",
+        "CREATE CONSTRAINT IF NOT EXISTS FOR (ip:IPAddress) REQUIRE ip.ip IS UNIQUE"
+    ]
+    for c in constraints:
+        try:
+            driver.execute_query(c)
+            logger.info(f"Applied constraint: {c}")
+        except Exception:
+            logger.exception(f"Failed to apply constraint: {c}")
 
-print("Subscribed to 'pix_transactions'. Listening for messages...")
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe('pix_transactions')
+    logger.info("Subscribed to 'pix_transactions'. Listening for messages...")
 
-try:
-    # Create constraints one at a time
-    driver.execute_query("CREATE CONSTRAINT accountId_unique IF NOT EXISTS FOR (a:Account) REQUIRE a.accountId IS UNIQUE;")
-    driver.execute_query("CREATE CONSTRAINT transactionId_unique IF NOT EXISTS FOR (t:Transaction) REQUIRE t.transactionId IS UNIQUE;")
-    driver.execute_query("CREATE CONSTRAINT deviceId_unique IF NOT EXISTS FOR (d:Device) REQUIRE d.deviceId IS UNIQUE;")
-    driver.execute_query("CREATE CONSTRAINT ipAddress_unique IF NOT EXISTS FOR (ip:IPAddress) REQUIRE ip.ip IS UNIQUE;")
-    for message in p.listen():
-        if message['type'] == 'message':
-            transaction_data = json.loads(message['data'].decode('utf-8'))
-            print(f"Received: {transaction_data}")
-            
-            ingest_transaction(driver, transaction_data)
-            
-except KeyboardInterrupt:
-    print("Stopping ingestion engine...")
-finally:
-    p.close()
-    driver.close()
-    print("Connections closed.")
+    try:
+        for message in pubsub.listen():
+            if message['type'] == 'message':
+                data = json.loads(message['data'])
+                logger.info(f"Received transaction {data.get('transaction_id')}")
+                ingest_transaction(driver, data)
+    except KeyboardInterrupt:
+        logger.info("Stopping ingestion engine...")
+    finally:
+        pubsub.close()
+        driver.close()
+        logger.info("Connections closed.")
+
+if __name__ == '__main__':
+    main()

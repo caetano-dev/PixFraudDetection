@@ -50,7 +50,7 @@ def calculate_initial_risk(account_info):
     return min(round(random.uniform(0.1, 0.3) + risk, 2), 1.0)
 
 # Enhanced account generation with more realistic features
-NUM_ACCOUNTS = 6000
+NUM_ACCOUNTS = 35000
 print(f"Generating {NUM_ACCOUNTS} accounts...")
 accounts_data = []
 
@@ -92,7 +92,7 @@ for _ in range(NUM_ACCOUNTS):
     })
 
 accounts_df = pd.DataFrame(accounts_data)
-accounts_df.to_csv('pix_accounts.csv', index=False, mode='a')
+accounts_df.to_csv('./data/pix_accounts.csv', index=False, mode='a')
 print("Accounts generated and saved to pix_accounts.csv.")
 
 # Transaction generation with time-based patterns and realistic fraud rates
@@ -470,10 +470,10 @@ def create_business_transaction(accounts_df, date):
     }
 
 # Generate transactions with realistic patterns and fraud rates
-TOTAL_TRANSACTIONS = 500000
+TOTAL_TRANSACTIONS = 100500
 current_date = start_date
 
-print(f"Generating {TOTAL_TRANSACTIONS} transactions... This is going to take a few seconds.")
+print(f"Generating {TOTAL_TRANSACTIONS} transactions... This is going to take some minutes, depending on your machine.")
 while len(transactions) < TOTAL_TRANSACTIONS:
     current_date += timedelta(minutes=np.random.randint(1, 30))
     if current_date > end_date:
@@ -536,14 +536,14 @@ while len(transactions) < TOTAL_TRANSACTIONS:
         transactions.extend(create_circular_payment_ring(accounts_df, current_date))
     else: 
         transactions.append(create_normal_transaction(accounts_df, current_date))
-        
-    if len(transactions) % 10000 == 0 and len(transactions) > 0:
+
+    if len(transactions) % 1000 == 0 and len(transactions) > 0:
         print(f"  ... {len(transactions)} transactions generated.")
 
 print("Generation complete. Preparing final CSV...")
 transactions_df = pd.DataFrame(transactions)
 transactions_df = transactions_df.sample(frac=1).reset_index(drop=True)  
-transactions_df.to_csv('pix_transactions.csv', index=False, mode='a')
+transactions_df.to_csv('./data/pix_transactions.csv', index=False, mode='a')
 
 print(f"Successfully created pix_transactions.csv with {len(transactions_df)} rows.")
 

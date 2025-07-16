@@ -2,9 +2,9 @@ import streamlit as st
 import pandas as pd
 import os
 from neo4j import GraphDatabase
-from dotenv import load_dotenv
 from streamlit_agraph import agraph, Node, Edge, Config
 import plotly.express as px
+from config import config
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -14,10 +14,7 @@ st.set_page_config(
 )
 
 # --- Environment and Data Loading ---
-load_dotenv()
-NEO4J_URI = os.getenv("NEO4J_URI")
-NEO4J_USERNAME = os.getenv("NEO4J_USERNAME")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
+neo4j_config = config['neo4j']
 
 @st.cache_data
 def load_data(filepath):
@@ -38,7 +35,10 @@ def load_community_data():
 
 @st.cache_resource
 def get_neo4j_driver():
-    return GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+    return GraphDatabase.driver(
+        neo4j_config['uri'],
+        auth=(neo4j_config['user'], neo4j_config['password'])
+    )
 
 driver = get_neo4j_driver()
 anomaly_data = load_data("./data/anomaly_scores.csv")

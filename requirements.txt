@@ -11,3 +11,4 @@ streamlit-agraph
 plotly
 networkx
 python-louvain
+pyyaml

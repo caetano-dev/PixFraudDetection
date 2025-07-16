@@ -400,3 +400,8 @@ The final phase is to build an interactive dashboard for investigators to explor
     -   [x] LOF outlier analysis within communities
     -   [x] Community fraud rate visualization
     -   [x] Comprehensive community statistics
+
+Ideas:
+
+ - [ ] Add path finding algorithm to the dashboard to find shortest path between accounts
+ - [ ] Unit tests

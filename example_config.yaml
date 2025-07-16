@@ -1,0 +1,12 @@
+redis:
+  host: localhost
+  port: 6379
+  db: 0
+
+neo4j:
+  uri: "bolt://localhost:7687"
+  user: "neo4j"
+  password: "password"
+
+app:
+  clear_on_start: false
