@@ -100,7 +100,7 @@ def main():
         
         # Velocity features
         'avgTimeBetweenTransactions', 'minTimeBetweenTransactions',
-        'transactionsWithin1Min', 'transactionsWithin5Min', 'rapidTransactionRatio'
+        'transactionsWithin1Min', 'transactionsWithin5Min', 'rapidTransactionRatio', 'totalVelocityTransactions'
     ]
     
     # Filter to only include features that exist in the dataset
@@ -139,7 +139,7 @@ def main():
     display_columns = ['accountId', 'anomaly_score', 'is_outlier']
     
     # Add other interesting observable columns if they exist
-    for col in ['totalTransactions', 'totalAmount', 'circularityRatio', 'rapidTransactionRatio', 'deviceDiversityRatio']:
+    for col in ['totalTransactions', 'totalAmount', 'circularityRatio', 'rapidTransactionRatio', 'deviceDiversityRatio', 'totalVelocityTransactions']:
         if col in features_df.columns:
             display_columns.append(col)
     

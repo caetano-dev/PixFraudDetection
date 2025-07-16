@@ -2,13 +2,10 @@ import os
 import pandas as pd
 import numpy as np
 from neo4j import GraphDatabase
-from dotenv import load_dotenv
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler
 import joblib
-
-# Load environment variables from .env file
-load_dotenv()
+from config import config
 
 class Neo4jConnection:
     def __init__(self, uri, user, password):
@@ -76,7 +73,7 @@ def get_community_features(conn):
     RETURN a.accountId AS accountId,
            a.communityId AS community,
            a.risk_score AS riskScore,
-           CASE WHEN a.is_verified THEN 1 ELSE 0 END AS isVerified,
+           CASE WHEN toLower(toString(a.is_verified)) = 'true' THEN 1 ELSE 0 END AS isVerified,
            sentTransactions,
            receivedTransactions,
            sentTransactions + receivedTransactions AS totalTransactions,
@@ -319,10 +316,12 @@ def update_neo4j_with_lof_results(conn, lof_results):
 
 def main():
     # Database connection
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USERNAME")
-    password = os.getenv("NEO4J_PASSWORD")
-    conn = Neo4jConnection(uri, user, password)
+    neo4j_config = config['neo4j']
+    conn = Neo4jConnection(
+        uri=neo4j_config['uri'], 
+        user=neo4j_config['user'], 
+        password=neo4j_config['password']
+    )
 
     try:
         # Check if community detection has been run

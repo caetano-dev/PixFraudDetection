@@ -3,10 +3,7 @@ import pandas as pd
 import networkx as nx
 import community as community_louvain
 from neo4j import GraphDatabase
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
+from config import config
 
 class Neo4jConnection:
     def __init__(self, uri, user, password):
@@ -197,9 +194,10 @@ def analyze_communities(conn):
 
 def main():
     # Database connection
-    uri = os.getenv("NEO4J_URI")
-    user = os.getenv("NEO4J_USERNAME")
-    password = os.getenv("NEO4J_PASSWORD")
+    neo4j_config = config['neo4j']
+    uri = neo4j_config['uri']
+    user = neo4j_config['user']
+    password = neo4j_config['password']
     
     print(f"Connecting to Neo4j at {uri}...")
     conn = Neo4jConnection(uri, user, password)

@@ -244,7 +244,7 @@ WITH a, allTimestamps, allHours, allDays,
      [d IN allDays | {day: d, count: size([x IN allDays WHERE x = d])}] AS dayCounts
 
 WITH a, allTimestamps, timeDifferences, hourCounts, dayCounts,
-     size(allTimestamps) AS totalTransactions,
+     size(allTimestamps) AS totalVelocityTransactions,
      CASE WHEN size(timeDifferences) > 0 THEN reduce(s = 0, diff IN timeDifferences | s + diff) / toFloat(size(timeDifferences)) ELSE 0 END AS avgTimeBetweenTransactions,
      CASE WHEN size(timeDifferences) > 0 THEN reduce(m = timeDifferences[0], diff IN timeDifferences | CASE WHEN diff < m THEN diff ELSE m END) ELSE 0 END AS minTimeBetweenTransactions,
      // Compute earliest and latest timestamps for spread
@@ -256,7 +256,7 @@ WITH a, allTimestamps, timeDifferences, hourCounts, dayCounts,
      reduce(entropy = 0.0, item IN dayCounts | entropy - (toFloat(item.count) / size(allDays)) * (log(toFloat(item.count) / size(allDays)) / log(2))) AS dayOfWeekEntropy
 
 RETURN a.accountId AS accountId,
-       totalTransactions,
+       totalVelocityTransactions,
        avgTimeBetweenTransactions,
        minTimeBetweenTransactions,
        // Duration between earliest and latest transactions
