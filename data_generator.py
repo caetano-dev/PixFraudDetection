@@ -49,57 +49,6 @@ def calculate_initial_risk(account_info):
         risk += 0.1
     return min(round(random.uniform(0.1, 0.3) + risk, 2), 1.0)
 
-# Enhanced account generation with more realistic features
-NUM_ACCOUNTS = 35000
-print(f"Generating {NUM_ACCOUNTS} accounts...")
-accounts_data = []
-
-for _ in range(NUM_ACCOUNTS):
-    account_type = random.choice(['individual', 'business'])
-    
-    account_id = generate_cpf() if account_type == 'individual' else generate_cnpj()
-    
-    # Generate multiple devices and IPs per account (realistic for modern users)
-    num_devices = random.randint(1, 3)
-    devices = [str(uuid.uuid4()) for _ in range(num_devices)]
-    ips = [generate_ip_address() for _ in range(num_devices)]
-
-    # Account creation date affects fraud risk
-    creation_date = fake.date_time_between(start_date='-3y', end_date='now')
-    
-    # Temporary dict to hold data for risk calculation
-    temp_account_info = {
-        'account_age_days': (datetime.now() - creation_date).days,
-        'is_verified': random.choice([True, False]),
-        'phone_verified': random.choice([True, False]),
-        'ips': ips
-    }
-
-    # Enhanced account features for better fraud detection
-    accounts_data.append({
-        'account_id': account_id,
-        'holder_name': fake.name() if account_type == 'individual' else fake.company(),
-        'account_type': account_type,
-        'creation_date': creation_date.isoformat(),
-        'account_age_days': temp_account_info['account_age_days'],
-        'state': fake.state_abbr(),
-        'city': fake.city(),
-        'is_verified': temp_account_info['is_verified'],
-        'phone_verified': temp_account_info['phone_verified'],
-        'risk_score': calculate_initial_risk(temp_account_info),
-        'devices': '|'.join(devices),  # Store as pipe-separated string for CSV
-        'ips': '|'.join(ips)  # Store as pipe-separated string for CSV
-    })
-
-accounts_df = pd.DataFrame(accounts_data)
-accounts_df.to_csv('./data/pix_accounts.csv', index=False, mode='a')
-print("Accounts generated and saved to pix_accounts.csv.")
-
-# Transaction generation with time-based patterns and realistic fraud rates
-transactions = []
-start_date = datetime(2024, 1, 1)
-end_date = datetime(2024, 12, 31)
-
 def get_account_details(df, account_id):
     """Helper to get devices and IPs for a given account."""
     account_info = df[df['account_id'] == account_id].iloc[0]
@@ -469,93 +418,149 @@ def create_business_transaction(accounts_df, date):
         'receiver_risk_score': receiver_info['risk_score']
     }
 
-# Generate transactions with realistic patterns and fraud rates
-TOTAL_TRANSACTIONS = 100500
-current_date = start_date
+def main():
+    """Main function to generate and save the dataset."""
+    print("Starting dataset generation...")
 
-print(f"Generating {TOTAL_TRANSACTIONS} transactions... This is going to take some minutes, depending on your machine.")
-while len(transactions) < TOTAL_TRANSACTIONS:
-    current_date += timedelta(minutes=np.random.randint(1, 30))
-    if current_date > end_date:
-        current_date = start_date
+    NUM_ACCOUNTS = 9500
+    TOTAL_TRANSACTIONS = 105000
+    print(f"Generating {NUM_ACCOUNTS} accounts...")
+    accounts_data = []
 
-    hour = current_date.hour
-    is_weekend = current_date.weekday() >= 5
-    is_business_hour = 9 <= hour <= 17
-    is_late_night = 0 <= hour <= 4
+    for _ in range(NUM_ACCOUNTS):
+        account_type = random.choice(['individual', 'business'])
+        
+        account_id = generate_cpf() if account_type == 'individual' else generate_cnpj()
+        
+        # Generate multiple devices and IPs per account (realistic for modern users)
+        num_devices = random.randint(1, 3)
+        devices = [str(uuid.uuid4()) for _ in range(num_devices)]
+        ips = [generate_ip_address() for _ in range(num_devices)]
 
-    transaction_types = [
-        'salary', 
-        'b2b', 
-        'micro', 
-        'smurfing', 
-        'circular', 
-        'normal'
-    ]
-    
-    weights = [
-        0.0,    
-        0.10,   
-        0.25,   
-        0.001,  # Slightly increased fraud probability
-        0.001,  # Slightly increased fraud probability
-        0.65    
-    ]
+        # Account creation date affects fraud risk
+        creation_date = fake.date_time_between(start_date='-3y', end_date='now')
+        
+        # Temporary dict to hold data for risk calculation
+        temp_account_info = {
+            'account_age_days': (datetime.now() - creation_date).days,
+            'is_verified': random.choice([True, False]),
+            'phone_verified': random.choice([True, False]),
+            'ips': ips
+        }
 
-    if current_date.day in [5, 20]:
-        weights[0] = 0.8  
-        weights[1] = 0.01 
-        weights[2] = 0.05
-        weights[5] = 0.14
-    
-    if not is_business_hour:
-        weights[1] = 0.0
+        # Enhanced account features for better fraud detection
+        accounts_data.append({
+            'account_id': account_id,
+            'holder_name': fake.name() if account_type == 'individual' else fake.company(),
+            'account_type': account_type,
+            'creation_date': creation_date.isoformat(),
+            'account_age_days': temp_account_info['account_age_days'],
+            'state': fake.state_abbr(),
+            'city': fake.city(),
+            'is_verified': temp_account_info['is_verified'],
+            'phone_verified': temp_account_info['phone_verified'],
+            'risk_score': calculate_initial_risk(temp_account_info),
+            'devices': '|'.join(devices),  # Store as pipe-separated string for CSV
+            'ips': '|'.join(ips)  # Store as pipe-separated string for CSV
+        })
 
-    if is_late_night or is_weekend:
-        weights[3] *= 3  
-        weights[4] *= 3  
+    accounts_df = pd.DataFrame(accounts_data)
+    accounts_df.to_csv('./data/pix_accounts.csv', index=False)
+    print("Accounts generated and saved to pix_accounts.csv.")
 
-    total_weight = sum(weights)
-    if total_weight > 0:
-        normalized_weights = [w / total_weight for w in weights]
-    else:
-        normalized_weights = [0] * len(weights)
-        normalized_weights[-1] = 1.0 
+    # Transaction generation with time-based patterns and realistic fraud rates
+    transactions = []
+    start_date = datetime(2024, 1, 1)
+    end_date = datetime(2024, 12, 31)
 
-    chosen_type = np.random.choice(transaction_types, p=normalized_weights)
+    current_date = start_date
 
-    if chosen_type == 'salary':
-        transactions.extend(create_salary_payments(accounts_df, current_date))
-    elif chosen_type == 'b2b':
-        transactions.append(create_business_transaction(accounts_df, current_date))
-    elif chosen_type == 'micro':
-        transactions.append(create_microtransaction(accounts_df, current_date))
-    elif chosen_type == 'smurfing':
-        transactions.extend(create_smurfing_ring(accounts_df, current_date))
-    elif chosen_type == 'circular':
-        transactions.extend(create_circular_payment_ring(accounts_df, current_date))
-    else: 
-        transactions.append(create_normal_transaction(accounts_df, current_date))
+    print(f"Generating {TOTAL_TRANSACTIONS} transactions... This is going to take some minutes, depending on your machine.")
+    while len(transactions) < TOTAL_TRANSACTIONS:
+        current_date += timedelta(minutes=np.random.randint(1, 30))
+        if current_date > end_date:
+            current_date = start_date
 
-    if len(transactions) % 1000 == 0 and len(transactions) > 0:
-        print(f"  ... {len(transactions)} transactions generated.")
+        hour = current_date.hour
+        is_weekend = current_date.weekday() >= 5
+        is_business_hour = 9 <= hour <= 17
+        is_late_night = 0 <= hour <= 4
 
-print("Generation complete. Preparing final CSV...")
-transactions_df = pd.DataFrame(transactions)
-transactions_df = transactions_df.sample(frac=1).reset_index(drop=True)  
-transactions_df.to_csv('./data/pix_transactions.csv', index=False, mode='a')
+        transaction_types = [
+            'salary', 
+            'b2b', 
+            'micro', 
+            'smurfing', 
+            'circular', 
+            'normal'
+        ]
+        
+        weights = [
+            0.0,    
+            0.10,   
+            0.25,   
+            0.001,  # Slightly increased fraud probability
+            0.001,  # Slightly increased fraud probability
+            0.65    
+        ]
 
-print(f"Successfully created pix_transactions.csv with {len(transactions_df)} rows.")
+        if current_date.day in [5, 20]:
+            weights[0] = 0.8  
+            weights[1] = 0.01 
+            weights[2] = 0.05
+            weights[5] = 0.14
+        
+        if not is_business_hour:
+            weights[1] = 0.0
 
-fraud_counts = transactions_df['fraud_flag'].value_counts()
-normal_flags = ['NORMAL', 'NORMAL_MICRO', 'NORMAL_SALARY', 'NORMAL_B2B']
-total_fraud = sum(count for flag, count in fraud_counts.items() if flag not in normal_flags)
-fraud_rate = (total_fraud / len(transactions_df)) * 100
+        if is_late_night or is_weekend:
+            weights[3] *= 3  
+            weights[4] *= 3  
 
-print(f"\nDataset Summary:")
-print(f"Total transactions: {len(transactions_df):,}")
-print(f"Total accounts: {len(accounts_df):,}")
-print(f"Fraud rate: {fraud_rate:.2f}%")
-print(f"Transaction types:")
-for flag, count in fraud_counts.items():
-    print(f"  {flag}: {count:,} ({count/len(transactions_df)*100:.1f}%)")
+        total_weight = sum(weights)
+        if total_weight > 0:
+            normalized_weights = [w / total_weight for w in weights]
+        else:
+            normalized_weights = [0] * len(weights)
+            normalized_weights[-1] = 1.0 
+
+        chosen_type = np.random.choice(transaction_types, p=normalized_weights)
+
+        if chosen_type == 'salary':
+            transactions.extend(create_salary_payments(accounts_df, current_date))
+        elif chosen_type == 'b2b':
+            transactions.append(create_business_transaction(accounts_df, current_date))
+        elif chosen_type == 'micro':
+            transactions.append(create_microtransaction(accounts_df, current_date))
+        elif chosen_type == 'smurfing':
+            transactions.extend(create_smurfing_ring(accounts_df, current_date))
+        elif chosen_type == 'circular':
+            transactions.extend(create_circular_payment_ring(accounts_df, current_date))
+        else: 
+            transactions.append(create_normal_transaction(accounts_df, current_date))
+
+        if len(transactions) % 1000 == 0 and len(transactions) > 0:
+            print(f"  ... {len(transactions)} transactions generated.")
+
+    print("Generation complete. Preparing final CSV...")
+    transactions_df = pd.DataFrame(transactions)
+    transactions_df = transactions_df.sample(frac=1).reset_index(drop=True)  
+    transactions_df.to_csv('./data/pix_transactions.csv', index=False)
+
+    print(f"Successfully created pix_transactions.csv with {len(transactions_df)} rows.")
+
+    fraud_counts = transactions_df['fraud_flag'].value_counts()
+    normal_flags = ['NORMAL', 'NORMAL_MICRO', 'NORMAL_SALARY', 'NORMAL_B2B']
+    total_fraud = sum(count for flag, count in fraud_counts.items() if flag not in normal_flags)
+    fraud_rate = (total_fraud / len(transactions_df)) * 100
+
+    print(f"\nDataset Summary:")
+    print(f"Total transactions: {len(transactions_df):,}")
+    print(f"Total accounts: {len(accounts_df):,}")
+    print(f"Fraud rate: {fraud_rate:.2f}%")
+    print(f"Transaction types:")
+    for flag, count in fraud_counts.items():
+        print(f"  {flag}: {count:,} ({count/len(transactions_df)*100:.1f}%)")
+
+if __name__ == "__main__":
+    main()
