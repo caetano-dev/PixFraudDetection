@@ -62,6 +62,8 @@ def main():
                        help='Number of neighbors for LOF algorithm (default: 20)')
     parser.add_argument('--contamination', type=float, default=0.1,
                        help='Contamination parameter (default: 0.1)')
+    parser.add_argument('--no-save', action='store_true',
+                        help='Do not save the results to a CSV file')
     
     args = parser.parse_args()
     
@@ -124,43 +126,17 @@ def main():
                                                 args.n_neighbors, args.contamination)
         model_name = "Local Outlier Factor"
 
-    # Save the results
-    output_path = "./data/anomaly_scores.csv"
-    features_df.to_csv(output_path, index=False)
-    print(f"{model_name} anomaly detection complete. Results saved to {output_path}")
+    print(f"Top 5 most anomalous accounts based on {args.algorithm}:")
+    print(features_df.sort_values(by='anomaly_score', ascending=True).head(5))
 
-    # Print summary
     outlier_count = features_df['is_outlier'].sum()
-    print(f"\nDetected {outlier_count} potential outliers using {model_name}.")
-    print(f"Outlier rate: {outlier_count/len(features_df)*100:.2f}%")
-    
-    print("\nTop 10 most anomalous accounts:")
-    top_anomalous = features_df.sort_values('anomaly_score').head(10)
-    display_columns = ['accountId', 'anomaly_score', 'is_outlier']
-    
-    # Add other interesting observable columns if they exist
-    for col in ['totalTransactions', 'totalAmount', 'circularityRatio', 'rapidTransactionRatio', 'deviceDiversityRatio', 'totalVelocityTransactions']:
-        if col in features_df.columns:
-            display_columns.append(col)
-    
-    print(top_anomalous[display_columns])
-    
-    # Show feature importance for Isolation Forest (if applicable)
-    if args.algorithm == 'isolation_forest':
-        print("\nMost important features for anomaly detection:")
-        try:
-            feature_importance = pd.DataFrame({
-                'feature': available_features,
-                'importance': abs(features_df[available_features].corrwith(features_df['anomaly_score']))
-            }).sort_values('importance', ascending=False)
-            print(feature_importance.head(10))
-        except:
-            print("Could not calculate feature importance")
-    
-    print(f"\nModel and scaler saved for {model_name.lower().replace(' ', '_')}")
-    print("Note: These models use only observable behavioral patterns (no fraud labels)")
-    print("For model evaluation, use the evaluation_dataset.csv with ground truth labels")
+    print(f"Found {outlier_count} outliers out of {len(features_df)} accounts.")
 
+    # Save results
+    if not args.no_save:
+        output_path = "./data/anomaly_scores.csv"
+        features_df.to_csv(output_path, index=False)
+        print(f"{args.algorithm.replace('_', ' ').title()} anomaly detection complete. Results saved to {output_path}")
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
