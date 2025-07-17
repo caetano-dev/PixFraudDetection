@@ -20,9 +20,6 @@ neo4j_config = config['neo4j']
 def load_data(filepath):
     if os.path.exists(filepath):
         df = pd.read_csv(filepath)
-        # Ensure fraudTransactionCount exists, fill with 0 if not
-        if 'fraudTransactionCount' not in df.columns:
-            df['fraudTransactionCount'] = "-"
         return df
     return None
 

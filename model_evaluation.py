@@ -233,7 +233,7 @@ def save_evaluation_metrics(summary):
     
     if metrics_data:
         metrics_df = pd.DataFrame(metrics_data)
-        metrics_df.to_csv("fraud_detection_metrics.csv", index=False)
+        metrics_df.to_csv("./data/fraud_detection_metrics.csv", index=False)
         print(f"\nEvaluation metrics saved to fraud_detection_metrics.csv")
 
 def main():
