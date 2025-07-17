@@ -98,18 +98,11 @@ This script connects to Neo4j, extracts graph and transactional features for eac
 python feature_engineering.py
 ```
 
-### Step 5: Production-Ready Feature Engineering
-Extract behavioral features without using fraud flags (production deployment ready):
-
-```bash
-python feature_engineering.py
-```
-
 This creates:
 - `account_features.csv` - Production features (39 behavioral patterns)
 - `evaluation_dataset.csv` - Evaluation dataset with ground truth labels
 
-### Step 6: Anomaly Detection
+### Step 5: Anomaly Detection
 Apply machine learning algorithms to detect fraud patterns:
 
 ```bash
@@ -120,21 +113,21 @@ python anomaly_detection.py --algorithm lof --contamination 0.05
 python anomaly_detection.py --algorithm isolation_forest
 ```
 
-### Step 7: Community Detection
+### Step 6: Community Detection
 Identify suspicious account clusters using Louvain algorithm:
 
 ```bash
 python community_detection.py
 ```
 
-### Step 8: Local Outlier Factor within Communities
+### Step 7: Local Outlier Factor within Communities
 Apply targeted anomaly detection within each community:
 
 ```bash
 python local_outlier_factor.py
 ```
 
-### Step 9: Launch the Investigation Dashboard
+### Step 8: Launch the Investigation Dashboard
 Interactive fraud investigation interface:
 
 ```bash

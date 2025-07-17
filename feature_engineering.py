@@ -306,6 +306,8 @@ def create_evaluation_dataset(conn, features_df):
     # Print fraud statistics for reference
     fraud_accounts = evaluation_df[evaluation_df['isFraudulent'] == 1]
     print(f"Ground truth: {len(fraud_accounts)} fraudulent accounts out of {len(evaluation_df)} total accounts")
+    
+    return evaluation_df
 
 
 def main():
