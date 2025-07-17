@@ -4,11 +4,14 @@ Faker
 redis
 neo4j
 python-dotenv
-scikit-learn
+scikit-learn==1.5.1
 joblib
-streamlit
-streamlit-agraph
+streamlit==1.37.0
+streamlit-agraph==0.0.48
 plotly
 networkx
 python-louvain
 pyyaml
+tenacity==8.5.0
+toolz==0.12.1
+requests==2.32.3

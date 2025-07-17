@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import os
+import requests
 from neo4j import GraphDatabase
 from streamlit_agraph import agraph, Node, Edge, Config
 import plotly.express as px
@@ -29,6 +30,18 @@ def load_community_data():
     lof_analysis = load_data("./data/lof_analysis.csv")
     lof_community_summary = load_data("./data/lof_community_summary.csv")
     return community_analysis, lof_analysis, lof_community_summary
+
+@st.cache_data
+def get_brazil_geojson():
+    """Downloads and caches GeoJSON data for Brazilian states."""
+    url = "https://raw.githubusercontent.com/codeforamerica/click_that_hood/master/public/data/brazil-states.geojson"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.error(f"Failed to download GeoJSON for map: {e}")
+        return None
 
 @st.cache_resource
 def get_neo4j_driver():
@@ -85,6 +98,33 @@ class Neo4jConnection:
             result = session.run(query, account_id=account_id)
             return pd.DataFrame([r.data() for r in result])
 
+    def get_state_level_metrics(self):
+        """Aggregates transaction metrics by state."""
+        query = """
+        MATCH (a:Account)-[:SENT]->(t:Transaction)
+        RETURN a.state AS state,
+               count(t) AS transactionCount,
+               sum(t.amount) AS totalAmount,
+               sum(CASE WHEN t.fraudFlag STARTS WITH 'SMURFING' OR t.fraudFlag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END) AS fraudCount
+        ORDER BY totalAmount DESC
+        """
+        with driver.session() as session:
+            result = session.run(query)
+            return pd.DataFrame([r.data() for r in result])
+
+    def get_hourly_transaction_summary(self):
+        """Aggregates transaction metrics by hour of the day."""
+        query = """
+        MATCH (t:Transaction)
+        RETURN t.hour_of_day AS hour,
+               count(t) AS transactionCount,
+               sum(t.amount) AS totalAmount
+        ORDER BY hour
+        """
+        with driver.session() as session:
+            result = session.run(query)
+            return pd.DataFrame([r.data() for r in result])
+
 # --- UI Rendering ---
 st.title("🕵️ PIX Fraud Detection Dashboard")
 
@@ -120,6 +160,75 @@ with tab1:
         col2.metric("Total Volume", f"R$ {kpis['totalAmount']:,.2f}")
         col3.metric("📊 Fraudulent Transactions (Dataset)", f"{kpis['totalFraudTransactions']:,}")
         col4.metric("📊 Fraud Rate (Dataset)", f"{fraud_rate:.2f}%")
+
+    st.header("Geographic Transaction Analysis")
+    st.caption("Heatmap of transaction counts by state. All data is production-ready and based on sender's location.")
+    
+    geojson = get_brazil_geojson()
+    state_metrics_df = conn.get_state_level_metrics()
+
+    if geojson and state_metrics_df is not None and not state_metrics_df.empty:
+        # Ensure state codes are uppercase to match GeoJSON
+        state_metrics_df['state'] = state_metrics_df['state'].str.upper()
+        
+        fig = px.choropleth_mapbox(
+            state_metrics_df,
+            geojson=geojson,
+            locations='state',
+            featureidkey="properties.sigla",
+            color='transactionCount',
+            color_continuous_scale="Plasma",
+            range_color=(0, state_metrics_df['transactionCount'].max()),
+            mapbox_style="carto-positron",
+            zoom=3,
+            center={"lat": -14.2350, "lon": -51.9253},
+            opacity=0.6,
+            hover_name='state',
+            hover_data={
+                'transactionCount': True,
+                'totalAmount': ':.2f'
+            },
+            labels={'transactionCount': 'Total Transactions', 'state': 'State', 'totalAmount': 'Total Volume (R$)'}
+        )
+        fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("Geographic data is not available or could not be loaded.")
+
+    st.header("Temporal Transaction Patterns")
+    st.caption("Analyzing transaction behavior over time (24-hour cycle)")
+    
+    hourly_summary_df = conn.get_hourly_transaction_summary()
+    if hourly_summary_df is not None and not hourly_summary_df.empty:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Chart for transaction count by hour
+            fig_hourly_count = px.bar(
+                hourly_summary_df,
+                x='hour',
+                y='transactionCount',
+                title='Transaction Count by Hour of Day',
+                labels={'hour': 'Hour of Day', 'transactionCount': 'Number of Transactions'},
+                template='plotly_white'
+            )
+            fig_hourly_count.update_traces(marker_color='#1f77b4')
+            st.plotly_chart(fig_hourly_count, use_container_width=True)
+            
+        with col2:
+            # Chart for transaction volume by hour
+            fig_hourly_amount = px.bar(
+                hourly_summary_df,
+                x='hour',
+                y='totalAmount',
+                title='Transaction Volume (R$) by Hour of Day',
+                labels={'hour': 'Hour of Day', 'totalAmount': 'Total Volume (R$)'},
+                template='plotly_white'
+            )
+            fig_hourly_amount.update_traces(marker_color='#ff7f0e')
+            st.plotly_chart(fig_hourly_amount, use_container_width=True)
+    else:
+        st.info("Hourly transaction data is not available.")
 
     st.header("Fraud Breakdown by Type")
     st.caption("📊 Based on ground truth fraud flags from the dataset")
