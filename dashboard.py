@@ -1,3 +1,4 @@
+# type: ignore - dashboard may have dynamic attributes and non-statically typed calls
 import streamlit as st
 import pandas as pd
 import os
@@ -417,7 +418,7 @@ with tab3:
         st.write("Accounts that are outliers within their own communities.")
         
         # Show top LOF outliers
-        lof_outliers = lof_analysis[lof_analysis['is_lof_outlier'] == 1].sort_values('lof_score').head(20)
+        lof_outliers = lof_analysis[lof_analysis['is_lof_outlier'] == 1].sort_values(by='lof_score').head(20)
         
         if not lof_outliers.empty:
             st.dataframe(

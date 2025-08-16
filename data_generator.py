@@ -4,6 +4,7 @@ from faker import Faker
 import random
 from datetime import datetime, timedelta
 import uuid
+import os
 
 print("Starting dataset generation...")
 fake = Faker('pt_BR')
@@ -14,7 +15,7 @@ def generate_cpf():
         s = sum(int(d) * (len(cpf_partial) + 1 - i) for i, d in enumerate(cpf_partial))
         result = 11 - (s % 11)
         return str(result) if result < 10 else '0'
-    
+
     cpf_base = [random.randint(0, 9) for _ in range(9)]
     cpf_base_str = "".join(map(str, cpf_base))
     d1 = calculate_digit(cpf_base_str)
@@ -61,10 +62,10 @@ def create_normal_transaction(accounts_df, date):
     sender_id, receiver_id = np.random.choice(accounts_df['account_id'], 2, replace=False)
     device_id, ip_address = get_account_details(accounts_df, sender_id)
     amount = round(np.random.uniform(5.0, 500.0), 2)
-    
+
     sender_info = accounts_df[accounts_df['account_id'] == sender_id].iloc[0]
     receiver_info = accounts_df[accounts_df['account_id'] == receiver_id].iloc[0]
-    
+
     return {
         'transaction_id': str(uuid.uuid4()),
         'sender_id': sender_id,
@@ -92,7 +93,7 @@ def create_normal_transaction(accounts_df, date):
 def create_smurfing_ring(accounts_df, date):
     """Simulates a smurfing ring with realistic fraud patterns, including rapid distribution and cash-out."""
     ring_transactions = []
-    
+
     high_risk_accounts = accounts_df[accounts_df['risk_score'] > 0.5]
     if len(high_risk_accounts) < 5:
         return []
@@ -103,11 +104,11 @@ def create_smurfing_ring(accounts_df, date):
         return []
     victim_id = np.random.choice(victim_pool['account_id'])
     victim_info = accounts_df[accounts_df['account_id'] == victim_id].iloc[0]
-    
+
     potential_mules = high_risk_accounts[high_risk_accounts['account_id'] != victim_id]
     if len(potential_mules) < 2:
         return []
-        
+
     num_mules = min(np.random.randint(2, 5), len(potential_mules))
     mules = np.random.choice(potential_mules['account_id'], num_mules, replace=False)
     central_mule = mules[0]
@@ -120,7 +121,7 @@ def create_smurfing_ring(accounts_df, date):
     stolen_amount = round(np.random.uniform(8000.0, 9990.0), 2)
     transaction_time = date + timedelta(seconds=np.random.randint(10, 60)) # Faster initial transfer
     victim_device, victim_ip = get_account_details(accounts_df, victim_id)
-    
+
     ring_transactions.append({
         'transaction_id': str(uuid.uuid4()),
         'sender_id': victim_id,
@@ -145,7 +146,7 @@ def create_smurfing_ring(accounts_df, date):
         'receiver_risk_score': central_mule_info['risk_score']
     })
 
-    if not secondary_mules.any():
+    if len(secondary_mules) == 0:
         return ring_transactions
 
     # Rapid distribution to secondary mules
@@ -153,7 +154,7 @@ def create_smurfing_ring(accounts_df, date):
     for mule in secondary_mules:
         transaction_time += timedelta(seconds=np.random.randint(20, 90)) # Very fast distribution
         mule_info = accounts_df[accounts_df['account_id'] == mule].iloc[0]
-        
+
         ring_transactions.append({
             'transaction_id': str(uuid.uuid4()),
             'sender_id': central_mule,
@@ -184,7 +185,7 @@ def create_smurfing_ring(accounts_df, date):
         if not cash_out_receiver_pool.empty:
             cash_out_receiver_id = np.random.choice(cash_out_receiver_pool['account_id'])
             cash_out_receiver_info = accounts_df[accounts_df['account_id'] == cash_out_receiver_id].iloc[0]
-            
+
             ring_transactions.append({
                 'transaction_id': str(uuid.uuid4()),
                 'sender_id': mule,
@@ -208,13 +209,13 @@ def create_smurfing_ring(accounts_df, date):
                 'sender_risk_score': mule_info['risk_score'],
                 'receiver_risk_score': cash_out_receiver_info['risk_score']
             })
-    
+
     return ring_transactions
 
 def create_circular_payment_ring(accounts_df, date):
     """Simulates circular payments to build artificial transaction history."""
     ring_transactions = []
-    
+
     high_risk_accounts = accounts_df[accounts_df['risk_score'] > 0.6]
     if len(high_risk_accounts) < 3:
         return []
@@ -227,13 +228,13 @@ def create_circular_payment_ring(accounts_df, date):
     # Use amounts that look less suspicious (not perfect round numbers)
     base_amount = round(np.random.uniform(1000.0, 5000.0) / 100) * 100 * np.random.uniform(0.95, 1.05)
     transaction_time = date
-    
+
     # Add "warm-up" transactions for one of the accounts in the cycle
     warmup_account_id = cycle_accounts[0]
     for _ in range(np.random.randint(1, 4)):
         warmup_receiver = np.random.choice(accounts_df[accounts_df['risk_score'] < 0.3]['account_id'])
         if warmup_receiver == warmup_account_id: continue
-        
+
         warmup_time = transaction_time - timedelta(days=np.random.randint(1, 5), hours=np.random.randint(1,12))
         warmup_amount = round(np.random.uniform(20.0, 150.0), 2)
         sender_info = accounts_df[accounts_df['account_id'] == warmup_account_id].iloc[0]
@@ -269,7 +270,7 @@ def create_circular_payment_ring(accounts_df, date):
         sender_id = cycle_accounts[i]
         receiver_id = cycle_accounts[(i + 1) % num_in_cycle]
         transaction_time += timedelta(minutes=np.random.randint(1, 15)) # Faster cycles
-        
+
         sender_info = accounts_df[accounts_df['account_id'] == sender_id].iloc[0]
         receiver_info = accounts_df[accounts_df['account_id'] == receiver_id].iloc[0]
 
@@ -296,16 +297,16 @@ def create_circular_payment_ring(accounts_df, date):
             'sender_risk_score': sender_info['risk_score'],
             'receiver_risk_score': receiver_info['risk_score']
         })
-        
+
     return ring_transactions
 
 def create_salary_payments(accounts_df, date):
     """Simulates legitimate salary payments from businesses to individuals."""
     salary_transactions = []
-    
+
     businesses = accounts_df[accounts_df['account_type'] == 'business']
     individuals = accounts_df[accounts_df['account_type'] == 'individual']
-    
+
     if len(businesses) == 0 or len(individuals) < 5:
         return []
 
@@ -318,7 +319,7 @@ def create_salary_payments(accounts_df, date):
     for employee_id in employees:
         salary_amount = round(np.random.uniform(2500.0, 8000.0), 2)
         transaction_time = date + timedelta(minutes=np.random.randint(0, 60))
-        
+
         sender_info = accounts_df[accounts_df['account_id'] == employer_id].iloc[0]
         receiver_info = accounts_df[accounts_df['account_id'] == employee_id].iloc[0]
 
@@ -345,7 +346,7 @@ def create_salary_payments(accounts_df, date):
             'sender_risk_score': sender_info['risk_score'],
             'receiver_risk_score': receiver_info['risk_score']
         })
-    
+
     return salary_transactions
 
 def create_microtransaction(accounts_df, date):
@@ -353,10 +354,10 @@ def create_microtransaction(accounts_df, date):
     sender_id, receiver_id = np.random.choice(accounts_df['account_id'], 2, replace=False)
     device_id, ip_address = get_account_details(accounts_df, sender_id)
     amount = round(np.random.uniform(1.0, 50.0), 2)
-    
+
     sender_info = accounts_df[accounts_df['account_id'] == sender_id].iloc[0]
     receiver_info = accounts_df[accounts_df['account_id'] == receiver_id].iloc[0]
-    
+
     return {
         'transaction_id': str(uuid.uuid4()),
         'sender_id': sender_id,
@@ -386,14 +387,14 @@ def create_business_transaction(accounts_df, date):
     businesses = accounts_df[accounts_df['account_type'] == 'business']
     if len(businesses) < 2:
         return create_normal_transaction(accounts_df, date)
-    
+
     sender_id, receiver_id = np.random.choice(businesses['account_id'], 2, replace=False)
     device_id, ip_address = get_account_details(accounts_df, sender_id)
     amount = round(np.random.uniform(1000.0, 25000.0), 2)
-    
+
     sender_info = accounts_df[accounts_df['account_id'] == sender_id].iloc[0]
     receiver_info = accounts_df[accounts_df['account_id'] == receiver_id].iloc[0]
-    
+
     return {
         'transaction_id': str(uuid.uuid4()),
         'sender_id': sender_id,
@@ -426,12 +427,14 @@ def main():
     TOTAL_TRANSACTIONS = 105000
     print(f"Generating {NUM_ACCOUNTS} accounts...")
     accounts_data = []
-
+    data_folder = r'./data'
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
     for _ in range(NUM_ACCOUNTS):
         account_type = random.choice(['individual', 'business'])
-        
+
         account_id = generate_cpf() if account_type == 'individual' else generate_cnpj()
-        
+
         # Generate multiple devices and IPs per account (realistic for modern users)
         num_devices = random.randint(1, 3)
         devices = [str(uuid.uuid4()) for _ in range(num_devices)]
@@ -439,7 +442,7 @@ def main():
 
         # Account creation date affects fraud risk
         creation_date = fake.date_time_between(start_date='-3y', end_date='now')
-        
+
         # Temporary dict to hold data for risk calculation
         temp_account_info = {
             'account_age_days': (datetime.now() - creation_date).days,
@@ -487,42 +490,42 @@ def main():
         is_late_night = 0 <= hour <= 4
 
         transaction_types = [
-            'salary', 
-            'b2b', 
-            'micro', 
-            'smurfing', 
-            'circular', 
+            'salary',
+            'b2b',
+            'micro',
+            'smurfing',
+            'circular',
             'normal'
         ]
-        
+
         weights = [
-            0.0,    
-            0.10,   
-            0.25,   
+            0.0,
+            0.10,
+            0.25,
             0.001,  # Slightly increased fraud probability
             0.001,  # Slightly increased fraud probability
-            0.65    
+            0.65
         ]
 
         if current_date.day in [5, 20]:
-            weights[0] = 0.8  
-            weights[1] = 0.01 
+            weights[0] = 0.8
+            weights[1] = 0.01
             weights[2] = 0.05
             weights[5] = 0.14
-        
+
         if not is_business_hour:
             weights[1] = 0.0
 
         if is_late_night or is_weekend:
-            weights[3] *= 3  
-            weights[4] *= 3  
+            weights[3] *= 3
+            weights[4] *= 3
 
         total_weight = sum(weights)
         if total_weight > 0:
             normalized_weights = [w / total_weight for w in weights]
         else:
-            normalized_weights = [0] * len(weights)
-            normalized_weights[-1] = 1.0 
+            normalized_weights = [0.0] * len(weights)
+            normalized_weights[-1] = 1.0
 
         chosen_type = np.random.choice(transaction_types, p=normalized_weights)
 
@@ -536,7 +539,7 @@ def main():
             transactions.extend(create_smurfing_ring(accounts_df, current_date))
         elif chosen_type == 'circular':
             transactions.extend(create_circular_payment_ring(accounts_df, current_date))
-        else: 
+        else:
             transactions.append(create_normal_transaction(accounts_df, current_date))
 
         if len(transactions) % 1000 == 0 and len(transactions) > 0:
@@ -544,7 +547,7 @@ def main():
 
     print("Generation complete. Preparing final CSV...")
     transactions_df = pd.DataFrame(transactions)
-    transactions_df = transactions_df.sample(frac=1).reset_index(drop=True)  
+    transactions_df = transactions_df.sample(frac=1).reset_index(drop=True)
     transactions_df.to_csv('./data/pix_transactions.csv', index=False)
 
     print(f"Successfully created pix_transactions.csv with {len(transactions_df)} rows.")
@@ -554,11 +557,11 @@ def main():
     total_fraud = sum(count for flag, count in fraud_counts.items() if flag not in normal_flags)
     fraud_rate = (total_fraud / len(transactions_df)) * 100
 
-    print(f"\nDataset Summary:")
+    print("\nDataset Summary:")
     print(f"Total transactions: {len(transactions_df):,}")
     print(f"Total accounts: {len(accounts_df):,}")
     print(f"Fraud rate: {fraud_rate:.2f}%")
-    print(f"Transaction types:")
+    print("Transaction types:")
     for flag, count in fraud_counts.items():
         print(f"  {flag}: {count:,} ({count/len(transactions_df)*100:.1f}%)")
 

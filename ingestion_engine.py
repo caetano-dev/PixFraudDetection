@@ -1,5 +1,6 @@
 import redis
 from neo4j import GraphDatabase
+from typing import Any
 import json
 import os
 import logging
@@ -29,7 +30,7 @@ def init_redis() -> redis.Redis:
         logger.exception("Failed to connect to Redis")
         raise
 
-def init_neo4j() -> GraphDatabase:
+def init_neo4j() -> Any:  # type: ignore
     """Initialize and return Neo4j driver."""
     try:
         driver = GraphDatabase.driver(
@@ -109,7 +110,7 @@ def ingest_transaction(driver, tx_data: dict) -> None:
         flow.fraudTransactionCount = flow.fraudTransactionCount + CASE WHEN $fraud_flag STARTS WITH 'SMURFING' OR $fraud_flag = 'CIRCULAR_PAYMENT' THEN 1 ELSE 0 END
     """
     try:
-        driver.execute_query(query, **tx_data)
+        driver.execute_query(query, **tx_data)  # type: ignore
         logger.debug(f"Ingested transaction: {tx_data['transaction_id']}")
     except Exception:
         logger.exception(f"Error ingesting transaction {tx_data.get('transaction_id')}")
@@ -153,7 +154,7 @@ def main() -> None:
         logger.info("Stopping ingestion engine...")
     finally:
         pubsub.close()
-        driver.close()
+        driver.close()  # type: ignore
         logger.info("Connections closed.")
 
 if __name__ == '__main__':

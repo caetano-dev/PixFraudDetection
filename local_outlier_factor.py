@@ -139,7 +139,7 @@ def apply_lof_within_communities(features_df, n_neighbors=5, contamination=0.1):
         actual_n_neighbors = min(n_neighbors, len(community_data) - 1)
         
         # Apply LOF
-        lof = LocalOutlierFactor(n_neighbors=actual_n_neighbors, contamination=contamination)
+        lof = LocalOutlierFactor(n_neighbors=actual_n_neighbors, contamination=contamination)  # type: ignore
         outlier_predictions = lof.fit_predict(X_scaled)
         outlier_scores = lof.negative_outlier_factor_
         

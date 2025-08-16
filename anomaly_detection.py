@@ -4,6 +4,7 @@ from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler
 import joblib
 import argparse
+import os
 
 def apply_isolation_forest(features_df, features_list):
     """
@@ -41,7 +42,7 @@ def apply_local_outlier_factor(features_df, features_list, n_neighbors=20, conta
     # Adjust n_neighbors if dataset is small
     actual_n_neighbors = min(n_neighbors, len(features_df) - 1)
     
-    model = LocalOutlierFactor(n_neighbors=actual_n_neighbors, contamination=contamination)
+    model = LocalOutlierFactor(n_neighbors=actual_n_neighbors, contamination=contamination)  # type: ignore
     predictions = model.fit_predict(X_scaled)
     anomaly_scores = model.negative_outlier_factor_
     
@@ -54,6 +55,7 @@ def apply_local_outlier_factor(features_df, features_list, n_neighbors=20, conta
     return features_df
 
 def main():
+    os.makedirs('./models', exist_ok=True)
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Anomaly Detection for PIX Fraud Detection')
     parser.add_argument('--algorithm', choices=['isolation_forest', 'lof'], default='lof',
@@ -120,11 +122,11 @@ def main():
     # Apply the selected algorithm
     if args.algorithm == 'isolation_forest':
         features_df = apply_isolation_forest(features_df, available_features)
-        model_name = "Isolation Forest"
+
     else:
         features_df = apply_local_outlier_factor(features_df, available_features, 
                                                 args.n_neighbors, args.contamination)
-        model_name = "Local Outlier Factor"
+
 
     print(f"Top 5 most anomalous accounts based on {args.algorithm}:")
     print(features_df.sort_values(by='anomaly_score', ascending=True).head(5))

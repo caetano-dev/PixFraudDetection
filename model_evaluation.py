@@ -109,6 +109,7 @@ def evaluate_lof_fraud_detection(lof_df):
     }
 
 def evaluate_global_anomaly_detection(anomaly_df):
+    roc_auc = None
     """Evaluate global anomaly detection performance."""
     print("\n" + "="*60)
     print("GLOBAL ANOMALY DETECTION EVALUATION")
