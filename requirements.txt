@@ -7,7 +7,7 @@ python-dotenv
 scikit-learn==1.5.1
 joblib
 streamlit==1.37.0
-streamlit-agraph==0.0.48
+streamlit-agraph
 plotly
 networkx
 python-louvain
