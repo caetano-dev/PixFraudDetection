@@ -6,6 +6,22 @@ from datetime import datetime, timedelta
 import uuid
 import os
 
+def get_realistic_transaction_time(current_date):
+    # Hourly probabilities: low overnight, peak during business hours
+    hour_probabilities = [
+        0.01, 0.01, 0.01, 0.01, 0.01, 0.02,  # 00:00–05:59
+        0.04, 0.06, 0.07, 0.08, 0.08, 0.07,  # 06:00–11:59
+        0.07, 0.06, 0.05, 0.05, 0.05, 0.04,  # 12:00–17:59
+        0.03, 0.03, 0.02, 0.01, 0.01, 0.01   # 18:00–23:59
+    ]
+    # Normalize probabilities to sum to 1 instead of appending
+    total_prob = sum(hour_probabilities)
+    hour_probabilities = [p / total_prob for p in hour_probabilities]
+    hour = np.random.choice(24, p=hour_probabilities)
+    minute = np.random.randint(0, 60)
+    second = np.random.randint(0, 60)
+    return current_date.replace(hour=hour, minute=minute, second=second)
+
 print("Starting dataset generation...")
 fake = Faker('pt_BR')
 
@@ -61,7 +77,10 @@ def create_normal_transaction(accounts_df, date):
     """Simulates a simple, everyday transaction between any two accounts."""
     sender_id, receiver_id = np.random.choice(accounts_df['account_id'], 2, replace=False)
     device_id, ip_address = get_account_details(accounts_df, sender_id)
-    amount = round(np.random.uniform(5.0, 500.0), 2)
+    # Use log-normal distribution for realistic transaction values
+    amount = round(np.random.lognormal(mean=3.0, sigma=1.0), 2)
+    if amount < 1.0:
+        amount = 1.0
 
     sender_info = accounts_df[accounts_df['account_id'] == sender_id].iloc[0]
     receiver_info = accounts_df[accounts_df['account_id'] == receiver_id].iloc[0]
@@ -423,8 +442,11 @@ def main():
     """Main function to generate and save the dataset."""
     print("Starting dataset generation...")
 
-    NUM_ACCOUNTS = 9500
-    TOTAL_TRANSACTIONS = 105000
+    NUM_ACCOUNTS = 10000
+    TOTAL_TRANSACTIONS = 1050000
+    REALISTIC_FRAUD_RATE = 0.0005
+    num_smurfing_events = int(TOTAL_TRANSACTIONS * REALISTIC_FRAUD_RATE * 0.6 / 11)
+    num_circular_events = int(TOTAL_TRANSACTIONS * REALISTIC_FRAUD_RATE * 0.5 / 4)
     print(f"Generating {NUM_ACCOUNTS} accounts...")
     accounts_data = []
     data_folder = r'./data'
@@ -480,9 +502,13 @@ def main():
 
     print(f"Generating {TOTAL_TRANSACTIONS} transactions... This is going to take some minutes, depending on your machine.")
     while len(transactions) < TOTAL_TRANSACTIONS:
-        current_date += timedelta(minutes=np.random.randint(1, 30))
+        # Advance the day every 5000 transactions
+        if len(transactions) > 0 and len(transactions) % 5000 == 0:
+            current_date += timedelta(days=1)
         if current_date > end_date:
             current_date = start_date
+        # Generate realistic timestamp within the day
+        transaction_time = get_realistic_transaction_time(current_date)
 
         hour = current_date.hour
         is_weekend = current_date.weekday() >= 5
@@ -529,18 +555,22 @@ def main():
 
         chosen_type = np.random.choice(transaction_types, p=normalized_weights)
 
-        if chosen_type == 'salary':
-            transactions.extend(create_salary_payments(accounts_df, current_date))
-        elif chosen_type == 'b2b':
-            transactions.append(create_business_transaction(accounts_df, current_date))
-        elif chosen_type == 'micro':
-            transactions.append(create_microtransaction(accounts_df, current_date))
-        elif chosen_type == 'smurfing':
-            transactions.extend(create_smurfing_ring(accounts_df, current_date))
-        elif chosen_type == 'circular':
-            transactions.extend(create_circular_payment_ring(accounts_df, current_date))
+        # Controlled fraud quotas
+        if num_smurfing_events > 0:
+            transactions.extend(create_smurfing_ring(accounts_df, transaction_time))
+            num_smurfing_events -= 1
+        elif num_circular_events > 0:
+            transactions.extend(create_circular_payment_ring(accounts_df, transaction_time))
+            num_circular_events -= 1
         else:
-            transactions.append(create_normal_transaction(accounts_df, current_date))
+            if chosen_type == 'salary':
+                transactions.extend(create_salary_payments(accounts_df, transaction_time))
+            elif chosen_type == 'b2b':
+                transactions.append(create_business_transaction(accounts_df, transaction_time))
+            elif chosen_type == 'micro':
+                transactions.append(create_microtransaction(accounts_df, transaction_time))
+            else:
+                transactions.append(create_normal_transaction(accounts_df, transaction_time))
 
         if len(transactions) % 1000 == 0 and len(transactions) > 0:
             print(f"  ... {len(transactions)} transactions generated.")
