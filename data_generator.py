@@ -1,10 +1,12 @@
 import pandas as pd
 import numpy as np
-from faker import Faker
 import random
-from datetime import datetime, timedelta
 import uuid
 import os
+from multiprocessing import Pool, cpu_count
+from faker import Faker
+from datetime import datetime, timedelta
+import time
 
 def get_realistic_transaction_time(current_date):
     """Generates a realistic timestamp based on hourly probabilities, reflecting typical usage patterns."""
@@ -24,6 +26,36 @@ def get_realistic_transaction_time(current_date):
 
 print("Starting dataset generation...")
 fake = Faker('pt_BR')
+
+# Worker for parallel account generation
+def _account_worker(_):
+    fake_local = Faker('pt_BR')
+    account_type = random.choice(['individual', 'business'])
+    account_id = generate_cpf() if account_type == 'individual' else generate_cnpj()
+    num_devices = random.randint(1, 3)
+    devices = [str(uuid.uuid4()) for _ in range(num_devices)]
+    ips = [generate_ip_address() for _ in range(num_devices)]
+    creation_date = fake_local.date_time_between(start_date='-3y', end_date='now')
+    temp_info = {
+        'account_age_days': (datetime.now() - creation_date).days,
+        'is_verified': random.choice([True, False]),
+        'phone_verified': random.choice([True, False]),
+        'ips': ips
+    }
+    return {
+        'account_id': account_id,
+        'holder_name': fake_local.name() if account_type == 'individual' else fake_local.company(),
+        'account_type': account_type,
+        'creation_date': creation_date.isoformat(),
+        'account_age_days': temp_info['account_age_days'],
+        'state': fake_local.state_abbr(),
+        'city': fake_local.city(),
+        'is_verified': temp_info['is_verified'],
+        'phone_verified': temp_info['phone_verified'],
+        'risk_score': calculate_initial_risk(temp_info),
+        'devices': '|'.join(devices),
+        'ips': '|'.join(ips)
+    }
 
 def generate_cpf():
     """Generates a random, mathematically valid CPF number."""
@@ -65,7 +97,8 @@ def calculate_initial_risk(account_info):
 
 def get_account_details(df, account_id):
     """Helper to get devices and IPs for a given account."""
-    account_info = df[df['account_id'] == account_id].iloc[0]
+    # optimized lookup by index
+    account_info = df.loc[account_id]
     devices = account_info['devices'].split('|')
     ips = account_info['ips'].split('|')
     return random.choice(devices), random.choice(ips)
@@ -84,8 +117,8 @@ def create_normal_transaction(accounts_df, date, is_weekday=None):
     
     amount = max(amount, 1.0)
 
-    sender_info = accounts_df[accounts_df['account_id'] == sender_id].iloc[0]
-    receiver_info = accounts_df[accounts_df['account_id'] == receiver_id].iloc[0]
+    sender_info = accounts_df.loc[sender_id]
+    receiver_info = accounts_df.loc[receiver_id]
 
     return {
         'transaction_id': str(uuid.uuid4()),
@@ -292,8 +325,8 @@ def create_circular_payment_ring(accounts_df, date):
         receiver_id = cycle_accounts[(i + 1) % num_in_cycle]
         transaction_time += timedelta(minutes=np.random.randint(1, 15)) # Faster cycles
 
-        sender_info = accounts_df[accounts_df['account_id'] == sender_id].iloc[0]
-        receiver_info = accounts_df[accounts_df['account_id'] == receiver_id].iloc[0]
+        sender_info = accounts_df.loc[sender_id]
+        receiver_info = accounts_df.loc[receiver_id]
 
         ring_transactions.append({
             'transaction_id': str(uuid.uuid4()),
@@ -440,90 +473,99 @@ def create_business_transaction(accounts_df, date):
         'receiver_risk_score': receiver_info['risk_score']
     }
 
+
 def generate_accounts(num_accounts):
     """Generate and save synthetic account data."""
     data_folder = './data'
     os.makedirs(data_folder, exist_ok=True)
 
+    # Parallel account generation with progress feedback
     accounts = []
-    for _ in range(num_accounts):
-        account_type = random.choice(['individual', 'business'])
-        account_id = generate_cpf() if account_type == 'individual' else generate_cnpj()
-        num_devices = random.randint(1, 3)
-        devices = [str(uuid.uuid4()) for _ in range(num_devices)]
-        ips = [generate_ip_address() for _ in range(num_devices)]
-        creation_date = fake.date_time_between(start_date='-3y', end_date='now')
-        temp_info = {
-            'account_age_days': (datetime.now() - creation_date).days,
-            'is_verified': random.choice([True, False]),
-            'phone_verified': random.choice([True, False]),
-            'ips': ips
-        }
-        accounts.append({
-            'account_id': account_id,
-            'holder_name': fake.name() if account_type == 'individual' else fake.company(),
-            'account_type': account_type,
-            'creation_date': creation_date.isoformat(),
-            'account_age_days': temp_info['account_age_days'],
-            'state': fake.state_abbr(),
-            'city': fake.city(),
-            'is_verified': temp_info['is_verified'],
-            'phone_verified': temp_info['phone_verified'],
-            'risk_score': calculate_initial_risk(temp_info),
-            'devices': '|'.join(devices),
-            'ips': '|'.join(ips)
-        })
+    total_accounts = num_accounts
+    start_time = time.time()
+    with Pool(cpu_count()) as pool:
+        for idx, record in enumerate(pool.imap_unordered(_account_worker, range(total_accounts)), 1):
+            accounts.append(record)
+            if idx % max(1, total_accounts // 10) == 0 or idx == total_accounts:
+                elapsed = time.time() - start_time
+                eta = elapsed / idx * (total_accounts - idx)
+                print(f"Accounts generated: {idx}/{total_accounts} "
+                      f"({idx/total_accounts*100:.1f}%), ETA {eta:.1f}s")
+
     df = pd.DataFrame(accounts)
     df.to_csv('./data/pix_accounts.csv', index=False)
     return df
 
+def _day_worker(args):
+    day_idx, tx_count, start_dt, smurf_set, circ_set, df = args
+    daily = []
+    curr_date = start_dt + timedelta(days=day_idx)
+    # Fraud injection
+    if day_idx in smurf_set:
+        daily.extend(create_smurfing_ring(df, get_realistic_transaction_time(curr_date)))
+    if day_idx in circ_set:
+        daily.extend(create_circular_payment_ring(df, get_realistic_transaction_time(curr_date)))
+    # Normal transactions
+    for _ in range(tx_count):
+        ttime = get_realistic_transaction_time(curr_date)
+        rv = np.random.rand()
+        if curr_date.day in [5, 20] and rv < 0.1:
+            daily.extend(create_salary_payments(df, ttime))
+        elif rv < 0.05:
+            daily.append(create_business_transaction(df, ttime))
+        elif rv < 0.45:
+            daily.append(create_microtransaction(df, ttime))
+        else:
+            daily.append(create_normal_transaction(df, ttime))
+    return daily
+
 def generate_transactions(accounts_df, total_tx, start_date, end_date, smurf_events, circular_events):
     """
     Generate transactions with a more realistic daily distribution and controlled fraud injection.
+    Parallelized using multiprocessing for per-day workloads.
     """
-    transactions = []
-    
-    # Pre-calculate the number of transactions to generate for each day
+    # Prepare accounts for fast lookup
+    if accounts_df.index.name != 'account_id':
+        accounts_df = accounts_df.set_index('account_id', drop=False)
+
+    # Pre-calculate daily transaction counts
     num_days = (end_date - start_date).days + 1
-    # Assign higher weight to weekdays
-    daily_weights = [5 if i % 7 < 5 else 1 for i in range(num_days)]
-    daily_weights = np.array(daily_weights) / sum(daily_weights)
-    
-    # Distribute the total transaction count across the days based on weights
+    daily_weights = np.array([5 if i % 7 < 5 else 1 for i in range(num_days)], dtype=float)
+    daily_weights /= daily_weights.sum()
     transactions_per_day = np.random.multinomial(total_tx, daily_weights)
-    
-    # Schedule fraud events on random days
+
+    # Schedule fraud events
     fraud_days = sorted(random.sample(range(num_days), smurf_events + circular_events))
     smurfing_days = set(fraud_days[:smurf_events])
     circular_days = set(fraud_days[smurf_events:])
-    
-    for day_index, num_transactions_for_day in enumerate(transactions_per_day):
-        current_date = start_date + timedelta(days=day_index)
-        
-        # --- Fraud Injection ---
-        if day_index in smurfing_days:
-            transactions.extend(create_smurfing_ring(accounts_df, get_realistic_transaction_time(current_date)))
-        if day_index in circular_days:
-            transactions.extend(create_circular_payment_ring(accounts_df, get_realistic_transaction_time(current_date)))
-            
-        # --- Normal Transaction Generation ---
-        for _ in range(num_transactions_for_day):
-            transaction_time = get_realistic_transaction_time(current_date)
-            
-            # Use probabilities to select transaction type
-            rand_val = np.random.rand()
-            if current_date.day in [5, 20] and rand_val < 0.1:
-                transactions.extend(create_salary_payments(accounts_df, transaction_time))
-            elif rand_val < 0.05:
-                transactions.append(create_business_transaction(accounts_df, transaction_time))
-            elif rand_val < 0.45:
-                transactions.append(create_microtransaction(accounts_df, transaction_time))
-            else:
-                transactions.append(create_normal_transaction(accounts_df, transaction_time))
 
-    df = pd.DataFrame(transactions).dropna().sample(frac=1).reset_index(drop=True)
-    df.to_csv('./data/pix_transactions.csv', index=False)
-    return df
+    # Build parameters for each day
+    params = [
+        (day_idx, tx_count, start_date, smurfing_days, circular_days, accounts_df)
+        for day_idx, tx_count in enumerate(transactions_per_day)
+    ]
+
+
+
+    # Parallel execution across CPU cores with progress feedback
+    transactions = []
+    total_days = len(params)
+    start_time = time.time()
+    with Pool(cpu_count()) as pool:
+        for day_idx, day_list in enumerate(pool.imap_unordered(_day_worker, params), 1):
+            transactions.extend(day_list)
+            if day_idx % max(1, total_days // 10) == 0 or day_idx == total_days:
+                elapsed = time.time() - start_time
+                eta = elapsed / day_idx * (total_days - day_idx)
+                print(f"Processed day {day_idx}/{total_days} ({day_idx/total_days*100:.1f}%), ETA {eta:.1f}s")
+
+    df_tx = pd.DataFrame(transactions).dropna().sample(frac=1).reset_index(drop=True)
+    df_tx.to_csv('./data/pix_transactions.csv', index=False)
+    return df_tx
+
+# (Removed obsolete nested helper; using top-level `_day_worker` for per-day transaction generation)
+
+
 
 
 def main():
