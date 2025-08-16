@@ -21,6 +21,7 @@ class TestDataGenerator(unittest.TestCase):
             'is_verified': [True] * 10,
             'state': ['SP'] * 10,
         })
+        self.accounts_df = self.accounts_df.set_index('account_id', drop=False)
 
     def test_generate_cpf(self):
         """Test if the generated CPF has a valid format."""

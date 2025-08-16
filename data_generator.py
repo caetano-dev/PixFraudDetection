@@ -473,7 +473,6 @@ def create_business_transaction(accounts_df, date):
         'receiver_risk_score': receiver_info['risk_score']
     }
 
-
 def generate_accounts(num_accounts):
     """Generate and save synthetic account data."""
     data_folder = './data'
@@ -545,8 +544,6 @@ def generate_transactions(accounts_df, total_tx, start_date, end_date, smurf_eve
         for day_idx, tx_count in enumerate(transactions_per_day)
     ]
 
-
-
     # Parallel execution across CPU cores with progress feedback
     transactions = []
     total_days = len(params)
@@ -562,11 +559,6 @@ def generate_transactions(accounts_df, total_tx, start_date, end_date, smurf_eve
     df_tx = pd.DataFrame(transactions).dropna().sample(frac=1).reset_index(drop=True)
     df_tx.to_csv('./data/pix_transactions.csv', index=False)
     return df_tx
-
-# (Removed obsolete nested helper; using top-level `_day_worker` for per-day transaction generation)
-
-
-
 
 def main():
     """Main function to orchestrate the data generation."""
