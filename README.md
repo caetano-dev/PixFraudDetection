@@ -86,13 +86,11 @@ A modular, production-ready pipeline for synthetic data generation, streaming in
    ```
 
 2. **Generate synthetic data**  
-It will generate more than 1.000.000 transactions, creating a 200MB file. You can adjust this number in the code. Look for `TOTAL_TRANSACTIONS`
    ```bash
    python data_generator.py
    ```
 
 3. **Start ingestion**  
-YOU DO NOT NEED TO WAIT FOR THE INGESTION TOO FINISH, SINCE IT MAY TAKE TOO LONG. You can stop it after a few minutes and move on to the next steps.
    ```bash
    python ingestion_engine.py --csv ./data/pix_transactions.csv
    ```
