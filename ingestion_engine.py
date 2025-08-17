@@ -1,4 +1,6 @@
 import redis
+import argparse
+import csv
 from neo4j import GraphDatabase
 from typing import Any
 import json
@@ -116,6 +118,19 @@ def ingest_transaction(driver, tx_data: dict) -> None:
         logger.exception(f"Error ingesting transaction {tx_data.get('transaction_id')}")
 
 def main() -> None:
+    # Parse command-line arguments for optional CSV ingestion
+    parser = argparse.ArgumentParser(description="Ingest transactions from Redis stream or CSV file")
+    parser.add_argument('--csv', dest='csv_file', help='Path to CSV file for batch ingestion')
+    args = parser.parse_args()
+
+    redis_client = init_redis()
+    driver = init_neo4j()
+
+    # If CSV file provided, ingest from CSV and exit
+    if args.csv_file:
+        ingest_csv(driver, args.csv_file)
+        driver.close()  # type: ignore
+        return
     """Main loop: initialize connections, optionally clear DB, subscribe to Redis, and ingest messages."""
     redis_client = init_redis()
     driver = init_neo4j()
@@ -156,6 +171,37 @@ def main() -> None:
         pubsub.close()
         driver.close()  # type: ignore
         logger.info("Connections closed.")
+
+def ingest_csv(driver, csv_path: str) -> None:
+    with open(csv_path, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            # Convert field types as needed
+            tx_data = {
+                'sender_id': row.get('sender_id'),
+                'receiver_id': row.get('receiver_id'),
+                'device_id': row.get('device_id'),
+                'ip_address': row.get('ip_address'),
+                'transaction_id': row.get('transaction_id'),
+                'amount': row.get('amount'),
+                'timestamp': row.get('timestamp'),
+                'fraud_flag': row.get('fraud_flag'),
+                'transaction_type': row.get('transaction_type'),
+                'channel': row.get('channel'),
+                'merchant_category': row.get('merchant_category'),
+                'hour_of_day': row.get('hour_of_day'),
+                'day_of_week': row.get('day_of_week'),
+                'is_weekend': row.get('is_weekend'),
+                'same_state': row.get('same_state'),
+                'sender_verified': row.get('sender_verified'),
+                'sender_state': row.get('sender_state'),
+                'sender_risk_score': row.get('sender_risk_score'),
+                'receiver_verified': row.get('receiver_verified'),
+                'receiver_state': row.get('receiver_state'),
+                'receiver_risk_score': row.get('receiver_risk_score'),
+            }
+            logger.info(f"Ingesting CSV transaction {tx_data.get('transaction_id')}")
+            ingest_transaction(driver, tx_data)
 
 if __name__ == '__main__':
     main()

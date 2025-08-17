@@ -2,6 +2,10 @@
 
 A modular, production-ready pipeline for synthetic data generation, streaming ingestion, graph-based feature engineering, and ML-driven fraud detection on Brazilian PIX transactions.
 
+[screenshot1](./.github/assets/screenshot1.png)
+[screenshot2](./.github/assets/screenshot2.png)
+[screenshot3](./.github/assets/screenshot3.png)
+
 ## Table of Contents
 
 - [Features](#features)
@@ -78,17 +82,20 @@ A modular, production-ready pipeline for synthetic data generation, streaming in
 
 2. **Generate synthetic data**  
    ```bash
-   python data_generator.py --output ./data/transactions.csv
+   python data_generator.py
    ```
 
 3. **Start ingestion**  
    ```bash
-   python ingestion_engine.py
+   python ingestion_engine.py --csv ./data/pix_transactions.csv
    ```
 
+   Ensure Neo4j is running and the GDS plugin is installed. The script will create the necessary graph structure and ingest the data.
+
 4. **Stream transactions** (in a new shell)  
+YOU CAN SKIP THIS IF YOU ARE NOT USING STREAMING
    ```bash
-   python stream_simulator.py --input ./data/transactions.csv
+   python stream_simulator.py 
    ```
 
 5. **Feature engineering**  
