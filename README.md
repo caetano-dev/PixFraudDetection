@@ -2,9 +2,14 @@
 
 A modular, production-ready pipeline for synthetic data generation, streaming ingestion, graph-based feature engineering, and ML-driven fraud detection on Brazilian PIX transactions.
 
-[screenshot1](./.github/assets/screenshot1.png)
-[screenshot2](./.github/assets/screenshot2.png)
-[screenshot3](./.github/assets/screenshot3.png)
+![screenshot](./.github/assets/1.png)
+![screenshot](./.github/assets/2.png)
+![screenshot](./.github/assets/3.png)
+![screenshot](./.github/assets/4.png)
+![screenshot](./.github/assets/5.png)
+![screenshot](./.github/assets/6.png)
+![screenshot](./.github/assets/7.png)
+![screenshot](./.github/assets/8.png)
 
 ## Table of Contents
 

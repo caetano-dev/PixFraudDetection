@@ -93,7 +93,7 @@ class Neo4jConnection:
         RETURN DISTINCT
             startNode(rel).accountId AS source,
             endNode(rel).accountId AS target,
-            type(rel) as type
+            type(rel) as type LIMIT 200
         """ % hop_count
         with driver.session() as session:
             result = session.run(query, account_id=account_id)
