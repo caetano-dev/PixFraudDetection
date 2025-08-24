@@ -12,6 +12,16 @@ standard_columns = [
     'payment_type', 'is_laundering'
 ]
 
+def parse_ts(s: pd.Series) -> pd.Series:
+    # Strict parser: first try YYYY/MM/DD HH:MM, then fall back to HH:MM:SS
+    s = s.astype(str).str.strip()
+    dt = pd.to_datetime(s, format='%Y/%m/%d %H:%M', errors='coerce')
+    mask = dt.isna()
+    if mask.any():
+        dt2 = pd.to_datetime(s[mask], format='%Y/%m/%d %H:%M:%S', errors='coerce')
+        dt.loc[mask] = dt2
+    return dt
+
 def normalize_strings(df):
     for col in ['currency_sent', 'currency_received', 'payment_type']:
         df[col] = df[col].astype(str).str.strip()
@@ -60,7 +70,7 @@ def parse_patterns_file(file_path):
         return df
 
     # Dtypes and normalization
-    df['timestamp'] = pd.to_datetime(df['timestamp'], format='%Y/%m/%d %H:%M', errors='coerce')
+    df['timestamp'] = parse_ts(df['timestamp'])
     # Preserve leading zeros, keep IDs as strings
     for col in ['from_bank', 'to_bank', 'from_account', 'to_account']:
         df[col] = df[col].astype(str)
@@ -96,9 +106,8 @@ try:
         low_memory=False
     )
 
-    transactions_df['timestamp'] = pd.to_datetime(
-        transactions_df['timestamp'], format='%Y/%m/%d %H:%M', errors='coerce'
-    )
+    transactions_df['timestamp'] = parse_ts(transactions_df['timestamp'])
+
     # Coerce numerics
     transactions_df['amount_sent'] = pd.to_numeric(transactions_df['amount_sent'], errors='coerce')
     transactions_df['amount_received'] = pd.to_numeric(transactions_df['amount_received'], errors='coerce')
@@ -130,28 +139,99 @@ except Exception as e:
 # ------------------------
 # Step 2: Parse patterns, filter, save
 # ------------------------
+
 filtered_patterns_df = pd.DataFrame()
 try:
+    # 2a) Parse HI_patterns.txt and filter to ACH + USD
     patterns_path = os.path.join(DATA_DIR, 'HI_patterns.txt')
-    patterns_df = parse_patterns_file(patterns_path)
-
+    patterns_df = parse_patterns_file(patterns_path)  # uses normalize_strings inside
     if not patterns_df.empty:
-        mask_ach_usd = (
+        patterns_df['timestamp'] = parse_ts(patterns_df['timestamp'])
+        mask_pat = (
             (patterns_df['currency_sent_u'] == 'US DOLLAR') &
             (patterns_df['currency_received_u'] == 'US DOLLAR') &
-            (patterns_df['payment_type_u'] == 'ACH')
+            (patterns_df['payment_type_u'] == 'ACH') &
+            (patterns_df['is_laundering'] == 1)
         )
-        filtered_patterns_df = patterns_df[mask_ach_usd & (patterns_df['is_laundering'] == 1)].copy()
-
-        if not filtered_patterns_df.empty:
-            output_path_step2 = os.path.join(PROCESSED_DIR, '2_filtered_laundering_transactions.csv')
-            filtered_patterns_df.drop(columns=['currency_sent_u', 'currency_received_u', 'payment_type_u']).to_csv(output_path_step2, index=False)
-            print(f"✅ Step 2: Saved strictly USD ACH laundering transactions to '{output_path_step2}' "
-                  f"(rows={len(filtered_patterns_df):,})")
-        else:
-            print("ℹ️ Step 2: No matching laundering transactions found after filtering.")
+        filtered_patterns_df = patterns_df[mask_pat].copy()
     else:
-        print("ℹ️ Step 2: Patterns file parsed but contained no transactions.")
+        filtered_patterns_df = pd.DataFrame()
+
+    # 2b) Read main CSV and find ACH/USD positives not present in patterns subset
+    transactions_path = os.path.join(DATA_DIR, 'HI-Small_Trans.csv')
+    raw = pd.read_csv(
+        transactions_path,
+        header=None,
+        names=standard_columns,
+        dtype={
+            'from_bank': 'string', 'to_bank': 'string',
+            'from_account': 'string', 'to_account': 'string',
+            'currency_received': 'string', 'currency_sent': 'string',
+            'payment_type': 'string', 'is_laundering': 'string'
+        },
+        low_memory=False
+    )
+    raw['timestamp'] = parse_ts(raw['timestamp'])
+    raw['amount_sent'] = pd.to_numeric(raw['amount_sent'], errors='coerce')
+    raw['amount_received'] = pd.to_numeric(raw['amount_received'], errors='coerce')
+    raw['is_laundering'] = pd.to_numeric(raw['is_laundering'], errors='coerce').fillna(0).astype('int8')
+    raw = normalize_strings(raw)
+
+    mask_usd_ach = (
+        (raw['currency_sent_u'] == 'US DOLLAR') &
+        (raw['currency_received_u'] == 'US DOLLAR') &
+        (raw['payment_type_u'] == 'ACH')
+    )
+    raw_pos = raw[mask_usd_ach & raw['is_laundering'].eq(1)].copy()
+
+    # Robust join keys using integer cents
+    def to_cents(s): return pd.to_numeric(s, errors='coerce').mul(100).round().astype('Int64')
+    raw_pos['amount_sent_c'] = to_cents(raw_pos['amount_sent'])
+    raw_pos['amount_received_c'] = to_cents(raw_pos['amount_received'])
+
+    if not filtered_patterns_df.empty:
+        filtered_patterns_df['amount_sent_c'] = to_cents(filtered_patterns_df['amount_sent'])
+        filtered_patterns_df['amount_received_c'] = to_cents(filtered_patterns_df['amount_received'])
+    else:
+        # Ensure columns exist for the join below
+        filtered_patterns_df = pd.DataFrame(columns=list(raw_pos.columns) + ['attempt_id','attempt_type'])
+
+    merge_cols = ['timestamp','from_bank','from_account','to_bank','to_account','amount_received_c','amount_sent_c']
+
+    # Find positives in the main CSV that aren't in the patterns subset
+    missing = raw_pos.merge(filtered_patterns_df[merge_cols], on=merge_cols, how='left', indicator=True) \
+                     .query("_merge=='left_only'") \
+                     .drop(columns=['_merge'])
+
+    added = 0
+    if not missing.empty:
+        # Recover the full rows for the missing keys
+        missing_full = raw_pos.merge(missing[merge_cols], on=merge_cols, how='inner')
+        missing_full['attempt_id'] = pd.NA
+        missing_full['attempt_type'] = 'UNLISTED'
+
+        # Align columns and union
+        union_cols = sorted(set(filtered_patterns_df.columns).union(set(missing_full.columns)))
+        for col in union_cols:
+            if col not in filtered_patterns_df.columns: filtered_patterns_df[col] = pd.NA
+            if col not in missing_full.columns: missing_full[col] = pd.NA
+
+        filtered_patterns_df = pd.concat([filtered_patterns_df[union_cols], missing_full[union_cols]],
+                                         ignore_index=True).drop_duplicates(subset=merge_cols)
+        added = len(missing_full)
+
+    # Drop helper columns before saving
+    drop_helpers = ['currency_sent_u','currency_received_u','payment_type_u','amount_sent_c','amount_received_c']
+    keep_cols = [c for c in filtered_patterns_df.columns if c not in drop_helpers]
+    filtered_patterns_df = filtered_patterns_df[keep_cols]
+
+    if not filtered_patterns_df.empty:
+        output_path_step2 = os.path.join(PROCESSED_DIR, '2_filtered_laundering_transactions.csv')
+        filtered_patterns_df.to_csv(output_path_step2, index=False)
+        base = len(filtered_patterns_df) - added
+        print(f"✅ Step 2: Saved USD/ACH laundering transactions (patterns={base:,}, added_from_csv={added:,}, total={len(filtered_patterns_df):,}) to '{output_path_step2}'")
+    else:
+        print("ℹ️ Step 2: No USD/ACH laundering transactions found.")
 
 except Exception as e:
     print(f"Error in Step 2: {e}")
