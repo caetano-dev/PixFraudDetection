@@ -8,7 +8,7 @@ SKLEARN_OK = True
 # Import graph utilities and config
 from graph import (
     proc, p_norm, p_pos, p_acct,
-    WINDOW_DAYS_LIST, WINDOW_STRIDE_DAYS, MAX_WINDOWS_PER_SETTING,
+    WINDOW_DAYS_LIST, WINDOW_STRIDE_DAYS,
     LOUVAIN_RESOLUTION, LOUVAIN_SEED,
     build_all, iter_windows, get_windowed_graph_fast,
     derive_node_labels, aggregate_graph, run_louvain, score_communities_unsupervised
@@ -23,6 +23,8 @@ RESULTS_CSV = METRICS_DIR / "window_metrics.csv"
 
 K_FRACS = (0.005, 0.01, 0.02)  # 0.5%, 1%, 2% for precision@k and attempt coverage
 SEED_CUTOFF_FRAC = 0.2         # first 20% of timeline for global seeds
+
+MAX_WINDOWS_PER_SETTING = None
 
 # -----------------------
 # Metrics helpers
@@ -303,7 +305,8 @@ for window_days in WINDOW_DAYS_LIST:
             for kf in K_FRACS:
                 row[f"p_at_{int(kf*1000)/10:.1f}pct"] = None
                 cov = attempt_coverage(comm_ranked_nodes_cache[kf], att_nodes_map, k_frac=1.0)
-                row[f"attcov_at_{int(kf*100)}pct"] = cov
+                name = f"{int(kf*1000)/10:.1f}pct" 
+                row[f"attcov_at_{name}"] = cov
             rows.append(row)
 
         count += 1
@@ -312,21 +315,26 @@ for window_days in WINDOW_DAYS_LIST:
 
 df_metrics = pd.DataFrame(rows)
 
-# Optional: add a random baseline row per window for reference
-def add_random_baseline(dfm):
+def add_random_baseline(dfm: pd.DataFrame) -> pd.DataFrame:
+    cols = list(dfm.columns)
     rows = []
     for _, r in dfm.groupby(['window_days', 'ws', 'we']).head(1).iterrows():
-        base = r.to_dict()
+        base = {c: r.get(c, None) for c in cols}
         base['method'] = 'random'
-        base['prevalence_eval'] = base['prevalence_eval']  # Same for random
-        base['ap'] = base['prevalence_eval']  # AP of random ≈ prevalence
-        for col in ['p_at_0.5pct', 'p_at_1.0pct', 'p_at_2.0pct']:
-            base[col] = base['prevalence_eval']
-            # Fix column naming consistency for attempt coverage
-            pct = col.split('_at_')[1].replace('.0','')  # '1.0pct' -> '1pct'
+        # prevalence_eval is already present for this row (full-pop for centralities)
+        prev_eval = base.get('prevalence_eval')
+        if prev_eval is None or pd.isna(prev_eval):
+            prev_eval = (base.get('pos_nodes', 0) / base.get('nodes', 1)) if base.get('nodes', 0) else np.nan
+            base['prevalence_eval'] = prev_eval
+        base['ap'] = prev_eval  # AP of random ≈ prevalence
+        
+        for pcol in ['p_at_0.5pct', 'p_at_1.0pct', 'p_at_2.0pct']:
+            base[pcol] = prev_eval
+            pct = pcol.split('_at_')[1].replace('.0','')
             base[f'attcov_at_{pct}'] = None
         rows.append(base)
-    return pd.concat([dfm, pd.DataFrame(rows)], ignore_index=True)
+    rand_df = pd.DataFrame(rows, columns=cols)
+    return pd.concat([dfm, rand_df], ignore_index=True)
 
 df_metrics = add_random_baseline(df_metrics)
 
@@ -373,7 +381,7 @@ if not df_metrics.empty:
                         p01_median=('p_at_1.0pct','median'),
                         lift_p01_median=('lift_p_at_1.0pct','median'),
                         lift_eval_p01_median=('lift_eval_p_at_1.0pct','median'),
-                        attcov01_median=('attcov_at_1pct','median'),
+                        attcov01_median=('attcov_at_1.0pct','median'),
                         prevalence_median=('prevalence','median'),
                         windows=('ws','count'))
                .reset_index()
