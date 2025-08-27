@@ -229,6 +229,49 @@ def aggregate_graph(G: nx.MultiDiGraph, directed=False) -> nx.Graph:
     
     return H
 
+# Centrality baselines and evaluation
+def precision_at_k(y_true, y_score, k_frac=0.01):
+    y_true = np.asarray(y_true)
+    y_score = np.asarray(y_score)
+    n = max(1, int(len(y_true) * k_frac))
+    idx = np.argsort(-y_score)[:n]
+    return float(y_true[idx].mean())
+
+def eval_scores(nodes, y_true_dict, score_dict, k_fracs=(0.005, 0.01, 0.02)):
+    y_true = np.array([y_true_dict.get(n, 0) for n in nodes], dtype=int)
+    res = {}
+    for name, s in score_dict.items():
+        scores = np.array([s.get(n, 0.0) for n in nodes], dtype=float)
+        ap = average_precision_score(y_true, scores) if SKLEARN_OK and len(set(y_true)) > 1 else None
+        res[name] = {'ap': ap}
+        for k in k_fracs:
+            res[name][f'p@{int(k*1000)/10:.1f}%'] = precision_at_k(y_true, scores, k)
+    return res
+
+def run_centrality_baselines(H_dir: nx.DiGraph):
+    # Scores
+    scores = {}
+    try:
+        scores['pagerank_wlog'] = nx.pagerank(H_dir, weight='w_amount_log', alpha=0.9, max_iter=100, tol=1e-6)
+    except Exception:
+        scores['pagerank_wlog'] = {}
+    try:
+        hubs, auth = nx.hits(H_dir, max_iter=500, tol=1e-8, normalized=True)
+        scores['hits_hub'] = hubs
+        scores['hits_auth'] = auth
+    except Exception:
+        scores['hits_hub'] = {}; scores['hits_auth'] = {}
+    # Attribute-based
+    scores['in_deg'] = {n: H_dir.nodes[n].get('in_deg', 0) for n in H_dir}
+    scores['out_deg'] = {n: H_dir.nodes[n].get('out_deg', 0) for n in H_dir}
+    scores['in_tx'] = {n: H_dir.nodes[n].get('in_tx_count', 0) for n in H_dir}
+    scores['out_tx'] = {n: H_dir.nodes[n].get('out_tx_count', 0) for n in H_dir}
+    scores['in_amt'] = {n: H_dir.nodes[n].get('in_amount_sum', 0) for n in H_dir}
+    scores['out_amt'] = {n: H_dir.nodes[n].get('out_amount_sum', 0) for n in H_dir}
+    scores['collector'] = {n: (H_dir.nodes[n].get('in_amount_sum',0)) / (H_dir.nodes[n].get('out_amount_sum',0)+1) for n in H_dir}
+    scores['distributor'] = {n: (H_dir.nodes[n].get('out_amount_sum',0)) / (H_dir.nodes[n].get('in_amount_sum',0)+1) for n in H_dir}
+    return scores
+
 def run_louvain(H: nx.Graph, resolution=1.0, seed=42, weight='w_amount_log'):
     if nx_louvain_communities is not None:
         comms = nx_louvain_communities(H, weight=weight, resolution=resolution, seed=seed)
@@ -241,7 +284,7 @@ def run_louvain(H: nx.Graph, resolution=1.0, seed=42, weight='w_amount_log'):
         except Exception:
             print("Louvain unavailable: install networkx>=3.0 or `pip install python-louvain`.")
             return {}, []
-        partition = community_louvain.best_partition(H, weight='w_amount', random_state=seed, resolution=resolution)
+        partition = community_louvain.best_partition(H, weight=weight, random_state=seed, resolution=resolution)
         comms = {}
         for n, cid in partition.items():
             comms.setdefault(cid, set()).add(n)
@@ -502,6 +545,12 @@ for window_days in WINDOW_DAYS_LIST:
         derive_node_labels(H_win)
         H_agg = aggregate_graph(H_win, directed=False)
         H_agg_dir = aggregate_graph(H_win, directed=True)
+        
+        nodes = list(H_agg_dir.nodes())
+        y_true_dict = {n: int(H_agg_dir.nodes[n].get('is_laundering_involved', 0)) for n in nodes}
+        scores = run_centrality_baselines(H_agg_dir)
+        metrics = eval_scores(nodes, y_true_dict, scores, k_fracs=(0.005, 0.01, 0.02))
+        print("  Centrality baselines:", {m: {k: round(v,4) if v is not None else None for k, v in d.items()} for m, d in metrics.items()})
         
         # Unsupervised community scoring
         part_win, comms_win = run_louvain(H_agg, resolution=LOUVAIN_RESOLUTION, seed=LOUVAIN_SEED)
