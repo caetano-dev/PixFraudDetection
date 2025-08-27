@@ -128,7 +128,7 @@ try:
     if not filtered_normal_df.empty:
         output_path_step1 = os.path.join(PROCESSED_DIR, '1_filtered_normal_transactions.csv')
         filtered_normal_df.drop(columns=['currency_sent_u', 'currency_received_u', 'payment_type_u']).to_csv(output_path_step1, index=False)
-        print(f"✅ Step 1: Saved strictly USD ACH normal transactions to '{output_path_step1}' "
+        print(f"Step 1: Saved strictly USD ACH normal transactions to '{output_path_step1}' "
               f"(rows={len(filtered_normal_df):,})")
     else:
         print("ℹ️ Step 1: No matching normal transactions found after filtering.")
@@ -229,7 +229,7 @@ try:
         output_path_step2 = os.path.join(PROCESSED_DIR, '2_filtered_laundering_transactions.csv')
         filtered_patterns_df.to_csv(output_path_step2, index=False)
         base = len(filtered_patterns_df) - added
-        print(f"✅ Step 2: Saved USD/ACH laundering transactions (patterns={base:,}, added_from_csv={added:,}, total={len(filtered_patterns_df):,}) to '{output_path_step2}'")
+        print(f"Step 2: Saved USD/ACH laundering transactions (patterns={base:,}, added_from_csv={added:,}, total={len(filtered_patterns_df):,}) to '{output_path_step2}'")
     else:
         print("ℹ️ Step 2: No USD/ACH laundering transactions found.")
 
@@ -274,7 +274,7 @@ try:
         if not filtered_accounts_df.empty:
             output_path_step3 = os.path.join(PROCESSED_DIR, '3_filtered_accounts.csv')
             filtered_accounts_df.to_csv(output_path_step3, index=False)
-            print(f"✅ Step 3: Saved filtered account details to '{output_path_step3}' "
+            print(f"Step 3: Saved filtered account details to '{output_path_step3}' "
                   f"(rows={len(filtered_accounts_df):,})")
         else:
             print("ℹ️ Step 3: No matching accounts found for the filtered transactions.")
