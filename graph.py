@@ -7,7 +7,7 @@ from datetime import timedelta
 
 # Optional: PR AUC from scikit-learn
 try:
-    from sklearn.metrics import average_precision_score, precision_recall_curve
+    from sklearn.metrics import average_precision_score
     SKLEARN_OK = True
 except Exception:
     SKLEARN_OK = False
@@ -93,7 +93,9 @@ def get_windowed_graph_fast(df_slice: pd.DataFrame, base_graph: nx.MultiDiGraph)
     nodes_needed = set(df_slice['from_account'].astype(str)) | set(df_slice['to_account'].astype(str))
     for node in nodes_needed:
         if node in base_graph.nodes:
-            H.add_node(node, **base_graph.nodes[node])
+            attrs = dict(base_graph.nodes[node])
+            attrs.pop('is_laundering_involved', None)
+            H.add_node(node, **attrs)
         else:
             H.add_node(node)  # fallback for missing nodes
     
@@ -179,13 +181,15 @@ def aggregate_graph(G: nx.MultiDiGraph, directed=False) -> nx.Graph:
         timestamps = [d.get('timestamp') for d in edge_list if d.get('timestamp') is not None]
         first_ts = min(timestamps) if timestamps else None
         last_ts = max(timestamps) if timestamps else None
+        span_seconds = (last_ts - first_ts).total_seconds() if (first_ts and last_ts) else 0
         
         H.add_edge(a, b, 
                   w_count=w_count,
                   w_amount=w_amount,
                   w_amount_log=w_amount_log,
                   first_ts=first_ts,
-                  last_ts=last_ts)
+                  last_ts=last_ts,
+                  span_seconds=span_seconds)
     
     # Third pass: add reciprocated attribute for directed graphs
     if directed:
@@ -195,47 +199,40 @@ def aggregate_graph(G: nx.MultiDiGraph, directed=False) -> nx.Graph:
     # Fourth pass: compute node-level features
     for node in H.nodes():
         if directed:
-            # Incoming edges
             in_edges = [(pred, node) for pred in H.predecessors(node)]
-            in_amount_sum = sum(H[u][v].get('w_amount', 0) for u, v in in_edges)
-            in_count = len(in_edges)
-            
-            # Outgoing edges  
             out_edges = [(node, succ) for succ in H.successors(node)]
+            in_amount_sum  = sum(H[u][v].get('w_amount', 0) for u, v in in_edges)
             out_amount_sum = sum(H[u][v].get('w_amount', 0) for u, v in out_edges)
-            out_count = len(out_edges)
+            in_deg = len(in_edges)
+            out_deg = len(out_edges)
+            in_tx_count  = sum(H[u][v].get('w_count', 0) for u, v in in_edges)
+            out_tx_count = sum(H[u][v].get('w_count', 0) for u, v in out_edges)
         else:
-            # For undirected graphs, all edges are both in and out
-            adj_edges = [(node, neighbor) if node <= neighbor else (neighbor, node) 
-                        for neighbor in H.neighbors(node)]
+            adj_edges = [(node, nbr) if node <= nbr else (nbr, node) for nbr in H.neighbors(node)]
             total_amount = sum(H[u][v].get('w_amount', 0) for u, v in adj_edges)
-            total_count = len(adj_edges)
-            
+            total_tx     = sum(H[u][v].get('w_count', 0) for u, v in adj_edges)
+            deg = len(adj_edges)
             in_amount_sum = out_amount_sum = total_amount
-            in_count = out_count = total_count
-        
-        # Safe ratio computation
+            in_deg = out_deg = deg
+            in_tx_count = out_tx_count = total_tx
+    
         in_out_amount_ratio = (in_amount_sum + 1) / (out_amount_sum + 1)
-        
-        # Add features to node
         H.nodes[node].update({
             'in_amount_sum': in_amount_sum,
             'out_amount_sum': out_amount_sum,
-            'in_count': in_count,
-            'out_count': out_count,
+            'in_deg': in_deg,
+            'out_deg': out_deg,
+            'in_tx_count': in_tx_count,
+            'out_tx_count': out_tx_count,
             'in_out_amount_ratio': in_out_amount_ratio
         })
     
     return H
 
-def run_louvain(H: nx.Graph, resolution=1.0, seed=42):
-    # Returns (partition: dict[node]->community_id, communities: list[set])
+def run_louvain(H: nx.Graph, resolution=1.0, seed=42, weight='w_amount_log'):
     if nx_louvain_communities is not None:
-        comms = nx_louvain_communities(H, weight='w_amount', resolution=resolution, seed=seed)
-        partition = {}
-        for cid, c in enumerate(comms):
-            for n in c:
-                partition[n] = cid
+        comms = nx_louvain_communities(H, weight=weight, resolution=resolution, seed=seed)
+        partition = {n: cid for cid, c in enumerate(comms) for n in c}
         return partition, [set(c) for c in comms]
     else:
         # Fallback to python-louvain
@@ -251,79 +248,41 @@ def run_louvain(H: nx.Graph, resolution=1.0, seed=42):
         comms = list(comms.values())
         return partition, comms
 
-def score_communities_unsupervised(H: nx.Graph, partition: dict, comms: list) -> dict:
+def score_communities_unsupervised(H, comms: list, min_size=3):
     """
     Truly unsupervised community scoring based on structural properties.
     Does NOT use ground-truth labels to avoid target leakage.
     """
-    comm_scores = {}
-    
-    for cid, community_nodes in enumerate(comms):
-        if len(community_nodes) == 0:
-            comm_scores[cid] = 0.0
+    scores = {}
+    for cid, nodes in enumerate(comms):
+        if not nodes or len(nodes) < min_size:
+            scores[cid] = 0.0
             continue
-            
-        # Extract subgraph for this community
-        subgraph = H.subgraph(community_nodes)
-        
-        # Structural features
-        # 1. Internal density (edges within community / possible edges)
-        n_nodes = len(community_nodes)
-        if n_nodes > 1:
-            max_edges = n_nodes * (n_nodes - 1) / 2  # for undirected graph
-            actual_edges = subgraph.number_of_edges()
-            internal_density = actual_edges / max_edges if max_edges > 0 else 0
-        else:
-            internal_density = 0
-        
-        # 2. Average clustering coefficient
+        sub = H.subgraph(nodes)
+        n = len(nodes)
+        max_edges = n*(n-1)/2 if n > 1 else 0
+        internal_density = (sub.number_of_edges()/max_edges) if max_edges else 0.0
         try:
-            avg_clustering = nx.average_clustering(subgraph, weight='w_amount')
+            avg_clust = nx.average_clustering(sub, weight='w_amount_log')
         except:
-            avg_clustering = 0
-        
-        # 3. Community size (larger communities might be more suspicious)
-        size_score = min(1.0, len(community_nodes) / 100)  # normalize to [0,1]
-        
-        # 4. Average transaction amount within community
-        total_amount = sum(d.get('w_amount', 0) for _, _, d in subgraph.edges(data=True))
-        avg_amount_score = min(1.0, np.log1p(total_amount) / 20)  # normalize roughly
-        
-        # Simple heuristic combination (can be refined)
-        heuristic_score = (internal_density * 0.3 + 
-                          avg_clustering * 0.2 + 
-                          size_score * 0.2 + 
-                          avg_amount_score * 0.3)
-        
-        comm_scores[cid] = heuristic_score
-    
-    return comm_scores
+            avg_clust = 0.0
+        total_amount = sum(d.get('w_amount', 0) for _,_,d in sub.edges(data=True))
+        amount_score = min(1.0, np.log1p(total_amount)/20)
+        size_boost = 1 - np.exp(-n/10)  # S-shaped size factor
+        scores[cid] = (0.35*internal_density + 0.2*avg_clust + 0.45*amount_score) * size_boost
+    return scores
 
-def run_seeded_pagerank_baseline(H_agg_directed: nx.DiGraph, seed_nodes: set):
+def run_seeded_pagerank_baseline(H_agg_directed: nx.DiGraph, seed_nodes: set, weight='w_amount_log', alpha=0.9):
     """
     Semi-supervised baseline using Personalized PageRank.
     Uses seed nodes (known positives) to propagate suspicion scores.
     """
-    if len(seed_nodes) == 0:
-        return None
-    
-    # Create personalization dictionary
-    personalization = {}
-    seed_prob = 1.0 / len(seed_nodes)
-    
-    for node in H_agg_directed.nodes():
-        if node in seed_nodes:
-            personalization[node] = seed_prob
-        else:
-            personalization[node] = 0.0
-    
-    # Run PersonalizedPageRank
+    if not seed_nodes: return None
+    personalization = {n: (1.0/len(seed_nodes) if n in seed_nodes else 0.0) for n in H_agg_directed}
     try:
-        pagerank_scores = nx.pagerank(H_agg_directed, 
-                                    personalization=personalization,
-                                    weight='w_amount',
-                                    max_iter=100,
-                                    tol=1e-6)
+        pr_fwd = nx.pagerank(H_agg_directed, personalization=personalization, weight=weight, alpha=alpha, max_iter=100, tol=1e-6)
+        pr_rev = nx.pagerank(H_agg_directed.reverse(copy=False), personalization=personalization, weight=weight, alpha=alpha, max_iter=100, tol=1e-6)
+        pagerank_scores = {n: 0.5*(pr_fwd.get(n,0.0) + pr_rev.get(n,0.0)) for n in H_agg_directed}
     except:
         return None
     
@@ -349,7 +308,7 @@ def run_seeded_pagerank_baseline(H_agg_directed: nx.DiGraph, seed_nodes: set):
     else:
         return None
 
-def community_baseline_pr(H: nx.Graph, partition: dict):
+def community_baseline_pr(H: nx.Graph):
     """
     DEPRECATED: This function had target leakage issues.
     Use score_communities_unsupervised or run_seeded_pagerank_baseline instead.
@@ -500,10 +459,10 @@ print(f"\nEnhanced community baseline on full period:")
 print(f"Aggregated graph: {H_full.number_of_nodes():,} nodes, {H_full.number_of_edges():,} edges")
 
 # Run Louvain community detection
-partition_full, comms_full = run_louvain(H_full, resolution=LOUVAIN_RESOLUTION, seed=LOUVAIN_SEED)
+partition_full, comms_full = run_louvain(H_full, resolution=LOUVAIN_RESOLUTION, seed=LOUVAIN_SEED, weight='w_amount_log')
 
 # Use unsupervised community scoring (no target leakage)
-comm_scores = score_communities_unsupervised(H_full, partition_full, comms_full)
+comm_scores = score_communities_unsupervised(H_full, comms_full)
 
 print("Unsupervised community scoring (top 5 by heuristic score):")
 sorted_comms = sorted(comm_scores.items(), key=lambda x: x[1], reverse=True)
@@ -518,7 +477,7 @@ pos_nodes_set = {n for n, d in H_full_directed.nodes(data=True) if int(d.get('is
 if len(pos_nodes_set) > 0:
     # Use a subset of positive nodes as seeds (e.g., 20%)
     seed_size = max(1, len(pos_nodes_set) // 5)
-    seed_nodes = set(list(pos_nodes_set)[:seed_size])
+    seed_nodes = set(sorted(pos_nodes_set)[:seed_size])
     
     pr_auc_seeded = run_seeded_pagerank_baseline(H_full_directed, seed_nodes)
     if pr_auc_seeded is not None:
@@ -546,7 +505,7 @@ for window_days in WINDOW_DAYS_LIST:
         
         # Unsupervised community scoring
         part_win, comms_win = run_louvain(H_agg, resolution=LOUVAIN_RESOLUTION, seed=LOUVAIN_SEED)
-        comm_scores_win = score_communities_unsupervised(H_agg, part_win, comms_win)
+        comm_scores_win = score_communities_unsupervised(H_agg, comms_win)
         avg_comm_score = np.mean(list(comm_scores_win.values())) if comm_scores_win else 0
         
         # Semi-supervised PageRank baseline
@@ -554,7 +513,7 @@ for window_days in WINDOW_DAYS_LIST:
         pr_auc_win = None
         if len(pos_nodes_win) > 0:
             seed_size_win = max(1, len(pos_nodes_win) // 5)
-            seed_nodes_win = set(list(pos_nodes_win)[:seed_size_win])
+            seed_nodes_win = set(sorted(pos_nodes_win)[:seed_size_win])
             pr_auc_win = run_seeded_pagerank_baseline(H_agg_dir, seed_nodes_win)
         
         print(f"[{ws:%Y-%m-%d} → {we:%Y-%m-%d}] nodes={H_agg.number_of_nodes():,}, edges={H_agg.number_of_edges():,}")
@@ -565,5 +524,3 @@ for window_days in WINDOW_DAYS_LIST:
         count += 1
         if MAX_WINDOWS_PER_SETTING is not None and count >= MAX_WINDOWS_PER_SETTING:
             break
-
-print("\nDone. Enhanced graph.py with fixed target leakage, optimized windowing, and richer features.")
