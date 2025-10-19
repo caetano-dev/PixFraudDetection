@@ -729,6 +729,11 @@ def analyze_community_methods(base_path):
     This analysis examines communities detected on the COMPLETE graph (all time periods),
     as opposed to the window-based community detection in the main metrics CSV.
     
+    Uses three data files per method:
+    1. community_summary.csv - Aggregate statistics per community
+    2. community_members.csv - All members with their properties
+    3. community_laundering_accounts.csv - Only laundering accounts in communities
+    
     Key Distinction:
     - GLOBAL: Communities detected on entire transaction network (persistent structures)
     - WINDOWS: Communities detected in time windows (temporal patterns, in window_metrics.csv)
@@ -742,69 +747,124 @@ def analyze_community_methods(base_path):
     print("COMMUNITY DETECTION: GLOBAL GRAPH ANALYSIS")
     print("="*80)
     print("\nNote: This analyzes communities detected on the ENTIRE graph,")
-    print("      not the window-based detection (see window_metrics.csv for that).\n")
+    print("      not the window-based detection (see window_metrics.csv for that).")
+    print("      Using 3 data files: summary, members, and laundering accounts.\n")
     
-    # Define paths for community metrics
-    louvain_path = base_path / 'communities' / 'louvain' / 'community_summary.csv'
-    leiden_path = base_path / 'communities' / 'leiden' / 'community_summary.csv'
+    # Define paths for all community data files
+    communities_base = base_path / 'metrics' / 'communities'
     
-    # Load community data
+    louvain_summary_path = communities_base / 'louvain' / 'community_summary.csv'
+    louvain_members_path = communities_base / 'louvain' / 'community_members.csv'
+    louvain_laundering_path = communities_base / 'louvain' / 'community_laundering_accounts.csv'
+    
+    leiden_summary_path = communities_base / 'leiden' / 'community_summary.csv'
+    leiden_members_path = communities_base / 'leiden' / 'community_members.csv'
+    leiden_laundering_path = communities_base / 'leiden' / 'community_laundering_accounts.csv'
+    
+    # Load Louvain data
+    louvain_summary = None
+    louvain_members = None
+    louvain_laundering = None
+    
     try:
-        louvain_df = pd.read_csv(louvain_path)
-        louvain_df['method'] = 'Louvain'
-        print(f"✓ Loaded Louvain: {len(louvain_df):,} communities")
-    except FileNotFoundError:
-        print(f"⚠ Warning: Could not find {louvain_path}")
-        louvain_df = None
+        louvain_summary = pd.read_csv(louvain_summary_path)
+        louvain_summary['method'] = 'Louvain'
+        print(f"✓ Loaded Louvain summary: {len(louvain_summary):,} communities")
+        
+        louvain_members = pd.read_csv(louvain_members_path)
+        louvain_members['method'] = 'Louvain'
+        print(f"✓ Loaded Louvain members: {len(louvain_members):,} accounts")
+        
+        louvain_laundering = pd.read_csv(louvain_laundering_path)
+        louvain_laundering['method'] = 'Louvain'
+        print(f"✓ Loaded Louvain laundering accounts: {len(louvain_laundering):,} fraud accounts")
+        
+    except FileNotFoundError as e:
+        print(f"⚠ Warning: Could not find Louvain file: {e}")
+    
+    # Load Leiden data
+    leiden_summary = None
+    leiden_members = None
+    leiden_laundering = None
     
     try:
-        leiden_df = pd.read_csv(leiden_path)
-        leiden_df['method'] = 'Leiden'
-        print(f"✓ Loaded Leiden: {len(leiden_df):,} communities")
-    except FileNotFoundError:
-        print(f"⚠ Warning: Could not find {leiden_path}")
-        leiden_df = None
+        leiden_summary = pd.read_csv(leiden_summary_path)
+        leiden_summary['method'] = 'Leiden'
+        print(f"✓ Loaded Leiden summary: {len(leiden_summary):,} communities")
+        
+        leiden_members = pd.read_csv(leiden_members_path)
+        leiden_members['method'] = 'Leiden'
+        print(f"✓ Loaded Leiden members: {len(leiden_members):,} accounts")
+        
+        leiden_laundering = pd.read_csv(leiden_laundering_path)
+        leiden_laundering['method'] = 'Leiden'
+        print(f"✓ Loaded Leiden laundering accounts: {len(leiden_laundering):,} fraud accounts")
+        
+    except FileNotFoundError as e:
+        print(f"⚠ Warning: Could not find Leiden file: {e}")
     
-    # If no data, return early
-    if louvain_df is None and leiden_df is None:
-        print("\n❌ No community detection data found. Skipping community analysis.")
-        return
+    # Check if we have at least summary data
+    if louvain_summary is None and leiden_summary is None:
+        print("\n❌ No community summary data found. Skipping community analysis.")
+        return None, None, None
     
-    # Combine data
-    if louvain_df is not None and leiden_df is not None:
-        combined_df = pd.concat([louvain_df, leiden_df], ignore_index=True)
-    elif louvain_df is not None:
-        combined_df = louvain_df
-    else:
-        combined_df = leiden_df
+    # Combine summary data
+    summary_dfs = [df for df in [louvain_summary, leiden_summary] if df is not None]
+    combined_summary = pd.concat(summary_dfs, ignore_index=True) if len(summary_dfs) > 1 else summary_dfs[0]
+    
+    # Combine members data
+    members_dfs = [df for df in [louvain_members, leiden_members] if df is not None]
+    combined_members = pd.concat(members_dfs, ignore_index=True) if len(members_dfs) > 0 else None
+    
+    # Combine laundering data
+    laundering_dfs = [df for df in [louvain_laundering, leiden_laundering] if df is not None]
+    combined_laundering = pd.concat(laundering_dfs, ignore_index=True) if len(laundering_dfs) > 0 else None
     
     # Print summary statistics
     print("\n" + "-"*80)
     print("COMMUNITY DETECTION SUMMARY")
     print("-"*80)
     
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method]
+    for method in combined_summary['method'].unique():
+        method_summary = combined_summary[combined_summary['method'] == method]
+        
         print(f"\n{method} Communities (GLOBAL - Entire Graph):")
-        print(f"  Total communities: {len(method_df):,}")
-        print(f"  Avg community size: {method_df['size'].mean():.2f}")
-        print(f"  Median community size: {method_df['size'].median():.0f}")
-        print(f"  Avg density: {method_df['density'].mean():.4f}")
-        print(f"  Communities with laundering: {(method_df['laundering_nodes'] > 0).sum():,}")
-        print(f"  Total laundering nodes detected: {method_df['laundering_nodes'].sum():,.0f}")
-        print(f"  Avg laundering %: {method_df['laundering_pct'].mean():.4f}")
-        print(f"  Total attempts covered: {method_df['num_attempts'].sum():,.0f}")
+        print(f"  Total communities: {len(method_summary):,}")
+        print(f"  Avg community size: {method_summary['size'].mean():.2f}")
+        print(f"  Median community size: {method_summary['size'].median():.0f}")
+        print(f"  Avg density: {method_summary['density'].mean():.4f}")
+        print(f"  Communities with laundering: {(method_summary['laundering_nodes'] > 0).sum():,}")
+        print(f"  Total laundering nodes detected: {method_summary['laundering_nodes'].sum():,.0f}")
+        print(f"  Avg laundering %: {method_summary['laundering_pct'].mean():.4f}")
+        print(f"  Total attempts covered: {method_summary['num_attempts'].sum():,.0f}")
+        
+        # Additional stats from members data
+        if combined_members is not None:
+            method_members = combined_members[combined_members['method'] == method]
+            print(f"  Total accounts in communities: {len(method_members):,}")
+            print(f"  Accounts flagged as laundering: {method_members['is_laundering'].sum():,}")
+            print(f"  Hub nodes identified: {method_members['is_hub'].sum():,}")
+        
+        # Additional stats from laundering accounts data
+        if combined_laundering is not None:
+            method_laundering = combined_laundering[combined_laundering['method'] == method]
+            print(f"  Unique laundering accounts: {method_laundering['account_id'].nunique():,}")
+            print(f"  Communities containing fraud: {method_laundering['community_id'].nunique():,}")
+        
         print(f"  >>> This represents persistent fraud structures across ALL time periods")
     
     # Create comprehensive visualization
-    fig = plt.figure(figsize=(18, 14))
-    gs = GridSpec(3, 3, figure=fig, hspace=0.3, wspace=0.3)
+    fig = plt.figure(figsize=(20, 16))
+    gs = GridSpec(4, 3, figure=fig, hspace=0.35, wspace=0.3)
     
     # 1. Score Distribution Comparison
     ax1 = fig.add_subplot(gs[0, 0])
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method]
-        ax1.hist(method_df['score'], bins=30, alpha=0.6, label=method, edgecolor='black')
+    colors = {'Louvain': '#FF6B6B', 'Leiden': '#4ECDC4'}
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method]
+        ax1.hist(method_df['score'], bins=30, label=method, 
+                color=colors.get(method, 'gray'), linewidth=2.5, 
+                histtype='step')
     ax1.set_xlabel('Community Score')
     ax1.set_ylabel('Frequency')
     ax1.set_title('Score Distribution by Method')
@@ -813,9 +873,12 @@ def analyze_community_methods(base_path):
     
     # 2. Community Size Distribution
     ax2 = fig.add_subplot(gs[0, 1])
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method]
-        ax2.hist(method_df['size'], bins=50, alpha=0.6, label=method, edgecolor='black', range=(0, 100))
+    colors = {'Louvain': '#FF6B6B', 'Leiden': '#4ECDC4'}
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method]
+        ax2.hist(method_df['size'], bins=50, label=method, 
+                color=colors.get(method, 'gray'), linewidth=2.5,
+                histtype='step', range=(0, 100))
     ax2.set_xlabel('Community Size (nodes)')
     ax2.set_ylabel('Frequency')
     ax2.set_title('Community Size Distribution (0-100 nodes)')
@@ -824,9 +887,12 @@ def analyze_community_methods(base_path):
     
     # 3. Density Distribution
     ax3 = fig.add_subplot(gs[0, 2])
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method]
-        ax3.hist(method_df['density'], bins=30, alpha=0.6, label=method, edgecolor='black')
+    colors = {'Louvain': '#FF6B6B', 'Leiden': '#4ECDC4'}
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method]
+        ax3.hist(method_df['density'], bins=30, label=method, 
+                color=colors.get(method, 'gray'), linewidth=2.5,
+                histtype='step')
     ax3.set_xlabel('Community Density')
     ax3.set_ylabel('Frequency')
     ax3.set_title('Density Distribution by Method')
@@ -836,8 +902,8 @@ def analyze_community_methods(base_path):
     # 4. Laundering Detection Rate
     ax4 = fig.add_subplot(gs[1, 0])
     method_stats = []
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method]
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method]
         total_comm = len(method_df)
         laundering_comm = (method_df['laundering_nodes'] > 0).sum()
         pct = (laundering_comm / total_comm) * 100
@@ -853,8 +919,8 @@ def analyze_community_methods(base_path):
     
     # 5. Laundering Percentage by Community Size
     ax5 = fig.add_subplot(gs[1, 1])
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method]
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method]
         # Only plot communities with laundering
         laundering_df = method_df[method_df['laundering_nodes'] > 0]
         if len(laundering_df) > 0:
@@ -866,41 +932,33 @@ def analyze_community_methods(base_path):
     ax5.legend()
     ax5.grid(alpha=0.3)
     
-    # 6. Top Communities Comparison
+    # 6. Hub Nodes Analysis (from members data)
     ax6 = fig.add_subplot(gs[1, 2])
-    top_n = 20
-    top_communities = []
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method].head(top_n)
-        top_communities.append({
-            'method': method,
-            'avg_score': method_df['score'].mean(),
-            'avg_size': method_df['size'].mean(),
-            'avg_laundering_pct': method_df['laundering_pct'].mean() * 100,
-            'total_laundering': method_df['laundering_nodes'].sum()
-        })
-    
-    top_df = pd.DataFrame(top_communities)
-    x = np.arange(len(top_df))
-    width = 0.35
-    
-    bars1 = ax6.bar(x - width/2, top_df['avg_score'] * 100, width, label='Avg Score (×100)', 
-                    color='#FF6B6B', edgecolor='black')
-    bars2 = ax6.bar(x + width/2, top_df['avg_laundering_pct'], width, label='Avg Laundering %',
-                    color='#4ECDC4', edgecolor='black')
-    
-    ax6.set_ylabel('Value')
-    ax6.set_title(f'Top {top_n} Communities Comparison')
-    ax6.set_xticks(x)
-    ax6.set_xticklabels(top_df['method'])
-    ax6.legend()
-    ax6.grid(axis='y', alpha=0.3)
+    if combined_members is not None:
+        hub_stats = []
+        for method in combined_members['method'].unique():
+            method_members = combined_members[combined_members['method'] == method]
+            total_accounts = len(method_members)
+            hub_accounts = method_members['is_hub'].sum()
+            hub_pct = (hub_accounts / total_accounts) * 100
+            hub_stats.append({'method': method, 'hubs': hub_accounts, 'pct': hub_pct})
+        
+        hub_df = pd.DataFrame(hub_stats)
+        bars = ax6.bar(hub_df['method'], hub_df['hubs'], color=['#FF6B6B', '#4ECDC4'], edgecolor='black')
+        ax6.set_ylabel('Number of Hub Nodes')
+        ax6.set_title('Hub Nodes Identified')
+        ax6.grid(axis='y', alpha=0.3)
+        for i, (method, hubs, pct) in enumerate(zip(hub_df['method'], hub_df['hubs'], hub_df['pct'])):
+            ax6.text(i, hubs + max(hub_df['hubs'])*0.02, f'{hubs:,}\n({pct:.2f}%)', ha='center', fontweight='bold')
+    else:
+        ax6.text(0.5, 0.5, 'Members data not available', ha='center', va='center', transform=ax6.transAxes)
+        ax6.set_title('Hub Nodes Analysis')
     
     # 7. Attempt Coverage
     ax7 = fig.add_subplot(gs[2, 0])
     attempt_stats = []
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method]
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method]
         total_attempts = method_df['num_attempts'].sum()
         communities_with_attempts = (method_df['num_attempts'] > 0).sum()
         attempt_stats.append({
@@ -921,35 +979,128 @@ def analyze_community_methods(base_path):
         ax7.text(i, attempts + max(attempt_df['total_attempts'])*0.02, 
                 f'{attempts}\n({comm} comm)', ha='center', fontweight='bold')
     
-    # 8. Density vs Score (Quality Assessment)
+    # 8. Account-Level Analysis (from members data)
     ax8 = fig.add_subplot(gs[2, 1])
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method].head(100)  # Top 100
-        ax8.scatter(method_df['density'], method_df['score'], 
-                   alpha=0.5, label=method, s=30, edgecolor='black', linewidth=0.5)
-    ax8.set_xlabel('Density')
-    ax8.set_ylabel('Score')
-    ax8.set_title('Community Quality: Density vs Score (Top 100)')
-    ax8.legend()
-    ax8.grid(alpha=0.3)
+    if combined_members is not None:
+        account_stats = []
+        for method in combined_members['method'].unique():
+            method_members = combined_members[combined_members['method'] == method]
+            total_accounts = len(method_members)
+            laundering_accounts = method_members['is_laundering'].sum()
+            clean_accounts = total_accounts - laundering_accounts
+            account_stats.append({
+                'method': method,
+                'laundering': laundering_accounts,
+                'clean': clean_accounts
+            })
+        
+        acc_df = pd.DataFrame(account_stats)
+        x = np.arange(len(acc_df))
+        width = 0.35
+        
+        bars1 = ax8.bar(x - width/2, acc_df['laundering'], width, label='Laundering', 
+                        color='#FF6B6B', edgecolor='black')
+        bars2 = ax8.bar(x + width/2, acc_df['clean'], width, label='Clean',
+                        color='#4ECDC4', edgecolor='black')
+        
+        ax8.set_ylabel('Number of Accounts')
+        ax8.set_title('Account Composition in Communities')
+        ax8.set_xticks(x)
+        ax8.set_xticklabels(acc_df['method'])
+        ax8.legend()
+        ax8.grid(axis='y', alpha=0.3)
+    else:
+        ax8.text(0.5, 0.5, 'Members data not available', ha='center', va='center', transform=ax8.transAxes)
+        ax8.set_title('Account-Level Analysis')
     
-    # 9. Overall Performance Summary Table
+    # 9. Density vs Score (Quality Assessment)
     ax9 = fig.add_subplot(gs[2, 2])
-    ax9.axis('off')
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method].head(100)  # Top 100
+        ax9.scatter(method_df['density'], method_df['score'], 
+                   alpha=0.5, label=method, s=30, edgecolor='black', linewidth=0.5)
+    ax9.set_xlabel('Density')
+    ax9.set_ylabel('Score')
+    ax9.set_title('Community Quality: Density vs Score (Top 100)')
+    ax9.legend()
+    ax9.grid(alpha=0.3)
+    
+    # 10. Laundering Account Distribution (from laundering_accounts data)
+    ax10 = fig.add_subplot(gs[3, 0])
+    if combined_laundering is not None:
+        laun_comm_stats = []
+        for method in combined_laundering['method'].unique():
+            method_laun = combined_laundering[combined_laundering['method'] == method]
+            unique_communities = method_laun['community_id'].nunique()
+            total_laun_accounts = len(method_laun)
+            avg_per_comm = total_laun_accounts / unique_communities if unique_communities > 0 else 0
+            laun_comm_stats.append({
+                'method': method,
+                'communities': unique_communities,
+                'avg_accounts': avg_per_comm
+            })
+        
+        laun_df = pd.DataFrame(laun_comm_stats)
+        bars = ax10.bar(laun_df['method'], laun_df['avg_accounts'], 
+                       color=['#FF6B6B', '#4ECDC4'], edgecolor='black')
+        ax10.set_ylabel('Avg Laundering Accounts per Community')
+        ax10.set_title('Fraud Concentration in Communities')
+        ax10.grid(axis='y', alpha=0.3)
+        for i, (method, comms, avg) in enumerate(zip(laun_df['method'], laun_df['communities'], laun_df['avg_accounts'])):
+            ax10.text(i, avg + max(laun_df['avg_accounts'])*0.02, 
+                     f'{avg:.1f}\n({comms} comm)', ha='center', fontweight='bold')
+    else:
+        ax10.text(0.5, 0.5, 'Laundering accounts\ndata not available', ha='center', va='center', transform=ax10.transAxes)
+        ax10.set_title('Fraud Concentration Analysis')
+    
+    # 11. Top Communities Comparison
+    ax11 = fig.add_subplot(gs[3, 1])
+    top_n = 20
+    top_communities = []
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method].head(top_n)
+        top_communities.append({
+            'method': method,
+            'avg_score': method_df['score'].mean(),
+            'avg_size': method_df['size'].mean(),
+            'avg_laundering_pct': method_df['laundering_pct'].mean() * 100,
+            'total_laundering': method_df['laundering_nodes'].sum()
+        })
+    
+    top_df = pd.DataFrame(top_communities)
+    x = np.arange(len(top_df))
+    width = 0.35
+    
+    bars1 = ax11.bar(x - width/2, top_df['avg_score'] * 100, width, label='Avg Score (×100)', 
+                    color='#FF6B6B', edgecolor='black')
+    bars2 = ax11.bar(x + width/2, top_df['avg_laundering_pct'], width, label='Avg Laundering %',
+                    color='#4ECDC4', edgecolor='black')
+    
+    ax11.set_ylabel('Value')
+    ax11.set_title(f'Top {top_n} Communities Comparison')
+    ax11.set_xticks(x)
+    ax11.set_xticklabels(top_df['method'])
+    ax11.legend()
+    ax11.grid(axis='y', alpha=0.3)
+    
+    # 12. Overall Performance Summary Table
+    ax12 = fig.add_subplot(gs[3, 2])
+    ax12.axis('off')
     
     summary_data = []
-    for method in combined_df['method'].unique():
-        method_df = combined_df[combined_df['method'] == method]
-        summary_data.append([
+    for method in combined_summary['method'].unique():
+        method_df = combined_summary[combined_summary['method'] == method]
+        row = [
             method,
             f"{len(method_df):,}",
             f"{method_df['size'].median():.0f}",
             f"{method_df['density'].mean():.3f}",
             f"{(method_df['laundering_nodes'] > 0).sum():,}",
             f"{method_df['laundering_pct'].mean()*100:.2f}%"
-        ])
+        ]
+        summary_data.append(row)
     
-    table = ax9.table(cellText=summary_data,
+    table = ax12.table(cellText=summary_data,
                      colLabels=['Method', 'Total\nCommunities', 'Median\nSize', 
                                'Avg\nDensity', 'Laundering\nCommunities', 'Avg\nLaundering %'],
                      cellLoc='center',
@@ -970,11 +1121,11 @@ def analyze_community_methods(base_path):
             if i % 2 == 0:
                 table[(i, j)].set_facecolor('#F0F0F0')
     
-    ax9.set_title('Community Detection Performance Summary', 
-                 fontweight='bold', fontsize=12, pad=20)
+    ax12.set_title('Community Detection Performance Summary', 
+                  fontweight='bold', fontsize=12, pad=20)
     
-    plt.suptitle('Community Detection: Louvain vs Leiden on ENTIRE GRAPH (Global Analysis)',
-                fontsize=16, fontweight='bold', y=0.995)
+    plt.suptitle('Community Detection: Louvain vs Leiden on ENTIRE GRAPH (Global Analysis)\nUsing Summary, Members, and Laundering Accounts Data',
+                fontsize=16, fontweight='bold', y=0.998)
     
     plt.savefig(OUTPUT_DIR / '09b_community_global_analysis.png', dpi=300, bbox_inches='tight')
     plt.show()
@@ -984,9 +1135,9 @@ def analyze_community_methods(base_path):
     print("DETAILED COMPARISON")
     print("-"*80)
     
-    if len(combined_df['method'].unique()) == 2:
-        louvain_data = combined_df[combined_df['method'] == 'Louvain']
-        leiden_data = combined_df[combined_df['method'] == 'Leiden']
+    if len(combined_summary['method'].unique()) == 2:
+        louvain_data = combined_summary[combined_summary['method'] == 'Louvain']
+        leiden_data = combined_summary[combined_summary['method'] == 'Leiden']
         
         print("\nKey Differences (GLOBAL - Entire Graph):")
         print(f"  Community count: Louvain={len(louvain_data)}, Leiden={len(leiden_data)}")
@@ -994,6 +1145,22 @@ def analyze_community_methods(base_path):
         print(f"  Median size: Louvain={louvain_data['size'].median():.0f}, Leiden={leiden_data['size'].median():.0f}")
         print(f"  Total laundering nodes: Louvain={louvain_data['laundering_nodes'].sum():.0f}, Leiden={leiden_data['laundering_nodes'].sum():.0f}")
         print(f"  Communities with laundering: Louvain={((louvain_data['laundering_nodes'] > 0).sum())}, Leiden={((leiden_data['laundering_nodes'] > 0).sum())}")
+        
+        # Additional comparison from members data
+        if combined_members is not None:
+            louvain_members = combined_members[combined_members['method'] == 'Louvain']
+            leiden_members = combined_members[combined_members['method'] == 'Leiden']
+            print(f"\nMember-Level Comparison:")
+            print(f"  Total accounts: Louvain={len(louvain_members):,}, Leiden={len(leiden_members):,}")
+            print(f"  Hub nodes: Louvain={louvain_members['is_hub'].sum():,}, Leiden={leiden_members['is_hub'].sum():,}")
+        
+        # Additional comparison from laundering accounts data
+        if combined_laundering is not None:
+            louvain_laun = combined_laundering[combined_laundering['method'] == 'Louvain']
+            leiden_laun = combined_laundering[combined_laundering['method'] == 'Leiden']
+            print(f"\nLaundering Accounts Comparison:")
+            print(f"  Unique fraud accounts: Louvain={louvain_laun['account_id'].nunique():,}, Leiden={leiden_laun['account_id'].nunique():,}")
+            print(f"  Communities with fraud: Louvain={louvain_laun['community_id'].nunique():,}, Leiden={leiden_laun['community_id'].nunique():,}")
     
     print("\n" + "-"*80)
     print("GLOBAL vs WINDOW-BASED COMPARISON")
@@ -1003,9 +1170,9 @@ def analyze_community_methods(base_path):
     print("  - Windows (in main analysis): Temporal patterns in window_metrics.csv")
     print("  - Look for 'communities_unsup_louvain' and 'communities_unsup_leiden' in Section 4")
     
-    print("\n✓ Community analysis complete")
+    print("\n✓ Community analysis complete (using summary, members, and laundering data)")
     
-    return combined_df
+    return combined_summary, combined_members, combined_laundering
 
 # ============================================================================
 # STATISTICAL SIGNIFICANCE TESTING
