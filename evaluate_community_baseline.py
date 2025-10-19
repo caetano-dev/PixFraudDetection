@@ -289,7 +289,9 @@ def main():
 
                         # Community detection
                         try:
-                            partition, comms = run_louvain(H_agg, resolution=res, seed=42, weight=weight)
+                            # Generate unique seed for each parameter combination to avoid identical results
+                            param_seed = hash((directed, weight, res, str(ws), str(we))) & 0x7FFFFFFF
+                            partition, comms = run_louvain(H_agg, resolution=res, seed=param_seed, weight=weight)
                         except RuntimeError as e:
                             print(f"Skipping Louvain (missing dependency): {e}")
                             continue
@@ -329,7 +331,9 @@ def main():
     try:
         # Build aggregated full graph for the best of res=1.0, undirected, amount
         H_full = aggregate_graph(G, directed=False)
-        partition, _ = run_louvain(H_full, resolution=1.0, seed=42, weight='w_amount')
+        # Use a different seed for the typology analysis to ensure varied results
+        typology_seed = hash(('typology_analysis', 'full_period', 'w_amount')) & 0x7FFFFFFF
+        partition, _ = run_louvain(H_full, resolution=1.0, seed=typology_seed, weight='w_amount')
         _, y_score = community_node_scores(H_full, partition)
         nodes = np.array(list(H_full.nodes()))
         order = np.argsort(-y_score)
