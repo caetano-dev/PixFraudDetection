@@ -3,6 +3,8 @@ import numpy as np
 import networkx as nx
 from pathlib import Path
 
+CUTOFF_DATE = pd.Timestamp('2022-11-05')
+
 
 def load_data(data_dir: str = "data") -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load the three parquet files containing transactions and account mappings."""
@@ -35,6 +37,11 @@ def preprocess_transactions(
     
     # Convert timestamp to datetime
     all_transactions['timestamp'] = pd.to_datetime(all_transactions['timestamp'])
+    
+    # Filter out transactions after the cutoff date (November 5th)
+    before_filter = len(all_transactions)
+    all_transactions = all_transactions[all_transactions['timestamp'] <= CUTOFF_DATE]
+    print(f"Transactions after filtering by cutoff date ({CUTOFF_DATE.date()}): {len(all_transactions):,} (removed {before_filter - len(all_transactions):,})")
     
     # Create account to entity mapping dictionary
     account_to_entity = accounts.set_index('Account Number')['Entity ID'].to_dict()

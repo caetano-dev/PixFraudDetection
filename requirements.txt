@@ -12,6 +12,7 @@ plotly
 networkx
 python-louvain
 pyyaml
+matplotlib
 tenacity==8.5.0
 toolz==0.12.1
 requests==2.32.3
