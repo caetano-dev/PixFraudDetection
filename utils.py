@@ -128,6 +128,52 @@ def build_daily_graph(window_df: pd.DataFrame) -> nx.DiGraph:
     return G
 
 
+def compute_node_stats(window_df: pd.DataFrame) -> dict:
+    """
+    Compute basic transactional statistics for each node in the window.
+    
+    Calculates volume sent, volume received, and transaction counts
+    for each entity based on the transactions in the current window.
+    
+    Args:
+        window_df: DataFrame containing transactions for the current window.
+                   Must have columns: source_entity, target_entity, amount_sent_c
+    
+    Returns:
+        Dictionary mapping entity_id to a dict with:
+            - 'vol_sent': (float) Total amount sent by this entity
+            - 'vol_recv': (float) Total amount received by this entity
+            - 'tx_count': (int) Total number of transactions (sent + received)
+    """
+    if window_df.empty:
+        return {}
+    
+    # Calculate sent statistics (entity as source)
+    sent_stats = window_df.groupby('source_entity').agg(vol_sent=('amount_sent_c', 'sum'), count_sent=('amount_sent_c', 'count'))
+    
+    # Calculate received statistics (entity as target)
+    recv_stats = window_df.groupby('target_entity').agg(vol_recv=('amount_sent_c', 'sum'), count_recv=('amount_sent_c', 'count'))
+    
+    # Get all unique entities
+    all_entities = set(sent_stats.index) | set(recv_stats.index)
+    
+    # Build the result dictionary
+    node_stats = {}
+    for entity in all_entities:
+        vol_sent = float(sent_stats.loc[entity, 'vol_sent']) if entity in sent_stats.index else 0.0
+        vol_recv = float(recv_stats.loc[entity, 'vol_recv']) if entity in recv_stats.index else 0.0
+        count_sent = int(sent_stats.loc[entity, 'count_sent']) if entity in sent_stats.index else 0
+        count_recv = int(recv_stats.loc[entity, 'count_recv']) if entity in recv_stats.index else 0
+        
+        node_stats[entity] = {
+            'vol_sent': vol_sent,
+            'vol_recv': vol_recv,
+            'tx_count': count_sent + count_recv,
+        }
+    
+    return node_stats
+
+
 def compute_leiden_features(G: nx.DiGraph) -> dict:
     """
     Compute Leiden community detection features for each node.

@@ -34,6 +34,7 @@ from config import (
 from utils import (
     load_data,
     build_daily_graph,
+    compute_node_stats,
     compute_leiden_features,
     print_evaluation_report,
     compute_daily_evaluation_metrics,
@@ -246,7 +247,10 @@ def main():
         # 5. Build graph for this window
         G = build_daily_graph(window_df)
         
-        # 6. Run algorithms and extract features
+        # 6. Compute node-level transaction statistics
+        node_stats = compute_node_stats(window_df)
+        
+        # 7. Run algorithms and extract features
         if len(G) > 0:
             # PageRank with error handling
             try:
@@ -269,10 +273,12 @@ def main():
             else:
                 leiden_features = {}
             
-            # 7. Extract features for each node in the graph
+            # 8. Extract features for each node in the graph
             for node in G.nodes():
                 # Get Leiden features for this node (if available)
                 node_leiden = leiden_features.get(node, {})
+                # Get transaction stats for this node
+                stats = node_stats.get(node, {})
                 
                 record = {
                     'date': current_date.date(),
@@ -285,11 +291,14 @@ def main():
                     'out_degree': int(G.out_degree(node)),
                     'leiden_id': node_leiden.get('leiden_id', -1),
                     'leiden_size': node_leiden.get('leiden_size', 0),
+                    'vol_sent': stats.get('vol_sent', 0.0),
+                    'vol_recv': stats.get('vol_recv', 0.0),
+                    'tx_count': stats.get('tx_count', 0),
                     'is_fraud': 1 if node in bad_actors else 0,
                 }
                 all_features.append(record)
             
-            # 8. Compute evaluation metrics for this day (optional)
+            # 9. Compute evaluation metrics for this day (optional)
             if RUN_EVALUATION and pagerank_scores:
                 # Filter k_values to not exceed nodes in this window
                 valid_k_values = [k for k in k_values if k <= len(G)]
@@ -399,7 +408,7 @@ def main():
     print("\n" + "=" * 60)
     print("Feature Statistics Summary")
     print("=" * 60)
-    print(results_df[['pagerank', 'hits_hub', 'hits_auth', 'degree', 'leiden_size']].describe())
+    print(results_df[['pagerank', 'hits_hub', 'hits_auth', 'degree', 'leiden_size', 'vol_sent', 'vol_recv', 'tx_count']].describe())
     
     print("\nDone!")
 
