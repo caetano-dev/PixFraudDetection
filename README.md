@@ -1,9 +1,5 @@
 # PIX Fraud Detector
 
-## To-do
-- [X] remove transactions that come after number of days spanned inside of buildGraph.py (dataset dependent)
-- [ ] sliding window for pagerank???
-
 ```
 ..                                  SMALL           MEDIUM           LARGE
 ..                                  HI     LI        HI      LI       HI       LI
@@ -17,16 +13,7 @@
 ```
 Longest laundering chain found: 7 days (filtered HI large)
 
-Run clan_dataset to remove the laundering transactions we don't need.
-
-A Graph Neural Network (GNN) based Anti-Money Laundering (AML) detection system that constructs transaction graphs and identifies suspicious entities.
-
-## Overview
-
-This project builds a **directed weighted transaction graph** from financial transaction data, where:
-- **Nodes** represent Entities (companies, individuals)
-- **Edges** represent aggregated transaction flows between entities
-- **Features** are engineered for both nodes and edges to enable GNN-based fraud detection
+Run clean_dataset to remove the laundering transactions we don't need.
 
 ## Quick Start
 

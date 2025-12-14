@@ -12,6 +12,7 @@ import numpy as np
 import networkx as nx
 from sklearn.metrics import roc_auc_score, average_precision_score
 from typing import Optional
+from cdlib import algorithms
 
 from config import (
     DATA_PATH,
@@ -125,6 +126,48 @@ def build_daily_graph(window_df: pd.DataFrame) -> nx.DiGraph:
         )
     
     return G
+
+
+def compute_leiden_features(G: nx.DiGraph) -> dict:
+    """
+    Compute Leiden community detection features for each node.
+    
+    Uses the Leiden algorithm to detect communities in the graph.
+    Returns community membership and size for each node.
+    
+    Args:
+        G: A NetworkX DiGraph
+        
+    Returns:
+        Dictionary mapping entity_id to a dict with:
+            - 'leiden_id': (int) Community ID the node belongs to
+            - 'leiden_size': (int) Number of nodes in that community
+    """
+    if len(G) == 0:
+        return {}
+    
+    try:
+        # Run Leiden algorithm (cdlib handles NetworkX conversion)
+        # Convert to undirected for community detection
+        G_undirected = G.to_undirected()
+        communities = algorithms.leiden(G_undirected, weights='weight')
+        
+        # Build mapping from node to community features
+        node_features = {}
+        
+        for community_id, community_members in enumerate(communities.communities):
+            community_size = len(community_members)
+            for node in community_members:
+                node_features[node] = {
+                    'leiden_id': community_id,
+                    'leiden_size': community_size,
+                }
+        
+        return node_features
+        
+    except Exception:
+        # Return empty dict if Leiden fails (e.g., graph too sparse)
+        return {}
 
 
 def rank_nodes_by_score(scores: dict, descending: bool = True) -> list:

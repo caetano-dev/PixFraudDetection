@@ -1,7 +1,7 @@
 """
 Main pipeline for Sliding/Cumulative Window Graph Feature Generation.
 
-This script generates time-series features (PageRank, HITS) for downstream
+This script generates time-series features (PageRank, HITS, Leiden) for downstream
 AI models by iterating through the transaction data day-by-day using either:
   - SLIDING window: Fixed-size window (current_date - WINDOW_DAYS, current_date]
   - CUMULATIVE window: Growing window [start_date, current_date]
@@ -29,16 +29,141 @@ from config import (
     EVALUATION_K_VALUES,
     RUN_EVALUATION,
     VERBOSE_EVALUATION,
+    RUN_LEIDEN,
 )
 from utils import (
     load_data,
     build_daily_graph,
+    compute_leiden_features,
     print_evaluation_report,
     compute_daily_evaluation_metrics,
 )
 
-# Type alias for clarity
-DegreeView = int
+
+def analyze_leiden_effectiveness(results_df: pd.DataFrame) -> None:
+    """
+    Analyze and print how effective Leiden communities are at identifying fraud.
+    
+    Key metrics:
+    - Distribution of fraud across community sizes
+    - Communities with highest fraud concentration
+    - Whether small communities are more likely to be fraudulent
+    """
+    print("\n" + "=" * 60)
+    print("Leiden Community Detection Analysis")
+    print("=" * 60)
+    
+    # Filter to valid Leiden assignments (leiden_id != -1)
+    valid_df = results_df[results_df['leiden_id'] != -1].copy()
+    
+    if valid_df.empty:
+        print("No valid Leiden communities found.")
+        return
+    
+    # Get the last date (full graph) for analysis
+    last_date = valid_df['date'].max()
+    final_df = valid_df[valid_df['date'] == last_date].copy()
+    
+    print(f"\nAnalysis based on final day: {last_date}")
+    print(f"Total nodes with community assignment: {len(final_df):,}")
+    
+    # Basic community statistics
+    n_communities = final_df['leiden_id'].nunique()
+    print(f"Total communities detected: {n_communities:,}")
+    
+    # Compute community-level fraud statistics
+    community_stats = final_df.groupby('leiden_id').agg(
+        size=('entity_id', 'count'),
+        fraud_count=('is_fraud', 'sum'),
+        fraud_rate=('is_fraud', 'mean')
+    ).reset_index()
+    
+    # Overall fraud rate for comparison
+    overall_fraud_rate = final_df['is_fraud'].mean()
+    print(f"Overall fraud rate: {overall_fraud_rate:.4%}")
+    
+    # Community size distribution
+    print("\n[Community Size Distribution]")
+    print("-" * 50)
+    size_bins = [1, 2, 5, 10, 50, 100, 500, float('inf')]
+    size_labels = ['1', '2-4', '5-9', '10-49', '50-99', '100-499', '500+']
+    
+    community_stats['size_bin'] = pd.cut(
+        community_stats['size'], 
+        bins=size_bins, 
+        labels=size_labels,
+        right=False
+    )
+    
+    size_analysis = community_stats.groupby('size_bin', observed=True).agg(
+        n_communities=('leiden_id', 'count'),
+        total_nodes=('size', 'sum'),
+        total_fraud=('fraud_count', 'sum')
+    ).reset_index()
+    
+    size_analysis['fraud_rate'] = size_analysis['total_fraud'] / size_analysis['total_nodes']
+    size_analysis['lift'] = size_analysis['fraud_rate'] / overall_fraud_rate
+    
+    print(f"{'Size':<10} {'Communities':<12} {'Nodes':<10} {'Fraud':<8} {'Rate':<10} {'Lift':<8}")
+    print("-" * 60)
+    for _, row in size_analysis.iterrows():
+        print(f"{row['size_bin']:<10} {int(row['n_communities']):<12} {int(row['total_nodes']):<10} "
+              f"{int(row['total_fraud']):<8} {row['fraud_rate']:.4%}   {row['lift']:.2f}x")
+    
+    # Top fraud-concentrated communities
+    print("\n[Top 10 Communities by Fraud Rate (min 3 members)]")
+    print("-" * 70)
+    
+    # Filter communities with at least 3 members for meaningful rates
+    significant_communities = community_stats[community_stats['size'] >= 3].copy()
+    top_fraud_communities = significant_communities.nlargest(10, 'fraud_rate')
+    
+    print(f"{'Comm ID':<10} {'Size':<8} {'Fraud':<8} {'Rate':<12} {'Lift':<8}")
+    print("-" * 50)
+    for _, row in top_fraud_communities.iterrows():
+        lift = row['fraud_rate'] / overall_fraud_rate if overall_fraud_rate > 0 else 0
+        print(f"{int(row['leiden_id']):<10} {int(row['size']):<8} {int(row['fraud_count']):<8} "
+              f"{row['fraud_rate']:.4%}      {lift:.2f}x")
+    
+    # Communities that are 100% fraud (potential fraud rings)
+    pure_fraud_communities = community_stats[
+        (community_stats['fraud_rate'] == 1.0) & (community_stats['size'] >= 2)
+    ]
+    
+    if not pure_fraud_communities.empty:
+        print(f"\n[Potential Fraud Rings: 100% Fraud Communities (size >= 2)]")
+        print("-" * 50)
+        print(f"Found {len(pure_fraud_communities)} communities that are 100% fraudulent")
+        print(f"Total nodes in these communities: {pure_fraud_communities['size'].sum():,}")
+        print(f"Size distribution: {pure_fraud_communities['size'].describe().to_dict()}")
+    
+    # Effectiveness summary
+    print("\n[Leiden Effectiveness Summary]")
+    print("-" * 50)
+    
+    # Calculate what % of fraud is in small communities
+    small_community_threshold = 10
+    small_communities = final_df[final_df['leiden_size'] <= small_community_threshold]
+    fraud_in_small = small_communities['is_fraud'].sum()
+    total_fraud = final_df['is_fraud'].sum()
+    
+    if total_fraud > 0:
+        pct_fraud_in_small = fraud_in_small / total_fraud
+        print(f"Fraud in small communities (size <= {small_community_threshold}): "
+              f"{fraud_in_small:,} / {total_fraud:,} ({pct_fraud_in_small:.2%})")
+    
+    # Calculate average community fraud rate vs overall
+    avg_community_fraud_rate = community_stats['fraud_rate'].mean()
+    print(f"Average community fraud rate: {avg_community_fraud_rate:.4%}")
+    print(f"Overall fraud rate: {overall_fraud_rate:.4%}")
+    
+    # Concentration metric: how much more concentrated is fraud in high-fraud communities?
+    high_fraud_communities = community_stats[community_stats['fraud_rate'] > overall_fraud_rate * 2]
+    if not high_fraud_communities.empty:
+        fraud_in_high = high_fraud_communities['fraud_count'].sum()
+        if total_fraud > 0:
+            print(f"Fraud in high-concentration communities (>2x avg rate): "
+                  f"{fraud_in_high:,} / {total_fraud:,} ({fraud_in_high/total_fraud:.2%})")
 
 
 def main():
@@ -61,6 +186,7 @@ def main():
     else:
         print(f"Window: Cumulative (grows from start) | Step: {STEP_SIZE} day(s)")
     print(f"Evaluation: {'Enabled' if RUN_EVALUATION else 'Disabled'}")
+    print(f"Leiden: {'Enabled' if RUN_LEIDEN else 'Disabled'}")
     print("=" * 60)
     
     # 1. Load all data once
@@ -132,14 +258,22 @@ def main():
             except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
                 pagerank_scores = {}
             
-            # HITS with error handling
             try:
                 hits_hubs, hits_auths = nx.hits(G, max_iter=HITS_MAX_ITER)
             except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
                 hits_hubs, hits_auths = {}, {}
             
+            # Leiden community detection
+            if RUN_LEIDEN:
+                leiden_features = compute_leiden_features(G)
+            else:
+                leiden_features = {}
+            
             # 7. Extract features for each node in the graph
             for node in G.nodes():
+                # Get Leiden features for this node (if available)
+                node_leiden = leiden_features.get(node, {})
+                
                 record = {
                     'date': current_date.date(),
                     'entity_id': node,
@@ -149,6 +283,8 @@ def main():
                     'degree': int(G.degree(node)),
                     'in_degree': int(G.in_degree(node)),
                     'out_degree': int(G.out_degree(node)),
+                    'leiden_id': node_leiden.get('leiden_id', -1),
+                    'leiden_size': node_leiden.get('leiden_size', 0),
                     'is_fraud': 1 if node in bad_actors else 0,
                 }
                 all_features.append(record)
@@ -255,11 +391,15 @@ def main():
                         mean_lift = float(algo_df[lift_col].mean()) if lift_col in algo_df.columns else 0.0
                         print(f"    @{k:>5}: {mean_prec:.4%} (lift: {mean_lift:.2f}x)")
     
+    # 11. Leiden community analysis
+    if RUN_LEIDEN:
+        analyze_leiden_effectiveness(results_df)
+    
     # Feature statistics summary
     print("\n" + "=" * 60)
     print("Feature Statistics Summary")
     print("=" * 60)
-    print(results_df[['pagerank', 'hits_hub', 'hits_auth', 'degree']].describe())
+    print(results_df[['pagerank', 'hits_hub', 'hits_auth', 'degree', 'leiden_size']].describe())
     
     print("\nDone!")
 
