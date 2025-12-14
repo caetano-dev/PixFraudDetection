@@ -15,6 +15,7 @@
 .. Laundering Rate (1 per N Trans)  981   1942       905    1948       807     1750
 ..                                  SMALL           MEDIUM           LARGE
 ```
+Longest laundering chain found: 7 days (filtered HI large)
 
 A Graph Neural Network (GNN) based Anti-Money Laundering (AML) detection system that constructs transaction graphs and identifies suspicious entities.
 

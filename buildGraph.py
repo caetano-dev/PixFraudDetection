@@ -1,7 +1,7 @@
 import pandas as pd
-import numpy as np
 import networkx as nx
 from pathlib import Path
+from typing import cast
 
 CUTOFF_DATE = pd.Timestamp('2022-11-05')
 
@@ -21,18 +21,14 @@ def load_data(data_dir: str = "data") -> tuple[pd.DataFrame, pd.DataFrame, pd.Da
     return normal_transactions, laundering_transactions, accounts
 
 
-def preprocess_transactions(
-    normal_transactions: pd.DataFrame,
-    laundering_transactions: pd.DataFrame,
-    accounts: pd.DataFrame
-) -> pd.DataFrame:
+def preprocess_transactions(normal_transactions: pd.DataFrame, laundering_transactions: pd.DataFrame, accounts: pd.DataFrame) -> pd.DataFrame:
     """
     Concatenate transactions and map accounts to entities.
     
     Returns a DataFrame with source_entity and target_entity columns.
     """
     # Concatenate normal and laundering transactions
-    all_transactions = pd.concat([normal_transactions, laundering_transactions], ignore_index=True)
+    all_transactions = cast(pd.DataFrame, pd.concat([normal_transactions, laundering_transactions], ignore_index=True))
     print(f"Total transactions after concatenation: {len(all_transactions):,}")
     
     # Convert timestamp to datetime
@@ -47,23 +43,23 @@ def preprocess_transactions(
     account_to_entity = accounts.set_index('Account Number')['Entity ID'].to_dict()
     
     # Map from_account -> source_entity
-    all_transactions['source_entity'] = all_transactions['from_account'].map(account_to_entity)
+    all_transactions['source_entity'] = cast(pd.Series, all_transactions['from_account']).map(account_to_entity)
     
     # Map to_account -> target_entity
-    all_transactions['target_entity'] = all_transactions['to_account'].map(account_to_entity)
+    all_transactions['target_entity'] = cast(pd.Series, all_transactions['to_account']).map(account_to_entity)
     
     # Report any unmapped accounts
-    unmapped_source = all_transactions['source_entity'].isna().sum()
-    unmapped_target = all_transactions['target_entity'].isna().sum()
+    unmapped_source = cast(pd.Series, all_transactions['source_entity']).isna().sum()
+    unmapped_target = cast(pd.Series, all_transactions['target_entity']).isna().sum()
     
     if unmapped_source > 0 or unmapped_target > 0:
         print(f"Warning: {unmapped_source:,} transactions have unmapped source accounts")
         print(f"Warning: {unmapped_target:,} transactions have unmapped target accounts")
         # Drop transactions with unmapped entities
-        all_transactions = all_transactions.dropna(subset=['source_entity', 'target_entity'])
+        all_transactions = all_transactions.dropna(subset=['source_entity', 'target_entity']) # type: ignore
         print(f"Transactions after dropping unmapped: {len(all_transactions):,}")
     
-    return all_transactions
+    return cast(pd.DataFrame, all_transactions)
 
 
 def compute_edge_attributes(transactions: pd.DataFrame) -> pd.DataFrame:
@@ -90,11 +86,11 @@ def compute_entity_labels(transactions: pd.DataFrame) -> dict:
     """
     laundering_txns = transactions[transactions['is_laundering'] == 1]
     
-    laundering_sources = set(laundering_txns['source_entity'].unique())
-    laundering_targets = set(laundering_txns['target_entity'].unique())
+    laundering_sources = set(cast(pd.Series, laundering_txns['source_entity']).unique())
+    laundering_targets = set(cast(pd.Series, laundering_txns['target_entity']).unique())
     laundering_entities = laundering_sources | laundering_targets
     
-    all_entities = set(transactions['source_entity'].unique()) | set(transactions['target_entity'].unique())
+    all_entities = set(cast(pd.Series, transactions['source_entity']).unique()) | set(cast(pd.Series, transactions['target_entity']).unique())
     
     labels = {entity: 1 if entity in laundering_entities else 0 for entity in all_entities}
     
@@ -115,9 +111,9 @@ def compute_temporal_statistics(transactions: pd.DataFrame) -> dict:
     entity_stats = {}
     
     # Statistics for amounts sent (entity as source)
-    sent_stats = transactions.groupby('source_entity')['amount_sent_c'].agg(
+    sent_stats = cast(pd.DataFrame, transactions.groupby('source_entity')['amount_sent_c'].agg(
         ['mean', 'max', 'min', 'std']
-    ).rename(columns={
+    )).rename(columns={
         'mean': 'sent_amount_mean',
         'max': 'sent_amount_max',
         'min': 'sent_amount_min',
@@ -125,9 +121,9 @@ def compute_temporal_statistics(transactions: pd.DataFrame) -> dict:
     })
     
     # Statistics for amounts received (entity as target)
-    received_stats = transactions.groupby('target_entity')['amount_sent_c'].agg(
+    received_stats = cast(pd.DataFrame, transactions.groupby('target_entity')['amount_sent_c'].agg(
         ['mean', 'max', 'min', 'std']
-    ).rename(columns={
+    )).rename(columns={
         'mean': 'received_amount_mean',
         'max': 'received_amount_max',
         'min': 'received_amount_min',
@@ -135,7 +131,7 @@ def compute_temporal_statistics(transactions: pd.DataFrame) -> dict:
     })
     
     # Get all unique entities
-    all_entities = set(transactions['source_entity'].unique()) | set(transactions['target_entity'].unique())
+    all_entities = set(cast(pd.Series, transactions['source_entity']).unique()) | set(cast(pd.Series, transactions['target_entity']).unique())
     
     # Build stats dictionary for each entity
     for entity in all_entities:
@@ -171,11 +167,7 @@ def compute_temporal_statistics(transactions: pd.DataFrame) -> dict:
     return entity_stats
 
 
-def build_graph(
-    edge_attributes: pd.DataFrame,
-    entity_labels: dict,
-    temporal_stats: dict
-) -> nx.DiGraph:
+def build_graph(edge_attributes: pd.DataFrame, entity_labels: dict, temporal_stats: dict) -> nx.DiGraph:
     """
     Construct the directed weighted graph with all node and edge attributes.
     """
@@ -283,12 +275,6 @@ def print_graph_summary(G: nx.DiGraph):
                 print(f"  {attr}: {value:,.2f}")
             else:
                 print(f"  {attr}: {value}")
-    
-    # Temporal range
-    print("\n" + "-" * 60)
-    print("DATA COVERAGE")
-    print("-" * 60)
-
 
 def main():
     """Main function to orchestrate the graph building pipeline."""

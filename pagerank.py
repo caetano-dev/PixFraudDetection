@@ -1,13 +1,11 @@
 import numpy as np
-from numpy.random.mtrand import weibull
-import pandas as pd
 import networkx as nx
-from sklearn.metrics import (precision_score, recall_score, f1_score, roc_auc_score, average_precision_score, precision_recall_curve, roc_curve)
+from sklearn.metrics import (roc_auc_score, average_precision_score)
 from typing import Optional
 from buildGraph import main as build_graph_main
 
 # tol = 1e-6 is the default in NetworkX's pagerank implementation
-def compute_pagerank(G: nx.DiGraph, alpha: float = 0.85, max_iter: int = 100, tol: float = 1e-6, personalization: Optional[dict] = None, weight: str = 'weight') -> dict:
+def compute_pagerank(G: nx.DiGraph, alpha: float = 0.85, max_iter: int = 100, tol: float = 1e-6, personalization: Optional[dict] = None, weight: Optional[str] = 'weight') -> dict:
     pagerank_scores = nx.pagerank(G, alpha=alpha, max_iter=max_iter, tol=tol, personalization=personalization, weight=weight)
     return pagerank_scores
 
