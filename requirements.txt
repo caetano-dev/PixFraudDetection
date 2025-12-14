@@ -1,4 +1,5 @@
 pandas
+tqdm
 numpy
 Faker
 redis
