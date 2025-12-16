@@ -1,13 +1,8 @@
 """
-Main pipeline for Sliding/Cumulative Window Graph Feature Generation.
+Main pipeline for Sliding Window Graph Feature Generation.
 
 This script generates time-series features (PageRank, HITS, Leiden) for downstream
-AI models by iterating through the transaction data day-by-day using either:
-  - SLIDING window: Fixed-size window (current_date - WINDOW_DAYS, current_date]
-  - CUMULATIVE window: Growing window [start_date, current_date]
-
-The cumulative mode preserves full network structure, which is better for
-capturing long laundering chains that span multiple days.
+AI models by iterating through the transaction data day-by-day using slideing windows.
 """
 
 from __future__ import annotations
@@ -19,7 +14,6 @@ from tqdm import tqdm
 
 from config import (
     WINDOW_DAYS,
-    WINDOW_MODE,
     STEP_SIZE,
     OUTPUT_FEATURES_FILE,
     OUTPUT_METRICS_FILE,
@@ -28,16 +22,21 @@ from config import (
     DATASET_SIZE,
     EVALUATION_K_VALUES,
     RUN_EVALUATION,
-    VERBOSE_EVALUATION,
     RUN_LEIDEN,
+    RUN_RANK_STABILITY,
+    RANK_STABILITY_TOP_K,
+    RANK_ANOMALY_PERCENTILE,
+    USE_TIME_AWARE_BAD_ACTORS,
 )
 from utils import (
     load_data,
     build_daily_graph,
     compute_node_stats,
     compute_leiden_features,
-    print_evaluation_report,
     compute_daily_evaluation_metrics,
+    get_bad_actors_up_to_date,
+    compute_rank_stability,
+    detect_rank_anomalies,
 )
 
 
@@ -166,55 +165,55 @@ def analyze_leiden_effectiveness(results_df: pd.DataFrame) -> None:
             print(f"Fraud in high-concentration communities (>2x avg rate): "
                   f"{fraud_in_high:,} / {total_fraud:,} ({fraud_in_high/total_fraud:.2%})")
 
-
 def main():
     """
-    Execute the sliding/cumulative window feature generation pipeline.
+    Execute the sliding window feature generation pipeline.
     
     Pipeline steps:
     1. Load all transaction data once
     2. Determine date range from dataset
-    3. Iterate day-by-day with sliding or cumulative window
+    3. Iterate day-by-day with sliding window
     4. For each window: build graph, run algorithms, extract features
     5. Optionally compute evaluation metrics per day
     6. Save all features and metrics to parquet files
     """
     print("=" * 60)
     print("Graph Feature Generation Pipeline")
-    print(f"Dataset: {DATASET_SIZE} | Mode: {WINDOW_MODE}")
-    if WINDOW_MODE == "SLIDING":
-        print(f"Window: {WINDOW_DAYS} days | Step: {STEP_SIZE} day(s)")
-    else:
-        print(f"Window: Cumulative (grows from start) | Step: {STEP_SIZE} day(s)")
+    print(f"Dataset: {DATASET_SIZE}")
+    print(f"Window: {WINDOW_DAYS} days | Step: {STEP_SIZE} day(s)")
     print(f"Evaluation: {'Enabled' if RUN_EVALUATION else 'Disabled'}")
     print(f"Leiden: {'Enabled' if RUN_LEIDEN else 'Disabled'}")
+    print(f"Rank Stability: {'Enabled' if RUN_RANK_STABILITY else 'Disabled'}")
+    print(f"Time-aware bad actors: {'Yes (no future leakage)' if USE_TIME_AWARE_BAD_ACTORS else 'No (global)'}")
     print("=" * 60)
     
     # 1. Load all data once
-    all_transactions, bad_actors = load_data()
+    # NOTE: bad_actors_global is for final summary only - for temporal evaluation,
+    # we use get_bad_actors_up_to_date() to prevent future information leakage
+    all_transactions, bad_actors_global = load_data()
     
     # 2. Determine date range
     start_date = all_transactions['timestamp'].min()
     end_date = all_transactions['timestamp'].max()
     print(f"\nData range: {start_date.date()} to {end_date.date()}")
     
-    # Start iteration - for SLIDING we need a full window first, for CUMULATIVE start immediately
-    if WINDOW_MODE == "SLIDING":
-        current_date = start_date + pd.Timedelta(days=WINDOW_DAYS)
-    else:
-        # CUMULATIVE: start from first day (or after a small warmup)
-        current_date = start_date + pd.Timedelta(days=1)
+    # Start iteration - start from first day (or after a small warmup)
+    # For SLIDING, this means the first few windows will be partial (growing) until they reach WINDOW_DAYS size
+    current_date = start_date + pd.Timedelta(days=1)
     
     total_days = (end_date - current_date).days + 1
     
-    if WINDOW_MODE == "SLIDING":
-        print(f"Processing {total_days} days with {WINDOW_DAYS}-day sliding window...\n")
-    else:
-        print(f"Processing {total_days} days with cumulative window (graph grows over time)...\n")
+    print(f"Processing {total_days} days with {WINDOW_DAYS}-day sliding window...\n")
     
     # Lists to collect all records
     all_features = []
     all_daily_metrics = []
+    all_rank_stability = []
+    
+    # Track previous window scores for rank stability analysis
+    prev_pagerank_scores = {}
+    prev_hits_hubs = {}
+    prev_hits_auths = {}
     
     # Filter k_values to reasonable sizes (will be further filtered per-day)
     k_values = EVALUATION_K_VALUES
@@ -224,16 +223,11 @@ def main():
     
     while current_date <= end_date:
         # Calculate window boundaries based on mode
-        if WINDOW_MODE == "SLIDING":
-            # SLIDING: (current_date - WINDOW_DAYS, current_date]
-            window_start = current_date - pd.Timedelta(days=WINDOW_DAYS)
-            mask = (
-                (all_transactions['timestamp'] > window_start) & 
-                (all_transactions['timestamp'] <= current_date)
-            )
-        else:
-            # CUMULATIVE: [start_date, current_date] - graph grows over time
-            mask = (all_transactions['timestamp'] <= current_date)
+        window_start = current_date - pd.Timedelta(days=WINDOW_DAYS)
+        mask = (
+            (all_transactions['timestamp'] > window_start) & 
+            (all_transactions['timestamp'] <= current_date)
+        )
         
         # 4. Filter transactions for current window
         window_df = all_transactions.loc[mask].copy()
@@ -267,11 +261,50 @@ def main():
             except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
                 hits_hubs, hits_auths = {}, {}
             
+            # 7b. Compute rank stability analysis (comparing with previous window)
+            # This detects anomalies when nodes shift drastically between snapshots
+            if RUN_RANK_STABILITY and prev_pagerank_scores:
+                pr_stability = compute_rank_stability(
+                    prev_pagerank_scores, 
+                    pagerank_scores, 
+                    top_k=RANK_STABILITY_TOP_K
+                )
+                pr_anomalies = detect_rank_anomalies(
+                    pr_stability['rank_changes'], 
+                    threshold_percentile=RANK_ANOMALY_PERCENTILE
+                )
+                
+                # Store rank change for each node (to be added to features)
+                pr_rank_changes = pr_stability['rank_changes']
+                
+                # Record stability metrics for this window transition
+                stability_record = {
+                    'date': current_date.date(),
+                    'algorithm': 'pagerank',
+                    'stability_score': pr_stability['stability_score'],
+                    'num_new_entrants': len(pr_stability['new_entrants']),
+                    'num_dropouts': len(pr_stability['dropouts']),
+                    'num_anomalies': len(pr_anomalies),
+                }
+                all_rank_stability.append(stability_record)
+            else:
+                pr_rank_changes = {}
+                pr_anomalies = set()
+            
             # Leiden community detection
             if RUN_LEIDEN:
                 leiden_features = compute_leiden_features(G)
             else:
                 leiden_features = {}
+            
+            # Get bad actors for evaluation
+            # USE_TIME_AWARE_BAD_ACTORS=True: Only use bad actors known UP TO current date
+            # (prevents future information leakage - critical for proper temporal evaluation)
+            # USE_TIME_AWARE_BAD_ACTORS=False: Use global bad actors (for quick testing only)
+            if USE_TIME_AWARE_BAD_ACTORS:
+                bad_actors_current = get_bad_actors_up_to_date(all_transactions, current_date)
+            else:
+                bad_actors_current = bad_actors_global
             
             # 8. Extract features for each node in the graph
             for node in G.nodes():
@@ -286,19 +319,24 @@ def main():
                     'pagerank': pagerank_scores.get(node, 0.0),
                     'hits_hub': hits_hubs.get(node, 0.0),
                     'hits_auth': hits_auths.get(node, 0.0),
-                    'degree': int(G.degree(node)),
-                    'in_degree': int(G.in_degree(node)),
-                    'out_degree': int(G.out_degree(node)),
+                    'degree': G.degree(node),
+                    'in_degree': G.in_degree(node),
+                    'out_degree': G.out_degree(node),
                     'leiden_id': node_leiden.get('leiden_id', -1),
                     'leiden_size': node_leiden.get('leiden_size', 0),
                     'vol_sent': stats.get('vol_sent', 0.0),
                     'vol_recv': stats.get('vol_recv', 0.0),
                     'tx_count': stats.get('tx_count', 0),
-                    'is_fraud': 1 if node in bad_actors else 0,
+                    # Fraud label (time-aware if USE_TIME_AWARE_BAD_ACTORS=True)
+                    'is_fraud': 1 if node in bad_actors_current else 0,
+                    # Rank stability features (0 if first window, disabled, or node not in previous)
+                    'pagerank_rank_change': pr_rank_changes.get(node, 0) if RUN_RANK_STABILITY else 0,
+                    'is_rank_anomaly': (1 if node in pr_anomalies else 0) if RUN_RANK_STABILITY else 0,
                 }
                 all_features.append(record)
             
             # 9. Compute evaluation metrics for this day (optional)
+            # Use time-aware bad actors to prevent future information leakage
             if RUN_EVALUATION and pagerank_scores:
                 # Filter k_values to not exceed nodes in this window
                 valid_k_values = [k for k in k_values if k <= len(G)]
@@ -308,7 +346,7 @@ def main():
                         pagerank_scores=pagerank_scores,
                         hits_hubs=hits_hubs,
                         hits_auths=hits_auths,
-                        bad_actors=bad_actors,
+                        bad_actors=bad_actors_current,  # Time-aware: no future leakage
                         k_values=valid_k_values
                     )
                     
@@ -333,11 +371,10 @@ def main():
                         
                         all_daily_metrics.append(metric_record)
                     
-                    # Print verbose evaluation if enabled
-                    if VERBOSE_EVALUATION:
-                        print(f"\n--- Day: {current_date.date()} ---")
-                        for algo_name, algo_metrics in daily_metrics.items():
-                            print_evaluation_report(algo_metrics, algo_name.upper())
+            # Store current scores for next iteration's rank stability analysis
+            prev_pagerank_scores = pagerank_scores.copy()
+            prev_hits_hubs = hits_hubs.copy()
+            prev_hits_auths = hits_auths.copy()
         
         # Move to next day
         current_date += pd.Timedelta(days=STEP_SIZE)
@@ -357,6 +394,16 @@ def main():
     print(f"Unique entities: {results_df['entity_id'].nunique():,}")
     print(f"Unique dates: {results_df['date'].nunique():,}")
     print(f"Fraud records: {results_df['is_fraud'].sum():,} ({100 * results_df['is_fraud'].mean():.2f}%)")
+    
+    # Print rank stability summary
+    if RUN_RANK_STABILITY and all_rank_stability:
+        stability_df = pd.DataFrame(all_rank_stability)
+        avg_stability = stability_df['stability_score'].mean()
+        total_anomalies = stability_df['num_anomalies'].sum()
+        print(f"\nRank Stability Analysis:")
+        print(f"  Average stability score: {avg_stability:.4f}")
+        print(f"  Total rank anomalies detected: {total_anomalies:,}")
+        print(f"  Entities flagged as rank anomalies: {results_df['is_rank_anomaly'].sum():,}")
     
     print(f"\nSaving features to {OUTPUT_FEATURES_FILE}...")
     results_df.to_parquet(OUTPUT_FEATURES_FILE, index=False)
@@ -408,7 +455,24 @@ def main():
     print("\n" + "=" * 60)
     print("Feature Statistics Summary")
     print("=" * 60)
-    print(results_df[['pagerank', 'hits_hub', 'hits_auth', 'degree', 'leiden_size', 'vol_sent', 'vol_recv', 'tx_count']].describe())
+    print(results_df[['pagerank', 'hits_hub', 'hits_auth', 'degree', 'leiden_size', 'vol_sent', 'vol_recv', 'tx_count', 'pagerank_rank_change']].describe())
+    
+    # Rank anomaly analysis
+    if RUN_RANK_STABILITY and results_df['is_rank_anomaly'].sum() > 0:
+        print("\n" + "=" * 60)
+        print("Rank Anomaly Analysis")
+        print("=" * 60)
+        anomaly_df = results_df[results_df['is_rank_anomaly'] == 1]
+        fraud_in_anomalies = anomaly_df['is_fraud'].sum()
+        total_anomalies = len(anomaly_df)
+        overall_fraud_rate = results_df['is_fraud'].mean()
+        anomaly_fraud_rate = anomaly_df['is_fraud'].mean() if total_anomalies > 0 else 0
+        
+        print(f"Total rank anomaly flags: {total_anomalies:,}")
+        print(f"Fraud among rank anomalies: {fraud_in_anomalies:,} ({anomaly_fraud_rate:.2%})")
+        print(f"Overall fraud rate: {overall_fraud_rate:.2%}")
+        if overall_fraud_rate > 0:
+            print(f"Lift from rank anomaly detection: {anomaly_fraud_rate / overall_fraud_rate:.2f}x")
     
     print("\nDone!")
 

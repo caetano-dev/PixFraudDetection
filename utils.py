@@ -13,6 +13,7 @@ import networkx as nx
 from sklearn.metrics import roc_auc_score, average_precision_score
 from typing import Optional
 from cdlib import algorithms
+from datetime import datetime
 
 from config import (
     DATA_PATH,
@@ -74,17 +75,50 @@ def load_data() -> tuple[pd.DataFrame, set]:
     if dropped_count > 0:
         print(f"Dropped {dropped_count:,} transactions with unmapped accounts")
     
-    # Identify bad actors (global ground truth)
-    # These are entities involved in ANY laundering transaction across the entire dataset
+    # Identify bad actors (global ground truth for final evaluation only)
+    # NOTE: For time-sliced evaluation without future leakage, use get_bad_actors_up_to_date()
     laundering_txns = all_transactions[all_transactions['is_laundering'] == 1]
-    bad_actors = set(laundering_txns['source_entity']).union(
+    bad_actors_global = set(laundering_txns['source_entity']).union(
         set(laundering_txns['target_entity'])
     )
     
     print(f"Loaded {len(all_transactions):,} transactions")
-    print(f"Identified {len(bad_actors):,} bad actors (entities in laundering transactions)")
+    print(f"Identified {len(bad_actors_global):,} bad actors globally (entities in laundering transactions)")
     
-    return all_transactions, bad_actors
+    return all_transactions, bad_actors_global
+
+
+def get_bad_actors_up_to_date(
+    all_transactions: pd.DataFrame, 
+    current_date: datetime
+) -> set:
+    """
+    Get bad actors known up to a specific date (prevents future information leakage).
+    
+    This function returns only entities that have been involved in laundering
+    transactions UP TO (and including) the current_date. This is critical for
+    proper temporal evaluation - when evaluating at time t, we should only
+    know about fraudulent activity that has occurred by time t.
+    
+    Args:
+        all_transactions: DataFrame with all transactions (must have 'timestamp',
+                         'is_laundering', 'source_entity', 'target_entity' columns)
+        current_date: The cutoff date (inclusive) for identifying bad actors
+        
+    Returns:
+        Set of entity IDs involved in laundering transactions up to current_date
+    """
+    # Filter transactions up to (and including) current_date
+    mask = all_transactions['timestamp'] <= current_date
+    transactions_up_to_date = all_transactions.loc[mask]
+    
+    # Identify bad actors from only these transactions
+    laundering_txns = transactions_up_to_date[transactions_up_to_date['is_laundering'] == 1]
+    bad_actors = set(laundering_txns['source_entity']).union(
+        set(laundering_txns['target_entity'])
+    )
+    
+    return bad_actors
 
 
 def build_daily_graph(window_df: pd.DataFrame) -> nx.DiGraph:
@@ -401,7 +435,8 @@ def compute_daily_evaluation_metrics(
         pagerank_scores: PageRank scores for nodes
         hits_hubs: HITS hub scores for nodes
         hits_auths: HITS authority scores for nodes
-        bad_actors: Set of known fraudulent entity IDs
+        bad_actors: Set of known fraudulent entity IDs (should be from get_bad_actors_up_to_date
+                   to prevent future leakage)
         k_values: List of K values for precision/recall@K
         
     Returns:
@@ -429,3 +464,121 @@ def compute_daily_evaluation_metrics(
         daily_metrics['hits_auth'] = evaluate_ranking_effectiveness(ranked_auths, labels, k_values)
     
     return daily_metrics
+
+
+def compute_rank_stability(
+    prev_scores: dict,
+    curr_scores: dict,
+    top_k: int = 100
+) -> dict:
+    """
+    Compute rank stability metrics between two consecutive time windows.
+    
+    This implements the "Rank Stability Analysis" methodology for detecting
+    anomalies when a node's role shifts drastically between temporal snapshots.
+    Large rank changes can indicate suspicious activity.
+    
+    Args:
+        prev_scores: Scores (e.g., PageRank) from previous time window
+        curr_scores: Scores from current time window
+        top_k: Number of top nodes to consider for stability analysis
+        
+    Returns:
+        Dictionary containing:
+            - 'rank_changes': dict mapping node_id to rank change (positive = moved up)
+            - 'new_entrants': set of nodes that appeared in top-k (weren't before)
+            - 'dropouts': set of nodes that left top-k
+            - 'biggest_risers': list of (node, change) tuples for largest positive changes
+            - 'biggest_fallers': list of (node, change) tuples for largest negative changes
+            - 'stability_score': float in [0,1] where 1 = perfectly stable
+    """
+    if not prev_scores or not curr_scores:
+        return {
+            'rank_changes': {},
+            'new_entrants': set(),
+            'dropouts': set(),
+            'biggest_risers': [],
+            'biggest_fallers': [],
+            'stability_score': None,
+        }
+    
+    # Compute rankings (1 = highest score)
+    prev_ranked = rank_nodes_by_score(prev_scores, descending=True)
+    curr_ranked = rank_nodes_by_score(curr_scores, descending=True)
+    
+    # Create rank dictionaries
+    prev_ranks = {node: rank + 1 for rank, (node, _) in enumerate(prev_ranked)}
+    curr_ranks = {node: rank + 1 for rank, (node, _) in enumerate(curr_ranked)}
+    
+    # Get top-k sets
+    prev_top_k = set(node for node, _ in prev_ranked[:top_k])
+    curr_top_k = set(node for node, _ in curr_ranked[:top_k])
+    
+    # Compute rank changes for nodes present in both windows
+    common_nodes = set(prev_ranks.keys()) & set(curr_ranks.keys())
+    rank_changes = {}
+    
+    for node in common_nodes:
+        # Positive change means moved up (lower rank number = higher position)
+        rank_change = prev_ranks[node] - curr_ranks[node]
+        rank_changes[node] = rank_change
+    
+    # Identify new entrants and dropouts in top-k
+    new_entrants = curr_top_k - prev_top_k
+    dropouts = prev_top_k - curr_top_k
+    
+    # Find biggest movers (only among nodes in both windows)
+    sorted_changes = sorted(rank_changes.items(), key=lambda x: x[1], reverse=True)
+    biggest_risers = sorted_changes[:10]  # Top 10 risers
+    biggest_fallers = sorted_changes[-10:][::-1]  # Top 10 fallers (reversed for biggest drops first)
+    
+    # Compute stability score: Jaccard similarity of top-k sets
+    if prev_top_k or curr_top_k:
+        stability_score = len(prev_top_k & curr_top_k) / len(prev_top_k | curr_top_k)
+    else:
+        stability_score = 1.0
+    
+    return {
+        'rank_changes': rank_changes,
+        'new_entrants': new_entrants,
+        'dropouts': dropouts,
+        'biggest_risers': biggest_risers,
+        'biggest_fallers': biggest_fallers,
+        'stability_score': stability_score,
+    }
+
+
+def detect_rank_anomalies(
+    rank_changes: dict,
+    threshold_percentile: float = 95
+) -> set:
+    """
+    Detect nodes with anomalous rank changes between time windows.
+    
+    Nodes with rank changes beyond the threshold percentile (either direction)
+    are flagged as potential anomalies, as drastic role shifts can indicate
+    suspicious financial activity.
+    
+    Args:
+        rank_changes: Dictionary mapping node_id to rank change value
+        threshold_percentile: Percentile threshold for anomaly detection (default 95)
+        
+    Returns:
+        Set of node IDs with anomalous rank changes
+    """
+    if not rank_changes:
+        return set()
+    
+    changes = np.array(list(rank_changes.values()))
+    abs_changes = np.abs(changes)
+    
+    # Compute threshold based on percentile of absolute changes
+    threshold = np.percentile(abs_changes, threshold_percentile)
+    
+    # Flag nodes exceeding threshold
+    anomalous_nodes = {
+        node for node, change in rank_changes.items()
+        if abs(change) >= threshold
+    }
+    
+    return anomalous_nodes

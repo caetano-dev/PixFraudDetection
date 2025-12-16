@@ -19,7 +19,6 @@ The "Pro" Solution (Optional): A truly optimized cumulative graph would update G
 ```
 Longest laundering chain found: 7 days (filtered HI large)
 
-Run clean_dataset to remove the laundering transactions we don't need.
 
 ## Quick Start
 
@@ -35,3 +34,14 @@ source venv/bin/activate  # On Unix/macOS
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+Put the HI_Large.csv and LI_Small.csv files in the `data/HI_Large` and `data/HI_Small` directories.
+
+Run clean_dataset.py to remove the laundering transactions we don't need.
+
+
+Edge Feature Aggregation: In build_daily_graph, you sum the weights (amount_sent_c).
+
+    Flaw: This masks "Structuring" or "Smurfing" (breaking one large transaction into many small ones). A single $10k transfer looks the same as ten $1k transfers in your current graph.
+
+    Fix: In build_daily_graph, add an edge attribute for transaction_count (which you already have) and potentially variance or max_amount. High count + low variance is a strong signal of smurfing.
