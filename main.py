@@ -26,7 +26,6 @@ from config import (
     RUN_RANK_STABILITY,
     RANK_STABILITY_TOP_K,
     RANK_ANOMALY_PERCENTILE,
-    USE_TIME_AWARE_BAD_ACTORS,
 )
 from utils import (
     load_data,
@@ -184,11 +183,9 @@ def main():
     print(f"Evaluation: {'Enabled' if RUN_EVALUATION else 'Disabled'}")
     print(f"Leiden: {'Enabled' if RUN_LEIDEN else 'Disabled'}")
     print(f"Rank Stability: {'Enabled' if RUN_RANK_STABILITY else 'Disabled'}")
-    print(f"Time-aware bad actors: {'Yes (no future leakage)' if USE_TIME_AWARE_BAD_ACTORS else 'No (global)'}")
     print("=" * 60)
     
     # 1. Load all data once
-    # NOTE: bad_actors_global is for final summary only - for temporal evaluation,
     # we use get_bad_actors_up_to_date() to prevent future information leakage
     all_transactions, bad_actors_global = load_data()
     
@@ -212,8 +209,9 @@ def main():
     
     # Track previous window scores for rank stability analysis
     prev_pagerank_scores = {}
-    prev_hits_hubs = {}
+    prev_hits_hubs = {} # Not being used for now
     prev_hits_auths = {}
+    # I can also use in out degrees, eigenvector centrality, betweenness, closeness, etc... (weirdnodes)
     
     # Filter k_values to reasonable sizes (will be further filtered per-day)
     k_values = EVALUATION_K_VALUES
@@ -298,13 +296,7 @@ def main():
                 leiden_features = {}
             
             # Get bad actors for evaluation
-            # USE_TIME_AWARE_BAD_ACTORS=True: Only use bad actors known UP TO current date
-            # (prevents future information leakage - critical for proper temporal evaluation)
-            # USE_TIME_AWARE_BAD_ACTORS=False: Use global bad actors (for quick testing only)
-            if USE_TIME_AWARE_BAD_ACTORS:
-                bad_actors_current = get_bad_actors_up_to_date(all_transactions, current_date)
-            else:
-                bad_actors_current = bad_actors_global
+            bad_actors_current = get_bad_actors_up_to_date(all_transactions, current_date)
             
             # 8. Extract features for each node in the graph
             for node in G.nodes():
@@ -327,7 +319,6 @@ def main():
                     'vol_sent': stats.get('vol_sent', 0.0),
                     'vol_recv': stats.get('vol_recv', 0.0),
                     'tx_count': stats.get('tx_count', 0),
-                    # Fraud label (time-aware if USE_TIME_AWARE_BAD_ACTORS=True)
                     'is_fraud': 1 if node in bad_actors_current else 0,
                     # Rank stability features (0 if first window, disabled, or node not in previous)
                     'pagerank_rank_change': pr_rank_changes.get(node, 0) if RUN_RANK_STABILITY else 0,

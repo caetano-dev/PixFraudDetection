@@ -61,12 +61,3 @@ RANK_STABILITY_TOP_K: int = 100
 # Percentile threshold for anomaly detection (95 = flag nodes with rank changes
 # in the top 5% most extreme changes)
 RANK_ANOMALY_PERCENTILE: float = 95.0
-
-# ============================================================================
-# TEMPORAL EVALUATION SETTINGS
-# ============================================================================
-# Use time-aware bad actors to prevent future information leakage.
-# When True, evaluation at time t only uses bad actors known up to time t.
-# When False, uses global bad actors (all-time) - NOT recommended for proper
-# temporal evaluation, but useful for quick testing.
-USE_TIME_AWARE_BAD_ACTORS: bool = True

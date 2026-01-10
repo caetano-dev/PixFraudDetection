@@ -3,6 +3,7 @@ To-do:
 
 - [ ] optimize sliding window to add edges instead of recomputing everything
 The Issue: On Day 100, you are re-loading and re-aggregating Day 1 to Day 99 again. window_df grows larger every iteration. On a large dataset, Day 90+ will take exponentially longer to process.
+- [ ] add more features to stability score, like hits, centrality.
 
 The "Pro" Solution (Optional): A truly optimized cumulative graph would update G incrementally (add today's edges to yesterday's graph) rather than rebuilding from scratch.
 
