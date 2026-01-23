@@ -7,6 +7,13 @@ The Issue: On Day 100, you are re-loading and re-aggregating Day 1 to Day 99 aga
 
 The "Pro" Solution (Optional): A truly optimized cumulative graph would update G incrementally (add today's edges to yesterday's graph) rather than rebuilding from scratch.
 
+(oddball paper)
+The trimmed-down set of features that are very successful in spotting patterns, are the following:
+1. Ni: number of neighbors (degree) of ego i,
+2. Ei: number of edges in egonet i,
+3. Wi: total weight of egonet i,
+4. λw,i: principal eigenvalue of the weighted adjacency matrix of egonet i
+
 ```
 ..                                  SMALL           MEDIUM           LARGE
 ..                                  HI     LI        HI      LI       HI       LI
