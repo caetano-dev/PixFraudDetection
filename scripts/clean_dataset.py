@@ -44,6 +44,7 @@ def main():
 
     print(f"Min timestamp: {df['timestamp'].min()}")
     print(f"Max timestamp: {df['timestamp'].max()}")
+    print(f"Now you need to rename the file in the data folder")
 
 if __name__ == "__main__":
     main()

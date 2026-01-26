@@ -1,5 +1,7 @@
 import pandas as pd
 
+# script to check which transaction is the last, just to check if the date cutoff is correct
+
 def main():
     # Load data (Fix spelling if file on disk is correct)
     df = pd.read_parquet('../data/2_filtered_laundering_transactions.parquet')
