@@ -7,6 +7,7 @@ for the money laundering detection feature generation pipeline.
 
 from __future__ import annotations
 
+import warnings
 import pandas as pd
 import numpy as np
 import networkx as nx
@@ -20,6 +21,7 @@ from config import (
     NORMAL_TRANSACTIONS_FILE,
     LAUNDERING_TRANSACTIONS_FILE,
     ACCOUNTS_FILE,
+    LEIDEN_RESOLUTION,
 )
 
 
@@ -125,16 +127,37 @@ def build_daily_graph(window_df: pd.DataFrame) -> nx.DiGraph:
     """
     Build a directed graph from a filtered DataFrame of transactions.
     
-    This function aggregates edges by (source, target) pairs and sums
-    the transaction amounts to create weighted edges. It focuses purely
-    on graph topology for PageRank/HITS computation.
+    Aggregates edges by (source, target) pairs and computes a composite
+    edge weight inspired by Oddball ego-network anomaly detection. The
+    composite weight rewards high transaction frequency alongside total
+    volume and incorporates amount variance to surface "smurfing" patterns
+    (many small, uniform transactions used to evade detection thresholds).
+    
+    Composite weight formula:
+        W_edge = volume * log2(1 + count) * (1 + 1 / (1 + CV))
+    
+    where:
+        - volume  = sum of amount_sent_c on the edge
+        - count   = number of transactions on the edge
+        - CV      = coefficient of variation (std / mean) of amounts
+    
+    Behaviour:
+        - High count amplifies weight (log2 term), penalising smurfing.
+        - Low CV (uniform amounts, classic smurfing) further amplifies
+          weight via the variance factor approaching 2.
+        - For a single transaction (count=1, std=0): factor = 1 * 2 = 2,
+          acting as a neutral baseline since PageRank uses relative weights.
     
     Args:
         window_df: DataFrame containing transactions for the current window.
                    Must have columns: source_entity, target_entity, amount_sent_c
     
     Returns:
-            - Edges have 'weight' (total amount) and 'count' (number of transactions)
+        nx.DiGraph with edge attributes:
+            - 'weight': composite Oddball-inspired weight (used by PageRank)
+            - 'volume': raw sum of transaction amounts
+            - 'count':  number of transactions on the edge
+            - 'amount_std': standard deviation of transaction amounts
     """
     G = nx.DiGraph()
     
@@ -142,13 +165,34 @@ def build_daily_graph(window_df: pd.DataFrame) -> nx.DiGraph:
     if window_df.empty:
         return G
     
-    # Aggregate edges: group by (source, target) and compute weight/count
+    # Aggregate edges: group by (source, target) and compute volume, count, std
     edge_aggregation = window_df.groupby(
         ['source_entity', 'target_entity']
     ).agg(
-        weight=('amount_sent_c', 'sum'),
-        count=('amount_sent_c', 'count')
+        volume=('amount_sent_c', 'sum'),
+        count=('amount_sent_c', 'count'),
+        amount_std=('amount_sent_c', 'std'),
     ).reset_index()
+    
+    # std returns NaN for groups with a single observation; fill with 0
+    edge_aggregation['amount_std'] = edge_aggregation['amount_std'].fillna(0.0)
+    
+    # Compute composite weight
+    # mean amount per edge (avoid division by zero; count >= 1 guaranteed)
+    mean_amount = edge_aggregation['volume'] / edge_aggregation['count']
+    
+    # Coefficient of variation (std / mean); use epsilon to avoid 0/0
+    epsilon = 1e-9
+    cv = edge_aggregation['amount_std'] / (mean_amount + epsilon)
+    
+    # Composite weight: volume * log2(1+count) * (1 + 1/(1+CV))
+    #   - log2(1+count) rewards high frequency (smurfing amplifier)
+    #   - (1 + 1/(1+CV)) ranges from ~1 (high variance) to 2 (uniform amounts)
+    edge_aggregation['weight'] = (
+        edge_aggregation['volume']
+        * np.log2(1 + edge_aggregation['count'])
+        * (1 + 1.0 / (1.0 + cv))
+    )
     
     # Add edges to graph
     for _, row in edge_aggregation.iterrows():
@@ -156,7 +200,9 @@ def build_daily_graph(window_df: pd.DataFrame) -> nx.DiGraph:
             row['source_entity'],
             row['target_entity'],
             weight=row['weight'],
-            count=row['count']
+            volume=row['volume'],
+            count=row['count'],
+            amount_std=row['amount_std'],
         )
     
     return G
@@ -208,46 +254,134 @@ def compute_node_stats(window_df: pd.DataFrame) -> dict:
     return node_stats
 
 
+def _run_leiden_on_graph(G_undirected: nx.Graph) -> list[list]:
+    """
+    Run the Leiden algorithm on an undirected graph and return the raw
+    community partition as a list of node-lists.
+
+    This helper isolates the cdlib call so that fallback strategies can
+    retry on individual connected components when the full-graph call
+    fails.
+
+    Args:
+        G_undirected: An undirected NetworkX graph (no self-loops expected).
+
+    Returns:
+        A list of communities, where each community is a list of node ids.
+
+    Raises:
+        Exception: Propagates any error from cdlib / leidenalg so the
+                   caller can decide how to handle it.
+    """
+    # NOTE: cdlib's leiden() wrapper does not expose leidenalg's
+    # resolution_parameter; LEIDEN_RESOLUTION from config is reserved
+    # for a future direct leidenalg integration.
+    communities = algorithms.leiden(
+        G_undirected,
+        weights='weight',
+    )
+    return communities.communities
+
+
 def compute_leiden_features(G: nx.DiGraph) -> dict:
     """
-    Compute Leiden community detection features for each node.
-    
-    Uses the Leiden algorithm to detect communities in the graph.
-    Returns community membership and size for each node.
-    
+    Compute Leiden community detection features for every node in *G*.
+
+    Guarantees that **every** node in *G* receives a ``leiden_id``,
+    including nodes that belong to isolated (size-1) connected
+    components.  The function applies three layers of resilience:
+
+    1. Run Leiden on the full undirected projection of *G*.
+    2. If (1) fails, fall back to running Leiden on each connected
+       component independently.
+    3. Any nodes still unassigned after (1) or (2) — whether because
+       they were dropped during the igraph conversion, belong to
+       trivial components, or survived an internal error — are each
+       placed into their own singleton community.
+
+    Self-loops are removed before community detection because they
+    carry no information about inter-node community structure and can
+    cause numerical issues in leidenalg.
+
     Args:
-        G: A NetworkX DiGraph
-        
+        G: A directed NetworkX graph produced by ``build_daily_graph``.
+
     Returns:
-        Dictionary mapping entity_id to a dict with:
-            - 'leiden_id': (int) Community ID the node belongs to
-            - 'leiden_size': (int) Number of nodes in that community
+        Dictionary mapping **every** node in *G* to a dict with:
+            - ``'leiden_id'``  (int): Community ID the node belongs to.
+            - ``'leiden_size'`` (int): Number of nodes in that community.
     """
     if len(G) == 0:
         return {}
-    
+
+    all_nodes = set(G.nodes())
+
+    # --- 1. Prepare a clean undirected copy ---------------------------------
+    G_undirected = G.to_undirected()
+    G_undirected.remove_edges_from(nx.selfloop_edges(G_undirected))
+
+    # --- 2. Try Leiden on the full graph ------------------------------------
+    node_features: dict = {}
+    next_community_id = 0
+
     try:
-        # Run Leiden algorithm (cdlib handles NetworkX conversion)
-        # Convert to undirected for community detection
-        G_undirected = G.to_undirected()
-        communities = algorithms.leiden(G_undirected, weights='weight')
-        
-        # Build mapping from node to community features
-        node_features = {}
-        
-        for community_id, community_members in enumerate(communities.communities):
+        raw_communities = _run_leiden_on_graph(G_undirected)
+
+        for community_members in raw_communities:
             community_size = len(community_members)
             for node in community_members:
                 node_features[node] = {
-                    'leiden_id': community_id,
+                    'leiden_id': next_community_id,
                     'leiden_size': community_size,
                 }
-        
-        return node_features
-        
-    except Exception:
-        # Return empty dict if Leiden fails (e.g., graph too sparse)
-        return {}
+            next_community_id += 1
+
+    except Exception as exc:
+        warnings.warn(
+            f"Leiden failed on full graph ({len(G)} nodes): {exc}. "
+            "Falling back to per-component community detection.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+        # --- 3. Fallback: run Leiden per connected component ----------------
+        for component in nx.connected_components(G_undirected):
+            if len(component) < 2:
+                # Isolated nodes are handled in the cleanup step below
+                continue
+
+            subgraph = G_undirected.subgraph(component).copy()
+            try:
+                sub_communities = _run_leiden_on_graph(subgraph)
+                for community_members in sub_communities:
+                    community_size = len(community_members)
+                    for node in community_members:
+                        node_features[node] = {
+                            'leiden_id': next_community_id,
+                            'leiden_size': community_size,
+                        }
+                    next_community_id += 1
+            except Exception:
+                # Last resort: treat the whole component as one community
+                community_size = len(component)
+                for node in component:
+                    node_features[node] = {
+                        'leiden_id': next_community_id,
+                        'leiden_size': community_size,
+                    }
+                next_community_id += 1
+
+    # --- 4. Guarantee 100 % coverage ----------------------------------------
+    missing_nodes = all_nodes - set(node_features.keys())
+    if missing_nodes:
+        for node in missing_nodes:
+            node_features[node] = {
+                'leiden_id': next_community_id,
+                'leiden_size': 1,
+            }
+            next_community_id += 1
+
+    return node_features
 
 
 def rank_nodes_by_score(scores: dict, descending: bool = True) -> list:
