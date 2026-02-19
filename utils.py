@@ -31,13 +31,16 @@ def load_data() -> tuple[pd.DataFrame, set]:
     
     This function:
     1. Loads the three parquet files (normal, laundering, accounts)
-    2. Merges transactions and maps accounts to entities
-    3. Identifies all bad actors (entities involved in laundering)
+    2. Merges transactions and maps accounts to entities using relational merges
+       to handle 1:N joint account ownerships.
+    3. Enforces Conservation of Mass by fractionally distributing transaction
+       volumes across Cartesian-expanded edges.
+    4. Identifies all bad actors (entities involved in laundering).
     
     Returns:
         tuple containing:
             - all_transactions (pd.DataFrame): Merged transaction data with
-              source_entity and target_entity columns
+              source_entity and target_entity columns, and adjusted amounts.
             - bad_actors (set): Set of entity IDs involved in any laundering
               transaction (global ground truth labels)
     """
@@ -61,14 +64,29 @@ def load_data() -> tuple[pd.DataFrame, set]:
     # Convert timestamp to datetime
     all_transactions['timestamp'] = pd.to_datetime(all_transactions['timestamp'])
     
-    # Create account to entity mapping
-    account_to_entity = dict(accounts.set_index('Account Number')['Entity ID'])
+    # Calculate account ownership degree (number of entities per account)
+    owner_counts = accounts.groupby('Account Number')['Entity ID'].count().reset_index()
+    owner_counts.columns = ['Account Number', 'owner_count']
     
-    # Map accounts to entities using .loc to avoid type issues
-    all_transactions = all_transactions.copy()
-    all_transactions.loc[:, 'source_entity'] = all_transactions['from_account'].map(account_to_entity)
-    all_transactions.loc[:, 'target_entity'] = all_transactions['to_account'].map(account_to_entity)
+    # Merge owner counts into the account subset
+    acct_subset = accounts[['Account Number', 'Entity ID']].merge(owner_counts, on='Account Number')
     
+    # Map source entities and attach source owner counts
+    all_transactions = all_transactions.merge(
+        acct_subset, left_on='from_account', right_on='Account Number', how='left'
+    ).rename(columns={
+        'Entity ID': 'source_entity', 
+        'owner_count': 'src_owner_count'
+    }).drop(columns=['Account Number'])
+    
+    # Map target entities and attach target owner counts
+    all_transactions = all_transactions.merge(
+        acct_subset, left_on='to_account', right_on='Account Number', how='left'
+    ).rename(columns={
+        'Entity ID': 'target_entity', 
+        'owner_count': 'tgt_owner_count'
+    }).drop(columns=['Account Number']) 
+
     # Drop transactions with unmapped accounts
     initial_count = len(all_transactions)
     all_transactions = all_transactions.dropna(subset=['source_entity', 'target_entity'])
@@ -76,6 +94,12 @@ def load_data() -> tuple[pd.DataFrame, set]:
     
     if dropped_count > 0:
         print(f"Dropped {dropped_count:,} transactions with unmapped accounts")
+
+    # Enforce Conservation of Mass (Fractional Ownership)
+    # Distribute the transaction amount across all synthesized edges
+    divisor = all_transactions['src_owner_count'] * all_transactions['tgt_owner_count']
+    all_transactions['amount_sent_c'] = all_transactions['amount_sent_c'] / divisor
+    all_transactions['amount_received'] = all_transactions['amount_received'] / divisor
     
     # Identify bad actors (global ground truth for final evaluation only)
     # NOTE: For time-sliced evaluation without future leakage, use get_bad_actors_up_to_date()
@@ -84,7 +108,7 @@ def load_data() -> tuple[pd.DataFrame, set]:
         set(laundering_txns['target_entity'])
     )
     
-    print(f"Loaded {len(all_transactions):,} transactions")
+    print(f"Loaded {len(all_transactions):,} individual entity-to-entity edge records")
     print(f"Identified {len(bad_actors_global):,} bad actors globally (entities in laundering transactions)")
     
     return all_transactions, bad_actors_global
@@ -317,8 +341,16 @@ def compute_leiden_features(G: nx.DiGraph) -> dict:
     all_nodes = set(G.nodes())
 
     # --- 1. Prepare a clean undirected copy ---------------------------------
-    G_undirected = G.to_undirected()
+    # Manually aggregate weights to prevent arbitrary data loss on reciprocal edges
+    G_undirected = nx.Graph()
+    for u, v, data in G.edges(data=True):
+        if G_undirected.has_edge(u, v):
+            G_undirected[u][v]['weight'] += data.get('weight', 0.0)
+        else:
+            G_undirected.add_edge(u, v, weight=data.get('weight', 0.0))
+            
     G_undirected.remove_edges_from(nx.selfloop_edges(G_undirected))
+
 
     # --- 2. Try Leiden on the full graph ------------------------------------
     node_features: dict = {}

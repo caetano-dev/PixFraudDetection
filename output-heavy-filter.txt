@@ -131,3 +131,45 @@ Overall fraud rate: 2.12%
 Lift from rank anomaly detection: 2.74x
 
 Done!
+
+##########
+##########
+##########
+##########
+
+
+Loading data/HI_Small_ACH/1_filtered_normal_transactions.parquet...
+Total Transactions: 199,982
+Laundering Transactions: 0
+
+Building Directed Graph...
+
+--- GRAPH TOPOLOGY HEALTH ---
+Total Nodes: 92,007
+Number of Isolated Components: 19,824
+Nodes in Largest Component: 2,165 (2.35%)
+WARNING: Graph is highly fragmented. Centrality metrics will suffer.
+
+--- LAUNDERING CHAIN HEALTH ---
+Total Laundering Nodes: 0
+Pass-through (Healthy Chain): 0
+Dead Ends (Money goes in, nothing goes out): 0
+Sources (Money goes out, nothing comes in): 0
+Loading data/HI_Small_ACH/2_filtered_laundering_transactions.parquet...
+Total Transactions: 1,419
+Laundering Transactions: 1,419
+
+Building Directed Graph...
+
+--- GRAPH TOPOLOGY HEALTH ---
+Total Nodes: 2,201
+Number of Isolated Components: 834
+Nodes in Largest Component: 19 (0.86%)
+WARNING: Graph is highly fragmented. Centrality metrics will suffer.
+
+--- LAUNDERING CHAIN HEALTH ---
+Total Laundering Nodes: 2,201
+Pass-through (Healthy Chain): 151
+Dead Ends (Money goes in, nothing goes out): 983
+Sources (Money goes out, nothing comes in): 1,067
+CRITICAL: Your filtering broke the laundering chains. Most fraud nodes are dead ends.

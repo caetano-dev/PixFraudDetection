@@ -1,71 +1,94 @@
 import pandas as pd
 import networkx as nx
+from pathlib import Path
 
-def analyze_graph_health(transactions_file: str):
-    print(f"Loading {transactions_file}...")
-    df = pd.read_parquet(transactions_file)
+def analyze_combined_graph(data_dir: str = "data/HI_Small"):
+    data_path = Path(data_dir)
+    normal_file = data_path / "1_filtered_normal_transactions.parquet"
+    laundering_file = data_path / "2_filtered_laundering_transactions.parquet"
     
-    # 1. Basic Stats
-    total_tx = len(df)
-    laundering_tx = df['is_laundering'].sum()
-    print(f"Total Transactions: {total_tx:,}")
-    print(f"Laundering Transactions: {laundering_tx:,}")
+    print(f"Loading files from {data_dir}...")
     
-    # 2. Build the Directed Graph
-    print("\nBuilding Directed Graph...")
+    # 1. Load BOTH files
+    try:
+        df_normal = pd.read_parquet(normal_file)
+        df_laundering = pd.read_parquet(laundering_file)
+    except FileNotFoundError:
+        print("Error: Could not find the parquet files. Make sure you ran process_aml_data.py first.")
+        return
+
+    print(f"  - Normal Transactions: {len(df_normal):,}")
+    print(f"  - Laundering Transactions: {len(df_laundering):,}")
+    
+    # 2. Merge into ONE DataFrame
+    print("Merging datasets...")
+    df_combined = pd.concat([df_normal, df_laundering], ignore_index=True)
+    total_tx = len(df_combined)
+    print(f"  - Combined Total: {total_tx:,}")
+
+    # 3. Build the Unified Directed Graph
+    print("\nBuilding Unified Graph (this might take a moment)...")
+    # We use the combined DF so edges can connect Normal <-> Laundering
     G = nx.from_pandas_edgelist(
-        df, 
+        df_combined, 
         source='from_account', 
         target='to_account', 
         edge_attr='is_laundering',
         create_using=nx.DiGraph
     )
     
-    # 3. Component Fragmentation
+    # 4. Component Analysis (Global Topology)
     wcc = list(nx.weakly_connected_components(G))
     largest_wcc = max(wcc, key=len)
     percent_in_lcc = (len(largest_wcc) / len(G)) * 100
     
-    print("\n--- GRAPH TOPOLOGY HEALTH ---")
+    print("\n--- UNIFIED GRAPH HEALTH ---")
     print(f"Total Nodes: {len(G):,}")
-    print(f"Number of Isolated Components: {len(wcc):,}")
-    print(f"Nodes in Largest Component: {len(largest_wcc):,} ({percent_in_lcc:.2f}%)")
+    print(f"Isolated Components: {len(wcc):,}")
+    print(f"Largest Component Size: {len(largest_wcc):,} ({percent_in_lcc:.2f}%)")
     
-    if percent_in_lcc < 80:
-        print("WARNING: Graph is highly fragmented. Centrality metrics will suffer.")
-        
-    # 4. Broken Laundering Chains (Dead Ends)
-    print("\n--- LAUNDERING CHAIN HEALTH ---")
-    bad_nodes = set(df[df['is_laundering'] == 1]['from_account']).union(
-                set(df[df['is_laundering'] == 1]['to_account']))
+    if percent_in_lcc > 80:
+        print("SUCCESS: The graph is well-connected! Algorithms will work.")
+    else:
+        print("WARNING: Graph is still fragmented. Check your raw data.")
+
+    # 5. Laundering Chain Health (Re-evaluated on the Unified Graph)
+    print("\n--- LAUNDERING CHAIN HEALTH (Unified) ---")
+    
+    # Identify all nodes involved in ANY laundering transaction
+    laundering_nodes = set(df_laundering['from_account']).union(set(df_laundering['to_account']))
     
     dead_ends = 0
-    source_nodes = 0
+    sources = 0
     pass_through = 0
+    total_laundering_nodes = 0
     
-    for node in bad_nodes:
+    for node in laundering_nodes:
         if node not in G: continue
+        total_laundering_nodes += 1
         
-        in_laundering = sum(1 for _, _, d in G.in_edges(node, data=True) if d.get('is_laundering') == 1)
-        out_laundering = sum(1 for _, _, d in G.out_edges(node, data=True) if d.get('is_laundering') == 1)
+        # In the unified graph, does this node have ANY incoming or outgoing edges?
+        # (Even if they are 'normal' transactions, they provide flow for PageRank)
+        in_degree = G.in_degree(node)
+        out_degree = G.out_degree(node)
         
-        if in_laundering > 0 and out_laundering == 0:
-            dead_ends += 1
-        elif in_laundering == 0 and out_laundering > 0:
-            source_nodes += 1
-        elif in_laundering > 0 and out_laundering > 0:
+        if in_degree > 0 and out_degree > 0:
             pass_through += 1
+        elif in_degree > 0 and out_degree == 0:
+            dead_ends += 1
+        elif in_degree == 0 and out_degree > 0:
+            sources += 1
             
-    print(f"Total Laundering Nodes: {len(bad_nodes):,}")
-    print(f"Pass-through (Healthy Chain): {pass_through:,}")
-    print(f"Dead Ends (Money goes in, nothing goes out): {dead_ends:,}")
-    print(f"Sources (Money goes out, nothing comes in): {source_nodes:,}")
-    
-    if dead_ends > pass_through:
-        print("CRITICAL: Your filtering broke the laundering chains. Most fraud nodes are dead ends.")
+    print(f"Nodes involved in Laundering: {total_laundering_nodes:,}")
+    print(f"Pass-through (Healthy Flow): {pass_through:,}")
+    print(f"Dead Ends (Stuck Money): {dead_ends:,}")
+    print(f"Sources (Origin Points): {sources:,}")
+
+    # Interpretation
+    if pass_through > dead_ends:
+        print("\nCONCLUSION: Connectivity is GOOD. Money is flowing through these accounts.")
+    else:
+        print("\nCONCLUSION: Connectivity is BAD. Most laundering nodes are still isolated.")
 
 if __name__ == "__main__":
-    # Point this to the output of your clean_dataset.py script
-    analyze_graph_health("data/HI_Small/1_filtered_normal_transactions.parquet")
-    analyze_graph_health("data/HI_Small/2_filtered_laundering_transactions.parquet")
-#    analyze_graph_health("data/HI_Small/1_filtered_normal_transactions.parquet")
+    analyze_combined_graph()

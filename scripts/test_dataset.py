@@ -4,7 +4,7 @@ import pandas as pd
 
 def main():
     # Load data (Fix spelling if file on disk is correct)
-    df = pd.read_parquet('../data/2_filtered_laundering_transactions.parquet')
+    df = pd.read_parquet('../data/HI_Small/2_filtered_laundering_transactions.parquet')
     
     # Ensure datetime
     df['timestamp'] = pd.to_datetime(df['timestamp'])
