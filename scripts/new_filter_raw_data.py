@@ -17,7 +17,7 @@ CLEAN_HEADER = [
 ]
 
 # Strict cutoff dates to prevent "future leakage" where only fraud exists
-# Based on the AMLSim documentation provided
+# Based on the AMLSim documentation
 CUTOFF_CONFIG = {
     "HI_Small": "2022-09-10",
     "LI_Small": "2022-09-10",
@@ -29,7 +29,7 @@ CUTOFF_CONFIG = {
 
 def process_dataset(dataset_name: str, base_dir: str = "data"):
     """
-    Process raw AMLSim CSVs:
+    Process raw AMLworld CSVs:
     1. Load data without topology filtering (keep all types/currencies).
     2. Filter out 'post-simulation' dates where artifacts occur.
     """
@@ -74,11 +74,7 @@ def process_dataset(dataset_name: str, base_dir: str = "data"):
         dropped_count = initial_count - len(df)
         print(f"  - Dropped {dropped_count:,} post-simulation transactions (potential artifacts).")
     
-    # 5. NO TOPOLOGY FILTERING
-    # We keep Wire, Cash, Cheque, and all currencies to maintain graph connectivity
-    print(f"  - Final Count: {len(df):,} transactions. Keeping ALL types/currencies.")
 
-    # 6. Split & Save
     output_normal = data_path / "1_filtered_normal_transactions.parquet"
     output_laundering = data_path / "2_filtered_laundering_transactions.parquet"
 
@@ -88,7 +84,6 @@ def process_dataset(dataset_name: str, base_dir: str = "data"):
     print(f"  - Saving to {output_laundering}...")
     df[df['is_laundering'] == 1].to_parquet(output_laundering, index=False)
 
-    # 7. Process Accounts
     if raw_acct_file.exists():
         print(f"  - Processing accounts...")
         accts_df = pd.read_csv(raw_acct_file)
