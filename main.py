@@ -244,16 +244,20 @@ def main():
         
         # 7. Run algorithms and extract features
         if len(G) > 0:
-            # PageRank with error handling
+                # --- PAGERANK (VOLUME) ---
+            # Detects "Heavy Hitters" - large amounts of money moving
             try:
-                pagerank_scores = nx.pagerank(
-                    G, 
-                    weight='weight', 
-                    alpha=PAGERANK_ALPHA
-                )
+                pagerank_scores = nx.pagerank(G, weight='weight', alpha=PAGERANK_ALPHA)
             except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
                 pagerank_scores = {}
-            
+                
+            # --- PAGERANK (FREQUENCY / SMURFING) ---
+            # Detects "Smurfing" - frequent small transactions
+            try:
+                pagerank_count = nx.pagerank(G, weight='count', alpha=PAGERANK_ALPHA)
+            except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
+                pagerank_count = {}
+
             try:
                 hits_hubs, hits_auths = nx.hits(G, max_iter=HITS_MAX_ITER)
             except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
@@ -309,6 +313,7 @@ def main():
                     'date': current_date.date(),
                     'entity_id': node,
                     'pagerank': pagerank_scores.get(node, 0.0),
+                    'pagerank_count': pagerank_count.get(node, 0.0),
                     'hits_hub': hits_hubs.get(node, 0.0),
                     'hits_auth': hits_auths.get(node, 0.0),
                     'degree': G.degree(node),
@@ -363,7 +368,7 @@ def main():
                         all_daily_metrics.append(metric_record)
                     
             # Store current scores for next iteration's rank stability analysis
-            prev_pagerank_scores = pagerank_scores.copy()
+            prev_pagerank_scores = pagerank_scores
             prev_hits_hubs = hits_hubs.copy()
             prev_hits_auths = hits_auths.copy()
         
