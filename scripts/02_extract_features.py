@@ -9,18 +9,22 @@ the strategy objects and helper modules in ``src/``.
 Pipeline flow
 -------------
 1.  Load all transaction data once via :func:`src.data.loader.load_data`.
-2.  Declare a list of instantiated :class:`~src.features.base.FeatureExtractor`
-    strategy objects.
+2.  Declare a **named dict** of instantiated
+    :class:`~src.features.base.FeatureExtractor` strategy objects.  Keys are
+    short identifiers (e.g. ``"pr_vol_85"``) used later when pulling results
+    out of the per-window ``daily_metrics`` mapping.
 3.  Iterate over :class:`~src.data.window_generator.TemporalWindowGenerator`
     to receive ``(current_date, window_df)`` tuples — one per non-empty day.
 4.  Build the directed transaction graph with
     :func:`src.graph.builder.build_daily_graph`.
-5.  Run each extractor strategy by calling ``.extract(G)``.
+5.  Run each extractor strategy by calling ``.extract(G)``, storing results
+    keyed by the extractor's registry name.
 6.  If rank-stability is enabled, run
     :class:`~src.features.stability.RankStabilityTracker` against the
-    current PageRank volume scores.
+    ``"pr_vol_85"`` PageRank volume scores.
 7.  If evaluation is enabled, compute daily ranking metrics.
-8.  Compile a flat feature record per node and append to a list.
+8.  Compile a flat feature record per node — including the derived
+    ``flow_ratio`` metric — and append to a list.
 9.  Save all feature records to a Parquet file.
 10. Save evaluation metrics to a second Parquet file (when enabled).
 11. Print summary statistics and the Leiden community analysis.
@@ -64,7 +68,6 @@ from src.config import (
     EVALUATION_K_VALUES,
     OUTPUT_FEATURES_FILE,
     OUTPUT_METRICS_FILE,
-    PAGERANK_ALPHA,
     RANK_ANOMALY_PERCENTILE,
     RANK_STABILITY_TOP_K,
     RUN_EVALUATION,
@@ -75,6 +78,7 @@ from src.config import (
 )
 from src.data.loader import get_bad_actors_up_to_date, load_data
 from src.data.window_generator import TemporalWindowGenerator
+from src.features.base import FeatureExtractor
 from src.features.centrality import (
     HITSExtractor,
     PageRankFrequencyExtractor,
@@ -269,18 +273,21 @@ def main() -> None:
     # ------------------------------------------------------------------ #
     # 2. Declare extractor strategies                                      #
     #                                                                      #
-    # Each entry in `extractors` is a concrete FeatureExtractor whose     #
-    # .extract(G) method returns {node_id: {feature_name: value}}.        #
-    # To disable an algorithm, simply remove it from this list.           #
+    # Each key is a short identifier used to retrieve per-node results    #
+    # from `daily_metrics` later in the loop.  To disable an algorithm,  #
+    # remove its entry from the dict.  To add a variant, insert a new    #
+    # key/value pair — no loop logic needs to change.                     #
     # ------------------------------------------------------------------ #
-    extractors = [
-        PageRankVolumeExtractor(alpha=PAGERANK_ALPHA),
-        PageRankFrequencyExtractor(alpha=PAGERANK_ALPHA),
-        HITSExtractor(),
-    ]
+    extractors: dict[str, FeatureExtractor] = {
+        "pr_vol_85": PageRankVolumeExtractor(alpha=0.85),
+        "pr_vol_75": PageRankVolumeExtractor(alpha=0.75),
+        "pr_count": PageRankFrequencyExtractor(alpha=0.85),
+        "hits": HITSExtractor(max_iter=100),
+    }
 
     if RUN_LEIDEN:
-        extractors.append(LeidenCommunityExtractor())
+        extractors["leiden_macro"] = LeidenCommunityExtractor(resolution=1.0)
+        extractors["leiden_micro"] = LeidenCommunityExtractor(resolution=2.0)
 
     # Stateful rank-stability tracker (operates on PageRank volume scores).
     # Instantiated unconditionally; only queried when RUN_RANK_STABILITY is True.
@@ -330,45 +337,43 @@ def main() -> None:
 
             # ---------------------------------------------------------- #
             # 4c. Run all registered feature extractor strategies         #
+            #                                                             #
+            # daily_metrics: {extractor_key: {node_id: {feat: val}}}     #
+            # Each extractor produces its own namespaced sub-dict so that #
+            # two variants of the same algorithm never overwrite each     #
+            # other's output.                                             #
             # ---------------------------------------------------------- #
-            # merged_features: {node_id: {feature_name: value, ...}}
-            merged_features: dict[object, dict] = {}
+            daily_metrics: dict[str, dict] = {}
 
-            for extractor in extractors:
-                result = extractor.extract(G)
-                # Merge each node's sub-dict into the running accumulator.
-                for node, feats in result.items():
-                    if node not in merged_features:
-                        merged_features[node] = {}
-                    merged_features[node].update(feats)
+            for key, extractor in extractors.items():
+                daily_metrics[key] = extractor.extract(G)
 
             # ---------------------------------------------------------- #
             # 4d. Rank stability analysis                                 #
             #                                                             #
-            # The tracker operates on a flat {node: score} dict, so we   #
-            # extract that from the PageRankVolumeExtractor's output      #
-            # (keyed as "pagerank" in merged_features).                   #
+            # Feeds on the pr_vol_85 scores: the primary PageRank-volume  #
+            # variant used as the rank-stability reference signal.        #
             # ---------------------------------------------------------- #
-            pr_rank_changes: dict = {}
-            pr_anomalies: set = set()
+            rank_changes: dict = {}
+            anomalies: set = set()
 
             if RUN_RANK_STABILITY:
-                # Build flat {node: pagerank_score} from merged results.
+                # Build flat {node: score} from the pr_vol_85 extractor.
                 flat_pr_scores: dict = {
                     node: feats.get("pagerank", 0.0)
-                    for node, feats in merged_features.items()
+                    for node, feats in daily_metrics.get("pr_vol_85", {}).items()
                 }
 
                 stability_result = stability_tracker.compute(flat_pr_scores)
 
                 if stability_result is not None:
-                    pr_rank_changes = stability_result["rank_changes"]
-                    pr_anomalies = stability_result["anomalies"]
+                    rank_changes = stability_result["rank_changes"]
+                    anomalies = stability_result["anomalies"]
 
                     all_rank_stability.append(
                         {
                             "date": current_date.date(),
-                            "algorithm": "pagerank",
+                            "algorithm": "pr_vol_85",
                             "stability_score": stability_result["stability_score"],
                             "num_new_entrants": stability_result["num_new_entrants"],
                             "num_dropouts": stability_result["num_dropouts"],
@@ -379,62 +384,100 @@ def main() -> None:
             # ---------------------------------------------------------- #
             # 4e. Time-aware fraud labels (no future leakage)             #
             # ---------------------------------------------------------- #
-            bad_actors_current = get_bad_actors_up_to_date(
+            bad_actors_up_to_date = get_bad_actors_up_to_date(
                 all_transactions, current_date
             )
 
             # ---------------------------------------------------------- #
             # 4f. Compile one flat feature record per node                #
+            #                                                             #
+            # flow_ratio = vol_sent / (vol_recv + 1)                     #
+            # The +1 Laplace smoothing prevents division-by-zero for      #
+            # pure-sender nodes (vol_recv == 0) while keeping the ratio  #
+            # meaningful: a value >> 1 flags net senders, a value << 1   #
+            # flags net receivers.                                        #
             # ---------------------------------------------------------- #
             for node in G.nodes():
-                node_feats = merged_features.get(node, {})
-                stats = node_stats.get(node, {})
+                node_stats_entry = node_stats.get(node, {})
+                vol_s = node_stats_entry.get("vol_sent", 0.0)
+                vol_r = node_stats_entry.get("vol_recv", 0.0)
 
                 record: dict = {
                     "date": current_date.date(),
                     "entity_id": node,
-                    # --- Centrality features ---
-                    "pagerank": node_feats.get("pagerank", 0.0),
-                    "pagerank_count": node_feats.get("pagerank_count", 0.0),
-                    "hits_hub": node_feats.get("hits_hub", 0.0),
-                    "hits_auth": node_feats.get("hits_auth", 0.0),
+                    # --- PageRank variants ---
+                    "pagerank_vol_85": daily_metrics.get("pr_vol_85", {})
+                    .get(node, {})
+                    .get("pagerank", 0.0),
+                    "pagerank_vol_75": daily_metrics.get("pr_vol_75", {})
+                    .get(node, {})
+                    .get("pagerank", 0.0),
+                    "pagerank_count": daily_metrics.get("pr_count", {})
+                    .get(node, {})
+                    .get("pagerank_count", 0.0),
+                    # --- HITS ---
+                    "hits_hub": daily_metrics.get("hits", {})
+                    .get(node, {})
+                    .get("hits_hub", 0.0),
+                    "hits_auth": daily_metrics.get("hits", {})
+                    .get(node, {})
+                    .get("hits_auth", 0.0),
+                    # --- Leiden macro (resolution=1.0) ---
+                    "leiden_macro_id": daily_metrics.get("leiden_macro", {})
+                    .get(node, {})
+                    .get("leiden_id", -1),
+                    "leiden_macro_size": daily_metrics.get("leiden_macro", {})
+                    .get(node, {})
+                    .get("leiden_size", 0),
+                    # --- Leiden micro (resolution=2.0) ---
+                    "leiden_micro_id": daily_metrics.get("leiden_micro", {})
+                    .get(node, {})
+                    .get("leiden_id", -1),
+                    "leiden_micro_size": daily_metrics.get("leiden_micro", {})
+                    .get(node, {})
+                    .get("leiden_size", 0),
                     # --- Degree features ---
-                    "degree": G.degree(node),
-                    "in_degree": G.in_degree(node),
-                    "out_degree": G.out_degree(node),
-                    # --- Community features ---
-                    "leiden_id": node_feats.get("leiden_id", -1),
-                    "leiden_size": node_feats.get("leiden_size", 0),
+                    "degree": G.degree(node) if node in G else 0,
+                    "in_degree": G.in_degree(node) if node in G else 0,
+                    "out_degree": G.out_degree(node) if node in G else 0,
                     # --- Transactional stats ---
-                    "vol_sent": stats.get("vol_sent", 0.0),
-                    "vol_recv": stats.get("vol_recv", 0.0),
-                    "tx_count": stats.get("tx_count", 0),
-                    # --- Ground truth label (time-aware) ---
-                    "is_fraud": 1 if node in bad_actors_current else 0,
+                    "vol_sent": vol_s,
+                    "vol_recv": vol_r,
+                    "tx_count": node_stats_entry.get("tx_count", 0),
+                    # --- Derived metric ---
+                    # Laplace-smoothed flow ratio: >> 1 → net sender, << 1 → net receiver
+                    "flow_ratio": vol_s / (vol_r + 1.0),
                     # --- Rank stability features ---
-                    "pagerank_rank_change": (
-                        pr_rank_changes.get(node, 0) if RUN_RANK_STABILITY else 0
-                    ),
-                    "is_rank_anomaly": (
-                        (1 if node in pr_anomalies else 0) if RUN_RANK_STABILITY else 0
-                    ),
+                    "pagerank_rank_change": rank_changes.get(node, 0),
+                    "is_rank_anomaly": 1 if node in anomalies else 0,
+                    # --- Ground truth label (time-aware) ---
+                    "is_fraud": 1 if node in bad_actors_up_to_date else 0,
                 }
                 all_features.append(record)
 
             # ---------------------------------------------------------- #
             # 4g. Daily evaluation metrics (optional)                     #
+            #                                                             #
+            # Uses pr_vol_85 as the primary PageRank signal, matching the #
+            # rank-stability reference above.                             #
             # ---------------------------------------------------------- #
             if RUN_EVALUATION:
                 pagerank_scores: dict = {
-                    node: merged_features.get(node, {}).get("pagerank", 0.0)
+                    node: daily_metrics.get("pr_vol_85", {})
+                    .get(node, {})
+                    .get("pagerank", 0.0)
                     for node in G.nodes()
                 }
                 hits_hubs: dict = {
-                    node: merged_features.get(node, {}).get("hits_hub", 0.0)
+                    node: daily_metrics.get("hits", {})
+                    .get(node, {})
+                    .get("hits_hub", 0.0)
                     for node in G.nodes()
                 }
                 hits_auths: dict = {
-                    node: merged_features.get(node, {}).get("hits_auth", 0.0)
+                    node: daily_metrics.get("hits", {})
+                    .get(node, {})
+                    .get("hits_auth", 0.0)
                     for node in G.nodes()
                 }
 
@@ -442,22 +485,19 @@ def main() -> None:
                     valid_k_values = [k for k in k_values if k <= len(G)]
 
                     if valid_k_values:
-                        # Import here to avoid a circular dependency at the
-                        # module level; these evaluation helpers are kept in
-                        # the legacy utils for now and called directly.
                         from src.features._evaluation import (
                             compute_daily_evaluation_metrics,
                         )
 
-                        daily_metrics = compute_daily_evaluation_metrics(
+                        eval_metrics = compute_daily_evaluation_metrics(
                             pagerank_scores=pagerank_scores,
                             hits_hubs=hits_hubs,
                             hits_auths=hits_auths,
-                            bad_actors=bad_actors_current,
+                            bad_actors=bad_actors_up_to_date,
                             k_values=valid_k_values,
                         )
 
-                        for algo_name, algo_metrics in daily_metrics.items():
+                        for algo_name, algo_metrics in eval_metrics.items():
                             metric_record: dict = {
                                 "date": current_date.date(),
                                 "algorithm": algo_name,
@@ -511,7 +551,7 @@ def main() -> None:
         stability_df = pd.DataFrame(all_rank_stability)
         avg_stability = stability_df["stability_score"].mean()
         total_anomalies = stability_df["num_anomalies"].sum()
-        print("\nRank Stability Analysis:")
+        print("\nRank Stability Analysis (reference: pr_vol_85):")
         print(f"  Average stability score:       {avg_stability:.4f}")
         print(f"  Total rank anomalies detected: {total_anomalies:,}")
         print(
@@ -536,7 +576,7 @@ def main() -> None:
         print("Aggregate Evaluation Summary (Mean Across All Days)")
         print("=" * 60)
 
-        for algo in ["pagerank", "hits_hub", "hits_auth"]:
+        for algo in ["pr_vol_85", "hits_hub", "hits_auth"]:
             algo_df = metrics_df[metrics_df["algorithm"] == algo]
             if algo_df.empty:
                 continue
@@ -570,30 +610,43 @@ def main() -> None:
     # 7. Post-pipeline analyses                                            #
     # ------------------------------------------------------------------ #
     if RUN_LEIDEN:
-        _analyze_leiden_effectiveness(results_df)
+        # Pass the macro Leiden columns to the effectiveness analyser.
+        # Rename to the column names _analyze_leiden_effectiveness expects.
+        leiden_analysis_df = results_df.rename(
+            columns={
+                "leiden_macro_id": "leiden_id",
+                "leiden_macro_size": "leiden_size",
+            }
+        )
+        _analyze_leiden_effectiveness(leiden_analysis_df)
 
     print("\n" + "=" * 60)
     print("Feature Statistics Summary")
     print("=" * 60)
-    print(
-        results_df[
-            [
-                "pagerank",
-                "hits_hub",
-                "hits_auth",
-                "degree",
-                "leiden_size",
-                "vol_sent",
-                "vol_recv",
-                "tx_count",
-                "pagerank_rank_change",
-            ]
-        ].describe()
-    )
+    # Select only the columns that are always present regardless of whether
+    # Leiden was enabled, so describe() never raises a KeyError.
+    summary_cols = [
+        "pagerank_vol_85",
+        "pagerank_vol_75",
+        "pagerank_count",
+        "hits_hub",
+        "hits_auth",
+        "degree",
+        "vol_sent",
+        "vol_recv",
+        "tx_count",
+        "flow_ratio",
+        "pagerank_rank_change",
+    ]
+    # Append Leiden columns only when they were computed.
+    if RUN_LEIDEN:
+        summary_cols += ["leiden_macro_size", "leiden_micro_size"]
+
+    print(results_df[[c for c in summary_cols if c in results_df.columns]].describe())
 
     if RUN_RANK_STABILITY and results_df["is_rank_anomaly"].sum() > 0:
         print("\n" + "=" * 60)
-        print("Rank Anomaly Analysis")
+        print("Rank Anomaly Analysis (reference: pr_vol_85)")
         print("=" * 60)
         anomaly_df = results_df[results_df["is_rank_anomaly"] == 1]
         fraud_in_anomalies = anomaly_df["is_fraud"].sum()

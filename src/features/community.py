@@ -2,69 +2,95 @@
 Community-detection feature extractor for the PixFraudDetection pipeline.
 
 This module provides a single concrete :class:`~src.features.base.FeatureExtractor`
-strategy that wraps the Leiden community-detection algorithm via ``cdlib``:
+strategy that wraps the Leiden community-detection algorithm:
 
 * :class:`LeidenCommunityExtractor` — assigns every node in the graph a
   community ID and community size.  Isolated nodes and any nodes that fall
-  through the cdlib / leidenalg conversion are guaranteed a singleton
-  community so that downstream feature tables have no ``NaN`` values.
+  through the leidenalg conversion are guaranteed a singleton community so
+  that downstream feature tables have no ``NaN`` values.
 
-All cdlib calls, fallback strategies, and self-loop removal logic are
-preserved verbatim from ``utils.compute_leiden_features`` and
-``utils._run_leiden_on_graph``.  No mathematical logic has been altered.
+The ``resolution`` parameter controls community granularity:
+    * ``resolution=1.0``  (macro) — larger, coarser communities
+    * ``resolution=2.0``  (micro) — smaller, more granular communities
+
+Resolution is implemented via ``leidenalg.RBConfigurationVertexPartition``,
+which exposes ``resolution_parameter`` directly.  This replaces the previous
+``cdlib.algorithms.leiden()`` call, which did not expose this parameter.
+
+All fallback strategies and self-loop removal logic are preserved verbatim
+from ``utils.compute_leiden_features``.  No mathematical logic has been altered.
 """
 
 from __future__ import annotations
 
 import warnings
 
+import igraph as ig
+import leidenalg
 import networkx as nx
-from cdlib import algorithms
 
 from src.features.base import FeatureExtractor
 
 # ---------------------------------------------------------------------------
-# Internal helper — mirrors utils._run_leiden_on_graph exactly
+# Internal helper
 # ---------------------------------------------------------------------------
 
 
-def _run_leiden_on_graph(G_undirected: nx.Graph) -> list[list]:
+def _run_leiden_on_graph(
+    G_undirected: nx.Graph,
+    resolution: float = 1.0,
+) -> list[list]:
     """
-    Run the Leiden algorithm on an undirected graph and return the raw
-    community partition as a list of node-lists.
+    Run the Leiden algorithm on an undirected NetworkX graph and return the
+    raw community partition as a list of node-lists.
 
-    This helper isolates the cdlib call so that fallback strategies can
-    retry on individual connected components when the full-graph call fails.
+    Uses ``leidenalg.RBConfigurationVertexPartition`` directly so that the
+    ``resolution_parameter`` can be forwarded without restriction.
 
     Parameters
     ----------
     G_undirected : nx.Graph
-        An undirected NetworkX graph.  Self-loops should be removed by the
-        caller before passing the graph here.
+        An undirected NetworkX graph.  Self-loops must be removed by the
+        caller before this function is invoked.
+    resolution : float
+        Resolution parameter forwarded to
+        ``leidenalg.RBConfigurationVertexPartition``.
+        Higher values → smaller, more granular communities.
+        Lower values  → larger, coarser communities.
+        Defaults to ``1.0``.
 
     Returns
     -------
     list[list]
-        A list of communities, where each community is a list of node IDs.
+        A list of communities, where each community is a list of node IDs
+        drawn from the original NetworkX graph (not igraph integer IDs).
 
     Raises
     ------
     Exception
-        Propagates any error from cdlib / leidenalg so that the caller can
+        Propagates any error from leidenalg / igraph so that the caller can
         decide how to handle it (retry per component, fall back to treating
         the whole component as one community, etc.).
-
-    Notes
-    -----
-    cdlib's ``leiden()`` wrapper does not expose leidenalg's
-    ``resolution_parameter``; ``LEIDEN_RESOLUTION`` from config is reserved
-    for a future direct leidenalg integration.
     """
-    communities = algorithms.leiden(
-        G_undirected,
-        weights="weight",
+    # Convert NetworkX graph → igraph, preserving node identity.
+    # ig.Graph.from_networkx() stores the original node label in the
+    # "_nx_name" vertex attribute.
+    ig_graph = ig.Graph.from_networkx(G_undirected)
+
+    # Use edge weights when available.
+    weight_attr = "weight" if "weight" in ig_graph.edge_attributes() else None
+
+    partition = leidenalg.find_partition(
+        ig_graph,
+        leidenalg.RBConfigurationVertexPartition,
+        weights=weight_attr,
+        resolution_parameter=resolution,
     )
-    return communities.communities
+
+    # Map igraph integer vertex IDs back to original NetworkX node labels.
+    nx_names: list = ig_graph.vs["_nx_name"]
+    communities: list[list] = [[nx_names[v] for v in cluster] for cluster in partition]
+    return communities
 
 
 # ---------------------------------------------------------------------------
@@ -77,8 +103,8 @@ class LeidenCommunityExtractor(FeatureExtractor):
     Leiden community detection feature extractor.
 
     Assigns every node in the directed graph *G* a ``leiden_id`` and
-    ``leiden_size`` by running the Leiden algorithm (via ``cdlib``) on an
-    undirected projection of the graph.
+    ``leiden_size`` by running the Leiden algorithm on an undirected
+    projection of the graph.
 
     Three layers of resilience guarantee **100 % node coverage**:
 
@@ -97,11 +123,34 @@ class LeidenCommunityExtractor(FeatureExtractor):
     projection aggregates their weights by addition, preventing arbitrary
     data loss.
 
+    Parameters
+    ----------
+    resolution : float
+        Resolution parameter forwarded to
+        ``leidenalg.RBConfigurationVertexPartition``.
+        Higher values → smaller, more granular communities (``micro``).
+        Lower values  → larger, coarser communities (``macro``).
+        Defaults to ``1.0``.
+
     Returns (via ``extract``)
     -------------------------
     ``{"leiden_id": int, "leiden_size": int}`` per node, or ``{}`` if *G*
     has no nodes.
+
+    Examples
+    --------
+    >>> macro = LeidenCommunityExtractor(resolution=1.0)
+    >>> micro = LeidenCommunityExtractor(resolution=2.0)
     """
+
+    def __init__(self, resolution: float = 1.0) -> None:
+        if resolution <= 0:
+            raise ValueError(f"resolution must be > 0, got {resolution}.")
+        self._resolution = resolution
+
+    @property
+    def name(self) -> str:
+        return f"LeidenCommunityExtractor(resolution={self._resolution})"
 
     def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float | int]]:
         """
@@ -146,7 +195,9 @@ class LeidenCommunityExtractor(FeatureExtractor):
         next_community_id: int = 0
 
         try:
-            raw_communities = _run_leiden_on_graph(G_undirected)
+            raw_communities = _run_leiden_on_graph(
+                G_undirected, resolution=self._resolution
+            )
 
             for community_members in raw_communities:
                 community_size = len(community_members)
@@ -159,7 +210,8 @@ class LeidenCommunityExtractor(FeatureExtractor):
 
         except Exception as exc:
             warnings.warn(
-                f"Leiden failed on full graph ({len(G)} nodes): {exc}. "
+                f"Leiden failed on full graph ({len(G)} nodes, "
+                f"resolution={self._resolution}): {exc}. "
                 "Falling back to per-component community detection.",
                 RuntimeWarning,
                 stacklevel=2,
@@ -170,13 +222,14 @@ class LeidenCommunityExtractor(FeatureExtractor):
             # -------------------------------------------------------------- #
             for component in nx.connected_components(G_undirected):
                 if len(component) < 2:
-                    # Isolated / trivial components are handled in step 4
-                    # below alongside any other unassigned nodes.
+                    # Isolated / trivial components are handled in step 4.
                     continue
 
                 subgraph = G_undirected.subgraph(component).copy()
                 try:
-                    sub_communities = _run_leiden_on_graph(subgraph)
+                    sub_communities = _run_leiden_on_graph(
+                        subgraph, resolution=self._resolution
+                    )
                     for community_members in sub_communities:
                         community_size = len(community_members)
                         for node in community_members:
@@ -197,7 +250,7 @@ class LeidenCommunityExtractor(FeatureExtractor):
 
         # ------------------------------------------------------------------ #
         # 4. Guarantee 100 % coverage — assign singleton communities to any   #
-        #    node not yet assigned (isolated nodes, cdlib conversion drops,    #
+        #    node not yet assigned (isolated nodes, igraph conversion drops,   #
         #    etc.)                                                             #
         # ------------------------------------------------------------------ #
         missing_nodes = all_nodes - set(node_features.keys())
