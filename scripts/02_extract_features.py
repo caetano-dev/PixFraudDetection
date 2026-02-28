@@ -51,6 +51,7 @@ from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
+from src.config import DATA_PATH # Make sure this is imported at the top
 
 # ---------------------------------------------------------------------------
 # Path bootstrap — make ``src`` importable when the script is run directly
@@ -559,9 +560,9 @@ def main() -> None:
             f"{results_df['is_rank_anomaly'].sum():,}"
         )
 
-    output_path = _PROJECT_ROOT / OUTPUT_FEATURES_FILE
-    print(f"\nSaving features to {output_path}...")
-    results_df.to_parquet(output_path, index=False)
+    features_out = DATA_PATH / OUTPUT_FEATURES_FILE
+    print(f"Saving features to {features_out}...")
+    results_df.to_parquet(features_out, index=False)
 
     # ------------------------------------------------------------------ #
     # 6. Save and summarize evaluation metrics                             #

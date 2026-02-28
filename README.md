@@ -15,8 +15,14 @@ source venv/bin/activate  # On Unix/macOS
 pip install -r requirements.txt
 ```
 
-Filter raw files with filter_raw_data.py 
+## Data Preparation
 
 Put the HI_Large.csv and LI_Small.csv files in the `data/HI_Large` and `data/HI_Small` directories.
 
+## Running the Pipeline
 
+```
+python3 scripts/01_filter_raw_data.py
+python3 scripts/02_extract_features.py
+python3 scripts/01_train_mode.py
+```

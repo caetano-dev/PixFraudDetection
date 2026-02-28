@@ -12,3 +12,5 @@ pyyaml
 matplotlib
 tenacity==8.5.0
 toolz==0.12.1
+xgboost
+shap
