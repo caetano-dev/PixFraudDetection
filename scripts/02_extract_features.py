@@ -577,7 +577,7 @@ def main() -> None:
         print("Aggregate Evaluation Summary (Mean Across All Days)")
         print("=" * 60)
 
-        for algo in ["pr_vol_85", "hits_hub", "hits_auth"]:
+        for algo in ["pagerank", "hits_hub", "hits_auth"]:
             algo_df = metrics_df[metrics_df["algorithm"] == algo]
             if algo_df.empty:
                 continue

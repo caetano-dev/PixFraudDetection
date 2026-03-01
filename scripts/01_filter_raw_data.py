@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 import argparse
 from pathlib import Path
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # Config for column mapping
 RAW_HEADER = [
@@ -29,61 +31,85 @@ CUTOFF_CONFIG = {
 
 def process_dataset(dataset_name: str, base_dir: str = "data"):
     """
-    Process raw AMLworld CSVs:
-    1. Load data without topology filtering (keep all types/currencies).
-    2. Filter out 'post-simulation' dates where artifacts occur.
+    Process raw AMLworld CSVs via memory-safe disk streaming:
+    1. Read data in chunks of 1 million rows to prevent OOM errors.
+    2. Enforce explicit datetime formatting for extreme parsing speed.
+    3. Filter out 'post-simulation' dates where artifacts occur.
+    4. Stream directly to Parquet files on disk.
     """
     data_path = Path(base_dir) / dataset_name
     raw_tx_file = data_path / "transactions.csv"
     raw_acct_file = data_path / "accounts.csv"
-    
-    print(f"Processing {dataset_name}...")
-    
-    # 1. Determine Cutoff Date
-    if dataset_name in CUTOFF_CONFIG:
-        cutoff_date = pd.Timestamp(CUTOFF_CONFIG[dataset_name]) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
-        # Sets cutoff to 2022-09-10 23:59:59
-        print(f"  - Cutoff Date Enforcement: Keeping transactions <= {cutoff_date}")
-    else:
-        print(f"  - WARNING: No cutoff date found for '{dataset_name}'. Using full dataset (Risk of data leakage!).")
-        cutoff_date = None
 
     if not raw_tx_file.exists():
-        raise FileNotFoundError(f"Could not find {raw_tx_file}")
+        print(f"Error: {raw_tx_file} not found.")
+        return
 
-    # 2. Load Transactions
-    # Check header length to handle duplicate 'Account' columns
-    df = pd.read_csv(raw_tx_file)
-    if len(df.columns) == len(CLEAN_HEADER):
-        df.columns = CLEAN_HEADER
-    else:
-        print("  - Warning: Column count mismatch. Attempting to match by position...")
-        df = df.iloc[:, :11]
-        df.columns = CLEAN_HEADER
-
-    # 3. DateTime Conversion
-    print("  - Converting timestamps...")
-    df['timestamp'] = pd.to_datetime(df['timestamp'])
-    
-    initial_count = len(df)
-    
-    # 4. CRITICAL: Date Filtering
-    # Remove transactions that happen after the simulation window (artifacts)
-    if cutoff_date:
-        df = df[df['timestamp'] <= cutoff_date]
-        dropped_count = initial_count - len(df)
-        print(f"  - Dropped {dropped_count:,} post-simulation transactions (potential artifacts).")
-    
+    cutoff_date_str = CUTOFF_CONFIG.get(dataset_name)
+    cutoff_date = pd.to_datetime(cutoff_date_str) if cutoff_date_str else None
 
     output_normal = data_path / "1_filtered_normal_transactions.parquet"
     output_laundering = data_path / "2_filtered_laundering_transactions.parquet"
 
-    print(f"  - Saving to {output_normal}...")
-    df[df['is_laundering'] == 0].to_parquet(output_normal, index=False)
-    
-    print(f"  - Saving to {output_laundering}...")
-    df[df['is_laundering'] == 1].to_parquet(output_laundering, index=False)
+    print(f"Processing {dataset_name} in chunks to prevent OOM errors...")
 
+    # Initialize PyArrow writers for disk streaming
+    normal_writer = None
+    laundering_writer = None
+    
+    total_rows = 0
+    dropped_count = 0
+
+    # 1. THE CHUNKSIZE FIX: Read 1M rows into memory at a time
+    chunk_iter = pd.read_csv(raw_tx_file, chunksize=1_000_000, low_memory=False)
+
+    for i, chunk in enumerate(chunk_iter):
+        initial_chunk_size = len(chunk)
+        total_rows += initial_chunk_size
+
+        # Clean headers
+        chunk = chunk.iloc[:, :11]
+        chunk.columns = CLEAN_HEADER
+
+        # 2. THE DATETIME FIX: Explicit format avoids row-by-row inference
+        # ISO8601 safely covers standard AMLSim output formats (e.g., '2022-09-01T00:00:00Z')
+        chunk['timestamp'] = pd.to_datetime(chunk['timestamp'], format='ISO8601')
+
+        # 3. Date Filtering
+        if cutoff_date:
+            chunk = chunk[chunk['timestamp'] <= cutoff_date]
+            dropped_count += (initial_chunk_size - len(chunk))
+
+        # Split normal and laundering
+        normal_chunk = chunk[chunk['is_laundering'] == 0]
+        laundering_chunk = chunk[chunk['is_laundering'] == 1]
+
+        # 4. Stream directly to Parquet on disk (Memory clears after this step)
+        if not normal_chunk.empty:
+            table_n = pa.Table.from_pandas(normal_chunk)
+            if normal_writer is None:
+                normal_writer = pq.ParquetWriter(output_normal, table_n.schema)
+            normal_writer.write_table(table_n)
+
+        if not laundering_chunk.empty:
+            table_l = pa.Table.from_pandas(laundering_chunk)
+            if laundering_writer is None:
+                laundering_writer = pq.ParquetWriter(output_laundering, table_l.schema)
+            laundering_writer.write_table(table_l)
+            
+        print(f"  - Processed chunk {i+1} ({(i+1)*1_000_000:,} rows read so far)")
+
+    # Close the disk streams
+    if normal_writer: normal_writer.close()
+    if laundering_writer: laundering_writer.close()
+
+    if cutoff_date:
+        print(f"  - Dropped {dropped_count:,} post-simulation transactions (artifacts).")
+    
+    print(f"  - Saved to {output_normal}")
+    print(f"  - Saved to {output_laundering}")
+
+    # Accounts file is small enough (usually < 2 million rows) to process safely in memory
     if raw_acct_file.exists():
         print(f"  - Processing accounts...")
         accts_df = pd.read_csv(raw_acct_file)
@@ -94,10 +120,7 @@ def process_dataset(dataset_name: str, base_dir: str = "data"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=str, default="HI_Small", 
-                        help="Name of the folder (e.g., HI_Small, HI_Large)")
-    parser.add_argument("--dir", type=str, default="data", 
-                        help="Base data directory")
-    
+    parser.add_argument("--dataset", type=str, default="HI_Small", help="Dataset folder name")
     args = parser.parse_args()
-    process_dataset(args.dataset, args.dir)
+    
+    process_dataset(args.dataset)
