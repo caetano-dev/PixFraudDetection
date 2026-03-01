@@ -7,7 +7,7 @@ data/
 etc/
 share/
 config.yaml
-data/
+!src/data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -17,12 +17,12 @@ pip install -r requirements.txt
 
 ## Data Preparation
 
-Put the HI_Large.csv and LI_Small.csv files in the `data/HI_Large` and `data/HI_Small` directories.
+Put the source AMLworld csv and text files in their `data` directories. Rename them to transactions.csv and accounts.csv as needed.
 
 ## Running the Pipeline
 
 ```
-python3 scripts/01_filter_raw_data.py
-python3 scripts/02_extract_features.py
-python3 scripts/01_train_mode.py
+python3 scripts/01_filter_raw_data.py --dataset HI_Small # or HI_Large, LI_Small, LI_Large
+python3 -m scripts.02_extract_features
+python3 -m scripts.03_train_mode
 ```
