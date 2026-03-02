@@ -150,6 +150,7 @@ def load_data() -> tuple[pd.DataFrame, set]:
     # becomes N×M synthesised edges.  Dividing by (N * M) preserves the total
     # money-flow through every account.
     # AMLword paper: "each entity (person or company) owns one or more bank accounts directly and via subsidiaries"
+    # divisor is the number of people who own the source account times the number of people who own the target account 
     divisor = all_transactions["src_owner_count"] * all_transactions["tgt_owner_count"]
     all_transactions["amount_sent_c"] = all_transactions["amount_sent_c"] / divisor
     all_transactions["amount_received"] = all_transactions["amount_received"] / divisor
