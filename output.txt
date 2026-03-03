@@ -12,7 +12,7 @@ Identified 4,645 bad actors globally (entities in laundering transactions)
 Data range: 2022-09-01 to 2022-09-10
 Processing 9 days with 3-day sliding window...
 
-Processing days: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [05:44<00:00, 38.23s/day]
+Processing days: 100%|████████████████████████████████████████████████| 9/9 [08:37<00:00, 57.56s/day]
 
 Compiling results...
 Generated 1,419,083 feature records
@@ -25,7 +25,7 @@ Rank Stability Analysis (reference: pr_vol_85):
   Total rank anomalies detected: 62,106
   Entities flagged as rank anomalies: 62,106
 Saving features to data/HI_Small/sliding_window_features.parquet...
-Saving metrics to /home/drull/Documents/PixFraudDetection/sliding_window_metrics.parquet...
+Saving metrics to data/HI_Small/sliding_window_metrics.parquet...
 
 ============================================================
 Aggregate Evaluation Summary (Mean Across All Days)
@@ -46,29 +46,55 @@ Aggregate Evaluation Summary (Mean Across All Days)
 
 [HITS_HUB]
 ----------------------------------------
-  Mean ROC-AUC:            0.5674
-  Mean Average Precision:  0.0265
+  Mean ROC-AUC:            0.5533
+  Mean Average Precision:  0.0256
 
   Mean Precision@K:
     @    1: 0.0000% (lift: 0.00x)
     @    2: 16.6667% (lift: 9.32x)
     @   10: 22.2222% (lift: 17.04x)
-    @   50: 12.0000% (lift: 9.42x)
-    @  100: 8.2222% (lift: 5.97x)
-    @  500: 5.1778% (lift: 3.88x)
+    @   50: 12.0000% (lift: 10.03x)
+    @  100: 8.5556% (lift: 7.40x)
+    @  500: 5.0889% (lift: 4.07x)
 
 [HITS_AUTH]
 ----------------------------------------
-  Mean ROC-AUC:            0.5370
-  Mean Average Precision:  0.0208
+  Mean ROC-AUC:            0.5322
+  Mean Average Precision:  0.0205
 
   Mean Precision@K:
     @    1: 33.3333% (lift: 13.34x)
     @    2: 22.2222% (lift: 9.55x)
     @   10: 14.4444% (lift: 10.44x)
-    @   50: 6.8889% (lift: 5.54x)
-    @  100: 5.4444% (lift: 4.84x)
-    @  500: 3.7333% (lift: 2.86x)
+    @   50: 7.1111% (lift: 6.29x)
+    @  100: 5.5556% (lift: 5.22x)
+    @  500: 3.8667% (lift: 3.25x)
+
+[K_CORE]
+----------------------------------------
+  Mean ROC-AUC:            0.6752
+  Mean Average Precision:  0.0574
+
+  Mean Precision@K:
+    @    1: 77.7778% (lift: 46.96x)
+    @    2: 83.3333% (lift: 55.80x)
+    @   10: 71.1111% (lift: 51.25x)
+    @   50: 45.7778% (lift: 32.01x)
+    @  100: 41.0000% (lift: 29.50x)
+    @  500: 28.0222% (lift: 19.89x)
+
+[BETWEENNESS]
+----------------------------------------
+  Mean ROC-AUC:            0.6362
+  Mean Average Precision:  0.0606
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 102.16x)
+    @    2: 94.4444% (lift: 98.65x)
+    @   10: 75.5556% (lift: 73.78x)
+    @   50: 31.5556% (lift: 25.46x)
+    @  100: 36.1111% (lift: 30.37x)
+    @  500: 25.4000% (lift: 18.84x)
 
 ============================================================
 Leiden Community Detection Analysis
@@ -76,55 +102,57 @@ Leiden Community Detection Analysis
 
 Analysis based on final day: 2022-09-10
 Total nodes with community assignment: 157,747
-Total communities detected: 2,438
+Total communities detected: 2,450
 Overall fraud rate: 2.8102%
 
 [Community Size Distribution]
 --------------------------------------------------
-Size       Communities  Nodes      Fraud    Rate       Lift    
+Size       Communities  Nodes      Fraud    Rate       Lift
 ------------------------------------------------------------
 1          1            1          0        0.0000%   0.00x
-2-4        1141         2905       36       1.2392%   0.44x
-5-9        355          2348       55       2.3424%   0.83x
-10-49      548          13071      273      2.0886%   0.74x
-50-99      171          12220      295      2.4141%   0.86x
-100-499    201          37915      1034     2.7272%   0.97x
-500+       21           89287      2740     3.0688%   1.09x
+2-4        1152         2923       38       1.3000%   0.46x
+5-9        360          2373       59       2.4863%   0.88x
+10-49      552          13009      272      2.0909%   0.74x
+50-99      162          12037      289      2.4009%   0.85x
+100-499    200          37151      1018     2.7402%   0.98x
+500+       23           90253      2757     3.0547%   1.09x
 
 [Top 10 Communities by Fraud Rate (min 3 members)]
 ----------------------------------------------------------------------
-Comm ID    Size     Fraud    Rate         Lift    
+Comm ID    Size     Fraud    Rate         Lift
 --------------------------------------------------
-1137       6        3        50.0000%      17.79x
-1185       6        2        33.3333%      11.86x
-1469       3        1        33.3333%      11.86x
-1478       3        1        33.3333%      11.86x
-1482       3        1        33.3333%      11.86x
-1559       3        1        33.3333%      11.86x
-1579       3        1        33.3333%      11.86x
-1583       3        1        33.3333%      11.86x
-1617       3        1        33.3333%      11.86x
-1627       3        1        33.3333%      11.86x
+1131       6        3        50.0000%      17.79x
+1176       6        2        33.3333%      11.86x
+1475       3        1        33.3333%      11.86x
+1495       3        1        33.3333%      11.86x
+1546       3        1        33.3333%      11.86x
+1557       3        1        33.3333%      11.86x
+1570       3        1        33.3333%      11.86x
+1607       3        1        33.3333%      11.86x
+1610       3        1        33.3333%      11.86x
+1643       3        1        33.3333%      11.86x
 
 [Leiden Effectiveness Summary]
 --------------------------------------------------
-Fraud in small communities (size <= 10): 98 / 4,433 (2.21%)
-Average community fraud rate: 1.7976%
+Fraud in small communities (size <= 10): 105 / 4,433 (2.37%)
+Average community fraud rate: 1.8654%
 Overall fraud rate: 2.8102%
-Fraud in high-concentration communities (>2x avg rate): 371 / 4,433 (8.37%)
+Fraud in high-concentration communities (>2x avg rate): 374 / 4,433 (8.44%)
 
 ============================================================
 Feature Statistics Summary
 ============================================================
-       pagerank_vol_85  pagerank_vol_75  pagerank_count      hits_hub     hits_auth        degree      vol_sent      vol_recv      tx_count    flow_ratio  pagerank_rank_change  leiden_macro_size  leiden_micro_size
-count     1.419083e+06     1.419083e+06    1.419083e+06  1.419083e+06  1.419083e+06  1.419083e+06  1.419083e+06  1.419083e+06  1.419083e+06  1.419083e+06          1.419083e+06       1.419083e+06       1.419083e+06
-mean      6.342124e-06     6.342124e-06    6.342124e-06  6.342124e-06  6.342124e-06  4.908271e+00  4.268933e+07  4.268933e+07  1.804926e+01  5.420672e+06          4.586137e+02       5.701529e+03       3.914741e+03
-std       1.396511e-05     1.187237e-05    1.262705e-05  2.389343e-03  2.483650e-03  3.861815e+01  3.245515e+09  3.225517e+09  2.214631e+02  2.090789e+09          2.625054e+04       7.611838e+03       5.605218e+03
-min       9.744157e-07     1.600833e-06    9.986310e-07 -8.221047e-16 -1.013627e-15  1.000000e+00  0.000000e+00  0.000000e+00  1.000000e+00  0.000000e+00         -1.583410e+05       1.000000e+00       1.000000e+00
-25%       3.268293e-06     3.668360e-06    3.395995e-06 -2.905769e-39 -5.050050e-30  2.000000e+00  0.000000e+00  4.948670e+03  6.000000e+00  0.000000e+00         -2.949000e+03       1.220000e+02       9.300000e+01
-50%       4.833895e-06     5.284964e-06    4.916512e-06  0.000000e+00  2.989054e-32  3.000000e+00  1.432110e+04  4.150473e+04  1.200000e+01  4.584399e-01          0.000000e+00       2.107000e+03       4.820000e+02
-75%       7.060580e-06     7.098526e-06    7.465867e-06  3.986245e-34  1.073079e-27  6.000000e+00  2.616793e+05  4.405629e+05  1.900000e+01  2.328417e+00          3.585000e+03       6.835000e+03       5.320000e+03
-max       3.531519e-03     3.024428e-03    3.215254e-03  9.999999e-01  9.999934e-01  1.463400e+04  1.046302e+12  1.046510e+12  6.431900e+04  1.046302e+12          1.640870e+05       2.647700e+04       1.945500e+04
+       pagerank_vol_85  pagerank_vol_75  ...  leiden_macro_size  leiden_micro_size
+count     1.419083e+06     1.419083e+06  ...       1.419083e+06       1.419083e+06
+mean      6.342124e-06     6.342124e-06  ...       5.658602e+03       3.887438e+03
+std       1.396511e-05     1.187237e-05  ...       7.544840e+03       5.556958e+03
+min       9.744157e-07     1.600833e-06  ...       1.000000e+00       1.000000e+00
+25%       3.268293e-06     3.668360e-06  ...       1.240000e+02       9.300000e+01
+50%       4.833895e-06     5.284964e-06  ...       2.085000e+03       4.930000e+02
+75%       7.060580e-06     7.098526e-06  ...       6.828000e+03       5.363000e+03
+max       3.531519e-03     3.024428e-03  ...       2.653700e+04       1.829700e+04
+
+[8 rows x 15 columns]
 
 ============================================================
 Rank Anomaly Analysis (reference: pr_vol_85)
@@ -136,32 +164,27 @@ Lift from rank anomaly detection: 2.36x
 
 Loading feature matrix from data/HI_Small/sliding_window_features.parquet...
 
-
 [Temporal Split Enforced]
+Training set:   851,449 rows (up to 2022-09-07)
+Validation set: 283,817 rows (up to 2022-09-09)
+Testing set:    283,817 rows (up to 2022-09-10)
 
-Training set: 1,109,840 rows (<= 2022-09-08)
-
-Testing set:  309,243 rows (> 2022-09-08)
-
-Class Imbalance Ratio (Neg/Pos): 79.79
-
+Class Imbalance Ratio (Neg/Pos) in Train: 105.47
 
 Training XGBoost Classifier...
+[0]	validation_0-aucpr:0.10416
+[50]	validation_0-aucpr:0.12223
+[100]	validation_0-aucpr:0.12418
+[140]	validation_0-aucpr:0.12372
 
+Best iteration: 90
 
 Evaluating on Future Temporal Window (Test Set)...
-
-Test AUPRC:   0.1396
-
-Test ROC-AUC: 0.7530
-
+Test AUPRC:   0.1330
+Test ROC-AUC: 0.7308
 
 Test Precision@K:
-
-  @  10: 90.0000% (Lift: 33.63x)
-
-  @  50: 90.0000% (Lift: 33.63x)
-
-  @ 100: 86.0000% (Lift: 32.13x)
-
-  @ 500: 67.4000% (Lift: 25.18x)
+  @  10: 100.0000% (Lift: 36.23x)
+  @  50: 100.0000% (Lift: 36.23x)
+  @ 100: 95.0000% (Lift: 34.42x)
+  @ 500: 67.0000% (Lift: 24.27x)
