@@ -13,6 +13,8 @@ source venv/bin/activate  # On Unix/macOS
 
 # Install dependencies
 pip install -r requirements.txt
+
+go mod tidy
 ```
 
 ## Data Preparation
@@ -23,6 +25,7 @@ Put the source AMLworld csv and text files in their `data` directories. Rename t
 
 ```
 python3 scripts/01_filter_raw_data.py --dataset HI_Small # or HI_Large, LI_Small, LI_Large
+go run cmd/engine/main.go
 python3 -m scripts.02_extract_features
 python3 -m scripts.03_train_mode
 ```
