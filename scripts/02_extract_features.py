@@ -474,46 +474,84 @@ def main() -> None:
             # Uses pr_vol_85 as the primary PageRank signal, matching the #
             # rank-stability reference above.                             #
             # ---------------------------------------------------------- #
-            # ------------------------------------------------------------------ #
-        # 7. Evaluation Metrics (Optional)                                   #
-        # ------------------------------------------------------------------ #
-        if RUN_EVALUATION:
-            pagerank_scores = {
-                n: vals.get("pagerank", 0.0) 
-                for n, vals in daily_metrics.get("pr_vol_85", {}).items()
-            }
-            hits_hubs = {
-                n: vals.get("hits_hub", 0.0) 
-                for n, vals in daily_metrics.get("hits", {}).items()
-            }
-            hits_auths = {
-                n: vals.get("hits_auth", 0.0) 
-                for n, vals in daily_metrics.get("hits", {}).items()
-            }
-            betweenness_scores = {
-                n: vals.get("betweenness", 0.0)
-                for n, vals in daily_metrics.get("betweenness", {}).items()
-            }
-            k_core_scores = {
-                n: vals.get("k_core", 0)
-                for n, vals in daily_metrics.get("k_core", {}).items()
-            }
+            if RUN_EVALUATION:
+                pagerank_scores: dict = {
+                    node: daily_metrics.get("pr_vol_85", {})
+                    .get(node, {})
+                    .get("pagerank", 0.0)
+                    for node in G.nodes()
+                }
+                hits_hubs: dict = {
+                    node: daily_metrics.get("hits", {})
+                    .get(node, {})
+                    .get("hits_hub", 0.0)
+                    for node in G.nodes()
+                }
+                hits_auths: dict = {
+                    node: daily_metrics.get("hits", {})
+                    .get(node, {})
+                    .get("hits_auth", 0.0)
+                    for node in G.nodes()
+                }
+                betweenness_scores: dict = {
+                    node: daily_metrics.get("betweenness", {})
+                    .get(node, {})
+                    .get("betweenness", 0.0)
+                    for node in G.nodes()
+                }
+                k_core_scores: dict = {
+                    node: daily_metrics.get("k_core", {})
+                    .get(node, {})
+                    .get("k_core", 0)
+                    for node in G.nodes()
+                }
 
-            eval_metrics = compute_daily_evaluation_metrics(
-                bad_actors=known_bad_actors,
-                k_values=EVALUATION_K_VALUES,
-                pagerank=pagerank_scores,
-                hits_hub=hits_hubs,
-                hits_auth=hits_auths,
-                betweenness=betweenness_scores,
-                k_core=k_core_scores
-            )
-            
-            # Save metrics exactly as before
-            for algo, metrics in eval_metrics.items():
-                metrics["date"] = current_date
-                metrics["algorithm"] = algo
-                all_metrics.append(metrics)
+                if pagerank_scores:
+                    valid_k_values = [k for k in k_values if k <= len(G)]
+
+                    if valid_k_values:
+                        from src.features._evaluation import (
+                            compute_daily_evaluation_metrics,
+                        )
+
+                        eval_metrics = compute_daily_evaluation_metrics(
+                            bad_actors=bad_actors_up_to_date,
+                            k_values=valid_k_values,
+                            pagerank=pagerank_scores,
+                            hits_hub=hits_hubs,
+                            hits_auth=hits_auths,
+                            betweenness=betweenness_scores,
+                            k_core=k_core_scores,
+                        )
+
+                        for algo_name, algo_metrics in eval_metrics.items():
+                            metric_record: dict = {
+                                "date": current_date.date(),
+                                "algorithm": algo_name,
+                                "total_nodes": algo_metrics["total_nodes"],
+                                "total_fraud": algo_metrics["total_fraud"],
+                                "fraud_rate": algo_metrics["fraud_rate"],
+                                "roc_auc": algo_metrics.get("roc_auc"),
+                                "average_precision": algo_metrics.get(
+                                    "average_precision"
+                                ),
+                            }
+
+                            for k in valid_k_values:
+                                metric_record[f"precision_at_{k}"] = algo_metrics[
+                                    "precision_at_k"
+                                ].get(k)
+                                metric_record[f"recall_at_{k}"] = algo_metrics[
+                                    "recall_at_k"
+                                ].get(k)
+                                metric_record[f"lift_at_{k}"] = algo_metrics[
+                                    "lift_at_k"
+                                ].get(k)
+                                metric_record[f"fraud_found_at_{k}"] = algo_metrics[
+                                    "fraud_found_at_k"
+                                ].get(k)
+
+                            all_daily_metrics.append(metric_record)
 
             pbar.update(1)
 
