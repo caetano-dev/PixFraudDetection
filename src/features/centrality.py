@@ -1,7 +1,7 @@
 """
 Centrality-based feature extractors for the PixFraudDetection pipeline.
 
-This module provides three concrete :class:`~src.features.base.FeatureExtractor`
+This module provides four concrete :class:`~src.features.base.FeatureExtractor`
 strategies that wrap NetworkX centrality algorithms:
 
 * :class:`PageRankVolumeExtractor`   — PageRank weighted by transaction *volume*
@@ -11,8 +11,10 @@ strategies that wrap NetworkX centrality algorithms:
   small transactions.
 * :class:`HITSExtractor`             — HITS algorithm, returning both hub and
   authority scores simultaneously.
+* :class:`BetweennessExtractor`      — Approximate betweenness centrality using
+  a random sample of ``k`` pivot nodes for scalability.
 
-All three classes preserve the **exact** NetworkX calls, hyper-parameters, and
+All classes preserve the **exact** NetworkX calls, hyper-parameters, and
 error-handling behaviour from the original ``main.py``.  No mathematical logic
 has been altered.
 """
@@ -185,3 +187,67 @@ class HITSExtractor(FeatureExtractor):
             node: {"hits_hub": hubs.get(node, 0.0), "hits_auth": auths.get(node, 0.0)}
             for node in G.nodes()
         }
+
+
+class BetweennessExtractor(FeatureExtractor):
+    """
+    Approximate betweenness centrality extractor.
+
+    Computes betweenness centrality using a random sample of ``k`` pivot
+    nodes rather than the exact all-pairs shortest-path algorithm.  This
+    makes it practical on the large daily transaction graphs seen in the
+    PixFraudDetection pipeline, where the exact O(VE) algorithm would be
+    prohibitively slow.
+
+    A high betweenness score identifies *broker* nodes that sit on many
+    shortest paths between other nodes — a structural signature of money-
+    mule accounts that act as intermediaries in layering schemes.
+
+    Parameters
+    ----------
+    k : int
+        Number of pivot nodes sampled for the approximation.
+        Larger values → more accurate estimate, higher runtime cost.
+        Defaults to ``50``.
+    seed : int
+        Random seed forwarded to NetworkX for reproducibility across runs.
+        Defaults to ``42``.
+
+    Returns (via ``extract``)
+    -------------------------
+    ``{"betweenness": float}`` per node, or ``{}`` on algorithm failure.
+    """
+
+    def __init__(self, k: int = 50, seed: int = 42) -> None:
+        self._k = k
+        self._seed = seed
+
+    @property
+    def name(self) -> str:
+        return f"BetweennessExtractor(k={self._k}, seed={self._seed})"
+
+    def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float]]:
+        """
+        Run approximate betweenness centrality on *G*.
+
+        Parameters
+        ----------
+        G : nx.DiGraph
+            Directed transaction graph for the current window.
+
+        Returns
+        -------
+        dict
+            ``{node_id: {"betweenness": score}}`` for every node in *G*,
+            or an empty dict if *G* has no nodes or the algorithm raises a
+            recoverable NetworkX error.
+        """
+        if len(G) == 0:
+            return {}
+
+        try:
+            b_scores: dict = nx.betweenness_centrality(G, k=self._k, seed=self._seed)
+        except nx.NetworkXError:
+            return {}
+
+        return {node: {"betweenness": score} for node, score in b_scores.items()}

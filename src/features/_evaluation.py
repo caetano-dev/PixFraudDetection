@@ -183,11 +183,9 @@ def evaluate_ranking_effectiveness(
 
 
 def compute_daily_evaluation_metrics(
-    pagerank_scores: dict,
-    hits_hubs: dict,
-    hits_auths: dict,
     bad_actors: set,
-    k_values: Optional[list[int]] = None,
+    k_values: list[int] | None = None,
+    **score_dicts: dict[object, float | int],
 ) -> dict:
     """
     Compute evaluation metrics for all three algorithms for a single day.
@@ -219,33 +217,22 @@ def compute_daily_evaluation_metrics(
         :func:`evaluate_ranking_effectiveness`.  An algorithm key is omitted
         when its score dictionary is empty.
     """
-    # Build a shared label dict from all nodes visible across all algorithms.
-    all_nodes = (
-        set(pagerank_scores.keys()) | set(hits_hubs.keys()) | set(hits_auths.keys())
-    )
-    labels = {node: (1 if node in bad_actors else 0) for node in all_nodes}
+    if not score_dicts:
+        return {}
 
+    # Build a shared label dict from all nodes visible across all provided algorithms
+    all_nodes = set()
+    for d in score_dicts.values():
+        all_nodes.update(d.keys())
+        
+    labels = {node: (1 if node in bad_actors else 0) for node in all_nodes}
     daily_metrics: dict = {}
 
-    # --- PageRank ---
-    if pagerank_scores:
-        ranked_pr = _rank_nodes_by_score(pagerank_scores, descending=True)
-        daily_metrics["pagerank"] = evaluate_ranking_effectiveness(
-            ranked_pr, labels, k_values
-        )
-
-    # --- HITS Hub ---
-    if hits_hubs:
-        ranked_hubs = _rank_nodes_by_score(hits_hubs, descending=True)
-        daily_metrics["hits_hub"] = evaluate_ranking_effectiveness(
-            ranked_hubs, labels, k_values
-        )
-
-    # --- HITS Authority ---
-    if hits_auths:
-        ranked_auths = _rank_nodes_by_score(hits_auths, descending=True)
-        daily_metrics["hits_auth"] = evaluate_ranking_effectiveness(
-            ranked_auths, labels, k_values
-        )
+    for algo_name, scores in score_dicts.items():
+        if scores:
+            ranked_nodes = _rank_nodes_by_score(scores, descending=True)
+            daily_metrics[algo_name] = evaluate_ranking_effectiveness(
+                ranked_nodes, labels, k_values
+            )
 
     return daily_metrics

@@ -51,7 +51,8 @@ from pathlib import Path
 
 import pandas as pd
 from tqdm import tqdm
-from src.config import DATA_PATH # Make sure this is imported at the top
+
+from src.config import DATA_PATH  # Make sure this is imported at the top
 
 # ---------------------------------------------------------------------------
 # Path bootstrap — make ``src`` importable when the script is run directly
@@ -81,11 +82,12 @@ from src.data.loader import get_bad_actors_up_to_date, load_data
 from src.data.window_generator import TemporalWindowGenerator
 from src.features.base import FeatureExtractor
 from src.features.centrality import (
+    BetweennessExtractor,
     HITSExtractor,
     PageRankFrequencyExtractor,
     PageRankVolumeExtractor,
 )
-from src.features.community import LeidenCommunityExtractor
+from src.features.community import KCoreExtractor, LeidenCommunityExtractor
 from src.features.stability import RankStabilityTracker
 from src.graph.builder import build_daily_graph, compute_node_stats
 
@@ -284,6 +286,8 @@ def main() -> None:
         "pr_vol_75": PageRankVolumeExtractor(alpha=0.75),
         "pr_count": PageRankFrequencyExtractor(alpha=0.85),
         "hits": HITSExtractor(max_iter=100),
+        "betweenness": BetweennessExtractor(k=50),
+        "k_core": KCoreExtractor(),
     }
 
     if RUN_LEIDEN:
@@ -448,6 +452,14 @@ def main() -> None:
                     # --- Derived metric ---
                     # Laplace-smoothed flow ratio: >> 1 → net sender, << 1 → net receiver
                     "flow_ratio": vol_s / (vol_r + 1.0),
+                    # --- Betweenness centrality ---
+                    "betweenness": daily_metrics.get("betweenness", {})
+                    .get(node, {})
+                    .get("betweenness", 0.0),
+                    # --- K-Core decomposition ---
+                    "k_core": daily_metrics.get("k_core", {})
+                    .get(node, {})
+                    .get("k_core", 0),
                     # --- Rank stability features ---
                     "pagerank_rank_change": rank_changes.get(node, 0),
                     "is_rank_anomaly": 1 if node in anomalies else 0,
@@ -462,70 +474,46 @@ def main() -> None:
             # Uses pr_vol_85 as the primary PageRank signal, matching the #
             # rank-stability reference above.                             #
             # ---------------------------------------------------------- #
-            if RUN_EVALUATION:
-                pagerank_scores: dict = {
-                    node: daily_metrics.get("pr_vol_85", {})
-                    .get(node, {})
-                    .get("pagerank", 0.0)
-                    for node in G.nodes()
-                }
-                hits_hubs: dict = {
-                    node: daily_metrics.get("hits", {})
-                    .get(node, {})
-                    .get("hits_hub", 0.0)
-                    for node in G.nodes()
-                }
-                hits_auths: dict = {
-                    node: daily_metrics.get("hits", {})
-                    .get(node, {})
-                    .get("hits_auth", 0.0)
-                    for node in G.nodes()
-                }
+            # ------------------------------------------------------------------ #
+        # 7. Evaluation Metrics (Optional)                                   #
+        # ------------------------------------------------------------------ #
+        if RUN_EVALUATION:
+            pagerank_scores = {
+                n: vals.get("pagerank", 0.0) 
+                for n, vals in daily_metrics.get("pr_vol_85", {}).items()
+            }
+            hits_hubs = {
+                n: vals.get("hits_hub", 0.0) 
+                for n, vals in daily_metrics.get("hits", {}).items()
+            }
+            hits_auths = {
+                n: vals.get("hits_auth", 0.0) 
+                for n, vals in daily_metrics.get("hits", {}).items()
+            }
+            betweenness_scores = {
+                n: vals.get("betweenness", 0.0)
+                for n, vals in daily_metrics.get("betweenness", {}).items()
+            }
+            k_core_scores = {
+                n: vals.get("k_core", 0)
+                for n, vals in daily_metrics.get("k_core", {}).items()
+            }
 
-                if pagerank_scores:
-                    valid_k_values = [k for k in k_values if k <= len(G)]
-
-                    if valid_k_values:
-                        from src.features._evaluation import (
-                            compute_daily_evaluation_metrics,
-                        )
-
-                        eval_metrics = compute_daily_evaluation_metrics(
-                            pagerank_scores=pagerank_scores,
-                            hits_hubs=hits_hubs,
-                            hits_auths=hits_auths,
-                            bad_actors=bad_actors_up_to_date,
-                            k_values=valid_k_values,
-                        )
-
-                        for algo_name, algo_metrics in eval_metrics.items():
-                            metric_record: dict = {
-                                "date": current_date.date(),
-                                "algorithm": algo_name,
-                                "total_nodes": algo_metrics["total_nodes"],
-                                "total_fraud": algo_metrics["total_fraud"],
-                                "fraud_rate": algo_metrics["fraud_rate"],
-                                "roc_auc": algo_metrics.get("roc_auc"),
-                                "average_precision": algo_metrics.get(
-                                    "average_precision"
-                                ),
-                            }
-
-                            for k in valid_k_values:
-                                metric_record[f"precision_at_{k}"] = algo_metrics[
-                                    "precision_at_k"
-                                ].get(k)
-                                metric_record[f"recall_at_{k}"] = algo_metrics[
-                                    "recall_at_k"
-                                ].get(k)
-                                metric_record[f"lift_at_{k}"] = algo_metrics[
-                                    "lift_at_k"
-                                ].get(k)
-                                metric_record[f"fraud_found_at_{k}"] = algo_metrics[
-                                    "fraud_found_at_k"
-                                ].get(k)
-
-                            all_daily_metrics.append(metric_record)
+            eval_metrics = compute_daily_evaluation_metrics(
+                bad_actors=known_bad_actors,
+                k_values=EVALUATION_K_VALUES,
+                pagerank=pagerank_scores,
+                hits_hub=hits_hubs,
+                hits_auth=hits_auths,
+                betweenness=betweenness_scores,
+                k_core=k_core_scores
+            )
+            
+            # Save metrics exactly as before
+            for algo, metrics in eval_metrics.items():
+                metrics["date"] = current_date
+                metrics["algorithm"] = algo
+                all_metrics.append(metrics)
 
             pbar.update(1)
 
@@ -577,7 +565,7 @@ def main() -> None:
         print("Aggregate Evaluation Summary (Mean Across All Days)")
         print("=" * 60)
 
-        for algo in ["pagerank", "hits_hub", "hits_auth"]:
+        for algo in ["pagerank", "hits_hub", "hits_auth", "k_core", "betweenness"]:
             algo_df = metrics_df[metrics_df["algorithm"] == algo]
             if algo_df.empty:
                 continue
@@ -632,6 +620,8 @@ def main() -> None:
         "pagerank_count",
         "hits_hub",
         "hits_auth",
+        "betweenness",
+        "k_core",
         "degree",
         "vol_sent",
         "vol_recv",

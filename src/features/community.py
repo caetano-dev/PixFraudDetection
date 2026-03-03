@@ -1,13 +1,17 @@
 """
 Community-detection feature extractor for the PixFraudDetection pipeline.
 
-This module provides a single concrete :class:`~src.features.base.FeatureExtractor`
-strategy that wraps the Leiden community-detection algorithm:
+This module provides two concrete :class:`~src.features.base.FeatureExtractor`
+strategies that wrap community-structure algorithms:
 
 * :class:`LeidenCommunityExtractor` — assigns every node in the graph a
   community ID and community size.  Isolated nodes and any nodes that fall
   through the leidenalg conversion are guaranteed a singleton community so
   that downstream feature tables have no ``NaN`` values.
+* :class:`KCoreExtractor` — computes the k-core number of every node via
+  k-core decomposition on an undirected projection of the graph.  A node's
+  core number is the largest *k* such that the node belongs to the k-core
+  (the maximal subgraph in which every node has degree >= k).
 
 The ``resolution`` parameter controls community granularity:
     * ``resolution=1.0``  (macro) — larger, coarser communities
@@ -263,3 +267,49 @@ class LeidenCommunityExtractor(FeatureExtractor):
                 next_community_id += 1
 
         return node_features
+
+
+class KCoreExtractor(FeatureExtractor):
+    """
+    Computes the k-core number for every node.
+
+    The graph is first cast to a standard undirected nx.Graph. 
+    Self-loops are explicitly removed, as k-core decomposition is 
+    mathematically undefined for self-looping topologies in NetworkX.
+
+    Returns (via ``extract``)
+    -------------------------
+    ``{"k_core": int}`` per node, or ``{}`` on algorithm failure.
+    """
+
+    @property
+    def name(self) -> str:
+        return "KCoreExtractor()"
+
+    def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float | int]]:
+        """
+        Run k-core decomposition on an undirected projection of *G*.
+
+        Parameters
+        ----------
+        G : nx.DiGraph
+            Directed transaction graph for the current window.
+
+        Returns
+        -------
+        dict
+            ``{node_id: {"k_core": core_number}}`` for every node in *G*,
+            or an empty dict if *G* has no nodes or the algorithm raises a
+            recoverable NetworkX error.
+        """
+        if len(G) == 0:
+            return {}
+
+        try:
+            G_un = nx.Graph(G)
+            G_un.remove_edges_from(nx.selfloop_edges(G_un))
+            core_scores: dict = nx.core_number(G_un)
+        except nx.NetworkXError:
+            return {}
+
+        return {node: {"k_core": score} for node, score in core_scores.items()}
