@@ -3,12 +3,11 @@ Supervised Machine Learning and Comparative Analysis Pipeline.
 
 This script executes the final phase of the TCC:
 1. Loads the extracted temporal graph features.
-2. Performs a strict chronological Train/Test split.
-3. Trains an XGBoost classifier with dynamic class-imbalance weighting.
+2. Performs a strict chronological Train/Validation/Test split.
+3. Trains an XGBoost classifier with dynamic class-imbalance weighting and early stopping.
 4. Evaluates performance using Precision@K and AUPRC.
 5. Generates SHAP values to empirically rank algorithm effectiveness.
 """
-
 import pandas as pd
 import numpy as np
 import xgboost as xgb
@@ -47,55 +46,67 @@ def main():
     df = pd.read_parquet(features_path)
 
     # 1. Feature Engineering & Cleanup
-    # Sort chronologically to prevent future data leakage
+    # Ensure data is sorted by time to prevent any future leakage
     df = df.sort_values(by=["date", "entity_id"]).reset_index(drop=True)
     
-    # Isolate targets and identifiers
-    y = df["is_fraud"].values
+    # 2. Strict Chronological Split (60% Train / 20% Val / 20% Test)
+    print("\n[Temporal Split Enforced]")
+    n_rows = len(df)
+    train_end_idx = int(n_rows * 0.6)
+    val_end_idx = int(n_rows * 0.8)
     
+    train_df = df.iloc[:train_end_idx]
+    val_df = df.iloc[train_end_idx:val_end_idx]
+    test_df = df.iloc[val_end_idx:]
+
+    print(f"Training set:   {len(train_df):,} rows (up to {train_df['date'].max()})")
+    print(f"Validation set: {len(val_df):,} rows (up to {val_df['date'].max()})")
+    print(f"Testing set:    {len(test_df):,} rows (up to {test_df['date'].max()})")
+
     # Drop non-predictive columns and arbitrary integer IDs
     cols_to_drop = [
         "date", "entity_id", "is_fraud", 
         "leiden_macro_id", "leiden_micro_id", "is_rank_anomaly"
     ]
-    X = df.drop(columns=[col for col in cols_to_drop if col in df.columns])
+    drop_cols = [col for col in cols_to_drop if col in df.columns]
     
-    # 2. Strict Chronological Split (70% Train, 30% Test)
-    # Splitting by unique dates ensures we don't sever a single day's graph
-    unique_dates = df['date'].unique()
-    split_index = int(len(unique_dates) * 0.70)
-    split_date = unique_dates[split_index]
+    X_train = train_df.drop(columns=drop_cols)
+    y_train = train_df["is_fraud"].values
     
-    train_mask = df['date'] <= split_date
-    test_mask = df['date'] > split_date
+    X_val = val_df.drop(columns=drop_cols)
+    y_val = val_df["is_fraud"].values
     
-    X_train, y_train = X[train_mask], y[train_mask]
-    X_test, y_test = X[test_mask], y[test_mask]
-    
-    print(f"\n[Temporal Split Enforced]")
-    print(f"Training set: {len(X_train):,} rows (<= {split_date})")
-    print(f"Testing set:  {len(X_test):,} rows (> {split_date})")
+    X_test = test_df.drop(columns=drop_cols)
+    y_test = test_df["is_fraud"].values
 
     # 3. Class Imbalance Handling
-    # Do not use SMOTE. Use exact ratio weighting for the XGBoost objective function.
+    # Use exact ratio weighting for the XGBoost objective function on Train set only
     num_neg = np.sum(y_train == 0)
     num_pos = np.sum(y_train == 1)
     pos_weight = num_neg / num_pos if num_pos > 0 else 1.0
-    print(f"Class Imbalance Ratio (Neg/Pos): {pos_weight:.2f}")
+    print(f"\nClass Imbalance Ratio (Neg/Pos) in Train: {pos_weight:.2f}")
 
-    # 4. Train XGBoost Model
+    # 4. Train XGBoost Model with Validation Early Stopping
     print("\nTraining XGBoost Classifier...")
     model = xgb.XGBClassifier(
-        n_estimators=200,
+        n_estimators=500,
         max_depth=6,
-        learning_rate=0.1,
+        learning_rate=0.05,
         scale_pos_weight=pos_weight,
-        eval_metric="aucpr",
         random_state=42,
+        eval_metric="aucpr",
+        early_stopping_rounds=50,
         n_jobs=-1
     )
     
-    model.fit(X_train, y_train)
+    model.fit(
+        X_train, 
+        y_train,
+        eval_set=[(X_val, y_val)],
+        verbose=50
+    )
+    
+    print(f"\nBest iteration: {model.best_iteration}")
 
     # 5. Evaluation Metrics
     print("\nEvaluating on Future Temporal Window (Test Set)...")
