@@ -595,7 +595,7 @@ def main() -> None:
     # ------------------------------------------------------------------ #
     if RUN_EVALUATION and all_daily_metrics:
         metrics_df = pd.DataFrame(all_daily_metrics)
-        metrics_path = _PROJECT_ROOT / OUTPUT_METRICS_FILE
+        metrics_path = DATA_PATH / OUTPUT_METRICS_FILE
         print(f"Saving metrics to {metrics_path}...")
         metrics_df.to_parquet(metrics_path, index=False)
 
