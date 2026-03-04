@@ -1,29 +1,25 @@
-Graph Feature Generation Pipeline
+2026/03/03 19:57:14 Starting Data Engine...
+2026/03/03 19:57:20 Loaded 4869640 resolved transactions. Range: 2022-09-01 to 2022-09-10
+2026/03/03 19:57:23 Pipeline complete. Wrote 3482622 edges and 1419083 node records.
+
+============================================================
+Graph Feature Generation Pipeline (Polyglot Mode — Parallel)
 Dataset: SMALL
-Window: 3 days | Step: 1 day(s)
 Evaluation:     Enabled
 Leiden:         Enabled
 Rank Stability: Enabled
 ============================================================
-Loading data from data/HI_Small...
-Loaded 4,869,640 individual entity-to-entity edge records
-Identified 4,645 bad actors globally (entities in laundering transactions)
+Loading Go Data Engine Parquet files...
+Loaded 9 temporal windows.
 
-Data range: 2022-09-01 to 2022-09-10
-Processing 9 days with 3-day sliding window...
+Pre-computing per-window fraud labels...
+Launching ProcessPoolExecutor with 4 workers...
 
-Processing days: 100%|████████████████████████████████████████████████| 9/9 [08:37<00:00, 57.56s/day]
+Processing days: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 9/9 [02:11<00:00, 14.66s/day]
+
+Applying sequential rank stability post-processing...
 
 Compiling results...
-Generated 1,419,083 feature records
-Unique entities: 166,175
-Unique dates:    9
-Fraud records:   22,014 (1.55%)
-
-Rank Stability Analysis (reference: pr_vol_85):
-  Average stability score:       0.5629
-  Total rank anomalies detected: 62,106
-  Entities flagged as rank anomalies: 62,106
 Saving features to data/HI_Small/sliding_window_features.parquet...
 Saving metrics to data/HI_Small/sliding_window_metrics.parquet...
 
@@ -46,29 +42,29 @@ Aggregate Evaluation Summary (Mean Across All Days)
 
 [HITS_HUB]
 ----------------------------------------
-  Mean ROC-AUC:            0.5533
-  Mean Average Precision:  0.0256
+  Mean ROC-AUC:            0.5471
+  Mean Average Precision:  0.0253
 
   Mean Precision@K:
     @    1: 0.0000% (lift: 0.00x)
     @    2: 16.6667% (lift: 9.32x)
     @   10: 22.2222% (lift: 17.04x)
-    @   50: 12.0000% (lift: 10.03x)
-    @  100: 8.5556% (lift: 7.40x)
-    @  500: 5.0889% (lift: 4.07x)
+    @   50: 12.0000% (lift: 9.42x)
+    @  100: 8.1111% (lift: 6.51x)
+    @  500: 4.9111% (lift: 3.77x)
 
 [HITS_AUTH]
 ----------------------------------------
-  Mean ROC-AUC:            0.5322
-  Mean Average Precision:  0.0205
+  Mean ROC-AUC:            0.5215
+  Mean Average Precision:  0.0202
 
   Mean Precision@K:
     @    1: 33.3333% (lift: 13.34x)
     @    2: 22.2222% (lift: 9.55x)
-    @   10: 14.4444% (lift: 10.44x)
-    @   50: 7.1111% (lift: 6.29x)
-    @  100: 5.5556% (lift: 5.22x)
-    @  500: 3.8667% (lift: 3.25x)
+    @   10: 16.6667% (lift: 14.90x)
+    @   50: 7.3333% (lift: 5.21x)
+    @  100: 5.6667% (lift: 4.68x)
+    @  500: 3.6000% (lift: 2.60x)
 
 [K_CORE]
 ----------------------------------------
@@ -76,25 +72,25 @@ Aggregate Evaluation Summary (Mean Across All Days)
   Mean Average Precision:  0.0574
 
   Mean Precision@K:
-    @    1: 77.7778% (lift: 46.96x)
-    @    2: 83.3333% (lift: 55.80x)
-    @   10: 71.1111% (lift: 51.25x)
-    @   50: 45.7778% (lift: 32.01x)
-    @  100: 41.0000% (lift: 29.50x)
-    @  500: 28.0222% (lift: 19.89x)
+    @    1: 55.5556% (lift: 38.63x)
+    @    2: 72.2222% (lift: 51.63x)
+    @   10: 67.7778% (lift: 52.76x)
+    @   50: 46.0000% (lift: 30.84x)
+    @  100: 39.8889% (lift: 28.88x)
+    @  500: 27.8444% (lift: 20.01x)
 
 [BETWEENNESS]
 ----------------------------------------
-  Mean ROC-AUC:            0.6362
-  Mean Average Precision:  0.0606
+  Mean ROC-AUC:            0.6366
+  Mean Average Precision:  0.0641
 
   Mean Precision@K:
     @    1: 100.0000% (lift: 102.16x)
-    @    2: 94.4444% (lift: 98.65x)
-    @   10: 75.5556% (lift: 73.78x)
-    @   50: 31.5556% (lift: 25.46x)
-    @  100: 36.1111% (lift: 30.37x)
-    @  500: 25.4000% (lift: 18.84x)
+    @    2: 100.0000% (lift: 102.16x)
+    @   10: 81.1111% (lift: 70.26x)
+    @   50: 34.6667% (lift: 28.82x)
+    @  100: 39.7778% (lift: 34.04x)
+    @  500: 27.2222% (lift: 19.87x)
 
 ============================================================
 Leiden Community Detection Analysis
@@ -102,7 +98,7 @@ Leiden Community Detection Analysis
 
 Analysis based on final day: 2022-09-10
 Total nodes with community assignment: 157,747
-Total communities detected: 2,450
+Total communities detected: 2,446
 Overall fraud rate: 2.8102%
 
 [Community Size Distribution]
@@ -110,57 +106,57 @@ Overall fraud rate: 2.8102%
 Size       Communities  Nodes      Fraud    Rate       Lift
 ------------------------------------------------------------
 1          1            1          0        0.0000%   0.00x
-2-4        1152         2923       38       1.3000%   0.46x
-5-9        360          2373       59       2.4863%   0.88x
-10-49      552          13009      272      2.0909%   0.74x
-50-99      162          12037      289      2.4009%   0.85x
-100-499    200          37151      1018     2.7402%   0.98x
-500+       23           90253      2757     3.0547%   1.09x
+2-4        1146         2905       37       1.2737%   0.45x
+5-9        354          2351       44       1.8715%   0.67x
+10-49      535          12587      272      2.1610%   0.77x
+50-99      188          13508      326      2.4134%   0.86x
+100-499    198          35230      961      2.7278%   0.97x
+500+       24           91165      2793     3.0637%   1.09x
 
 [Top 10 Communities by Fraud Rate (min 3 members)]
 ----------------------------------------------------------------------
 Comm ID    Size     Fraud    Rate         Lift
 --------------------------------------------------
-1131       6        3        50.0000%      17.79x
-1176       6        2        33.3333%      11.86x
-1475       3        1        33.3333%      11.86x
-1495       3        1        33.3333%      11.86x
+1184       6        2        33.3333%      11.86x
+1485       3        1        33.3333%      11.86x
+1489       3        1        33.3333%      11.86x
+1499       3        1        33.3333%      11.86x
+1505       3        1        33.3333%      11.86x
+1543       3        1        33.3333%      11.86x
 1546       3        1        33.3333%      11.86x
-1557       3        1        33.3333%      11.86x
-1570       3        1        33.3333%      11.86x
-1607       3        1        33.3333%      11.86x
-1610       3        1        33.3333%      11.86x
-1643       3        1        33.3333%      11.86x
+1601       3        1        33.3333%      11.86x
+1605       3        1        33.3333%      11.86x
+1609       3        1        33.3333%      11.86x
 
 [Leiden Effectiveness Summary]
 --------------------------------------------------
-Fraud in small communities (size <= 10): 105 / 4,433 (2.37%)
-Average community fraud rate: 1.8654%
+Fraud in small communities (size <= 10): 90 / 4,433 (2.03%)
+Average community fraud rate: 1.7716%
 Overall fraud rate: 2.8102%
-Fraud in high-concentration communities (>2x avg rate): 374 / 4,433 (8.44%)
+Fraud in high-concentration communities (>2x avg rate): 392 / 4,433 (8.84%)
 
 ============================================================
 Feature Statistics Summary
 ============================================================
-       pagerank_vol_85  pagerank_vol_75  ...  leiden_macro_size  leiden_micro_size
-count     1.419083e+06     1.419083e+06  ...       1.419083e+06       1.419083e+06
-mean      6.342124e-06     6.342124e-06  ...       5.658602e+03       3.887438e+03
-std       1.396511e-05     1.187237e-05  ...       7.544840e+03       5.556958e+03
-min       9.744157e-07     1.600833e-06  ...       1.000000e+00       1.000000e+00
-25%       3.268293e-06     3.668360e-06  ...       1.240000e+02       9.300000e+01
-50%       4.833895e-06     5.284964e-06  ...       2.085000e+03       4.930000e+02
-75%       7.060580e-06     7.098526e-06  ...       6.828000e+03       5.363000e+03
-max       3.531519e-03     3.024428e-03  ...       2.653700e+04       1.829700e+04
+       pagerank_vol_85  pagerank_vol_75  pagerank_count      hits_hub  ...    flow_ratio  pagerank_rank_change  leiden_macro_size  leiden_micro_size
+count     1.419083e+06     1.419083e+06    1.419083e+06  1.419083e+06  ...  1.419083e+06          1.419083e+06       1.419083e+06       1.419083e+06
+mean      6.342124e-06     6.342124e-06    6.342124e-06  6.342124e-06  ...  5.420672e+06          4.584008e+02       5.692512e+03       3.854189e+03
+std       1.396511e-05     1.187237e-05    1.262705e-05  2.389343e-03  ...  2.090789e+09          2.624917e+04       7.595256e+03       5.490943e+03
+min       9.744157e-07     1.600833e-06    9.986310e-07 -7.096835e-15  ...  0.000000e+00         -1.586410e+05       1.000000e+00       1.000000e+00
+25%       3.268293e-06     3.668360e-06    3.395995e-06 -2.798696e-37  ...  0.000000e+00         -3.080000e+03       1.190000e+02       9.300000e+01
+50%       4.833895e-06     5.284964e-06    4.916512e-06  0.000000e+00  ...  4.584399e-01          0.000000e+00       2.130000e+03       5.000000e+02
+75%       7.060580e-06     7.098526e-06    7.465867e-06  5.824815e-34  ...  2.328417e+00          3.697000e+03       6.832000e+03       5.348000e+03
+max       3.531519e-03     3.024428e-03    3.215254e-03  9.999999e-01  ...  1.046302e+12          1.640130e+05       2.622300e+04       1.818100e+04
 
 [8 rows x 15 columns]
 
 ============================================================
 Rank Anomaly Analysis (reference: pr_vol_85)
 ============================================================
-Total rank anomaly flags: 62,106
-Fraud among rank anomalies: 2,273 (3.66%)
+Total rank anomaly flags: 62,108
+Fraud among rank anomalies: 2,282 (3.67%)
 Overall fraud rate: 1.55%
-Lift from rank anomaly detection: 2.36x
+Lift from rank anomaly detection: 2.37x
 
 Loading feature matrix from data/HI_Small/sliding_window_features.parquet...
 
@@ -172,19 +168,25 @@ Testing set:    283,817 rows (up to 2022-09-10)
 Class Imbalance Ratio (Neg/Pos) in Train: 105.47
 
 Training XGBoost Classifier...
-[0]	validation_0-aucpr:0.10416
-[50]	validation_0-aucpr:0.12223
-[100]	validation_0-aucpr:0.12418
-[140]	validation_0-aucpr:0.12372
+[0]	validation_0-aucpr:0.10762
+[50]	validation_0-aucpr:0.12519
+[100]	validation_0-aucpr:0.12759
+[133]	validation_0-aucpr:0.12688
 
-Best iteration: 90
+Best iteration: 83
 
 Evaluating on Future Temporal Window (Test Set)...
-Test AUPRC:   0.1330
-Test ROC-AUC: 0.7308
+Test AUPRC:   0.1348
+Test ROC-AUC: 0.7336
 
 Test Precision@K:
   @  10: 100.0000% (Lift: 36.23x)
   @  50: 100.0000% (Lift: 36.23x)
-  @ 100: 95.0000% (Lift: 34.42x)
-  @ 500: 67.0000% (Lift: 24.27x)
+  @ 100: 98.0000% (Lift: 35.50x)
+  @ 500: 65.8000% (Lift: 23.84x)
+  
+  
+  
+  Executed in  130.29 secs    fish           external
+   usr time  408.70 secs    0.24 millis  408.70 secs
+   sys time    5.66 secs    1.29 millis    5.66 secs
