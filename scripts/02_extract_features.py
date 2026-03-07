@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pandas as pd
 import networkx as nx
+import pyarrow.dataset as ds
 from tqdm import tqdm
 
 from src.config import DATA_PATH
@@ -58,48 +59,31 @@ from src.features.stability import RankStabilityTracker
 # Top-level worker function (must be picklable for ProcessPoolExecutor)
 # ---------------------------------------------------------------------------
 
-def process_window(
-    window_date: str,
-    day_edges: pd.DataFrame,
-    day_nodes: pd.DataFrame,
+def process_window_lazy(
+    date_str: str,
+    edges_path: Path,
+    nodes_path: Path,
     run_flags: dict,
 ) -> dict:
     """
-    Process a single temporal window: build graph, extract features, compute
-    evaluation metrics.
-
-    This function is designed to be called in a child process via
-    ``ProcessPoolExecutor``.  All extractors are instantiated locally inside
-    the function body to guarantee picklability — no shared mutable state
-    crosses process boundaries.
-
-    Parameters
-    ----------
-    window_date : str
-        The date string identifying this temporal window.
-    day_edges : pd.DataFrame
-        Edge rows for this window (columns: source, target, weight, volume,
-        count, amount_std).
-    day_nodes : pd.DataFrame
-        Node rows for this window (columns: entity_id, vol_sent, vol_recv,
-        tx_count).
-    run_flags : dict
-        Runtime configuration flags and per-window data:
-        - ``run_evaluation`` (bool)
-        - ``run_leiden`` (bool)
-        - ``evaluation_k_values`` (list[int])
-        - ``bad_actors`` (set) — pre-computed fraud labels for this date
-
-    Returns
-    -------
-    dict
-        - ``date``: The ``window_date`` string
-        - ``features``: List of feature dicts for every node (rank stability
-          fields set to placeholder 0 values)
-        - ``metrics``: List of evaluation metric dicts for this day
-        - ``pr_scores``: Flat ``{node: pr_vol_85_score}`` dict for the
-          sequential rank stability post-processing step
+    Worker function that loads only a single day of data from disk into RAM.
     """
+    import pyarrow.dataset as ds
+    import pandas as pd
+    import networkx as nx
+
+    # 1. Disk-Stream only the rows matching this specific date
+    day_edges = ds.dataset(edges_path, format="parquet").to_table(
+        filter=ds.field("window_date") == date_str
+    ).to_pandas()
+
+    day_nodes = ds.dataset(nodes_path, format="parquet").to_table(
+        filter=ds.field("window_date") == date_str
+    ).to_pandas()
+
+    if day_edges.empty:
+        return {"date": date_str, "features": [], "metrics": [], "pr_scores": {}}
+
     # ---- Instantiate extractors locally (picklability guarantee) ----------
     extractors: dict[str, FeatureExtractor] = {
         "pr_vol_85": PageRankVolumeExtractor(alpha=0.85),
@@ -114,7 +98,7 @@ def process_window(
         extractors["leiden_macro"] = LeidenCommunityExtractor(resolution=1.0)
         extractors["leiden_micro"] = LeidenCommunityExtractor(resolution=2.0)
 
-    current_date = pd.to_datetime(window_date)
+    current_date = pd.to_datetime(date_str)
 
     # ---- Build NetworkX DiGraph ------------------------------------------
     G = nx.from_pandas_edgelist(
@@ -237,8 +221,12 @@ def process_window(
         for node, feats in daily_metrics.get("pr_vol_85", {}).items()
     }
 
+    del day_edges
+    del day_nodes
+    del G
+
     return {
-        "date": window_date,
+        "date": date_str,
         "features": features,
         "metrics": eval_metric_records,
         "pr_scores": pr_scores,
@@ -391,13 +379,22 @@ def main() -> None:
     print("=" * 60)
 
     # ======================================================================
-    # 1. Load Data Engine Outputs
+    # 1. Scanning unique dates (Lazy Load)
     # ======================================================================
-    print("Loading Go Data Engine Parquet files...")
-    edges_df = pd.read_parquet(DATA_PATH / "aggregated_edges.parquet")
-    nodes_df = pd.read_parquet(DATA_PATH / "aggregated_nodes.parquet")
+    edges_path = DATA_PATH / "aggregated_edges.parquet"
+    nodes_path = DATA_PATH / "aggregated_nodes.parquet"
+
+    print(f"Scanning unique dates from {edges_path} (Lazy Load)...")
+    # Lazy load the dataset without pulling it into RAM
+    edges_dataset = ds.dataset(edges_path, format="parquet")
+
+    # Extract only the window_date column to find out what days we need to process
+    date_table = edges_dataset.to_table(columns=["window_date"])
+    unique_dates = sorted(list(set(date_table["window_date"].to_pylist())))
+    print(f"Found {len(unique_dates)} temporal windows.\n")
 
     # Load raw laundering data and accounts for ground truth labels
+    print("Loading ground truth labels...")
     laundering_df = pd.read_parquet(DATA_PATH / "2_filtered_laundering_transactions.parquet")
     accounts_df = pd.read_parquet(DATA_PATH / "3_filtered_accounts.parquet")
 
@@ -418,12 +415,8 @@ def main() -> None:
 
     laundering_df["timestamp"] = laundering_df["timestamp"].dt.tz_localize(None)
 
-    unique_dates = sorted(edges_df["window_date"].unique())
-    print(f"Loaded {len(unique_dates)} temporal windows.\n")
-
     # ======================================================================
-    # 2. Pre-compute fraud labels per window date (avoids sending full
-    #    laundering_df to each worker process)
+    # 2. Pre-compute fraud labels per window date
     # ======================================================================
     print("Pre-computing per-window fraud labels...")
     date_bad_actors: dict[str, set] = {}
@@ -438,14 +431,8 @@ def main() -> None:
             )
         date_bad_actors[date_str] = bad_actors
 
-    # ======================================================================
-    # 3. Group edges and nodes by window_date
-    # ======================================================================
-    edges_by_date = {date_str: group for date_str, group in edges_df.groupby("window_date")}
-    nodes_by_date = {date_str: group for date_str, group in nodes_df.groupby("window_date")}
-
-    # Free memory — the original DataFrames are no longer needed
-    del edges_df, nodes_df
+    # Free memory
+    del laundering_df, accounts_df
 
     # ======================================================================
     # 4. Parallel Map: ProcessPoolExecutor over temporal windows
@@ -456,7 +443,9 @@ def main() -> None:
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    max_workers = min(4, multiprocessing.cpu_count())
+    # CRITICAL LIMIT FOR 8GB RAM: Do not exceed 2 workers.
+    # Each worker will load 1 day into RAM.
+    max_workers = 2
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     collected_results: list[dict] = []
@@ -469,18 +458,21 @@ def main() -> None:
                 "bad_actors": date_bad_actors[date_str],
             }
             future = executor.submit(
-                process_window,
+                process_window_lazy,
                 date_str,
-                edges_by_date[date_str],
-                nodes_by_date[date_str],
+                edges_path,
+                nodes_path,
                 run_flags,
             )
             futures[future] = date_str
 
         with tqdm(total=len(unique_dates), desc="Processing days", unit="day") as pbar:
             for future in as_completed(futures):
-                result = future.result()  # propagates worker exceptions
-                collected_results.append(result)
+                try:
+                    result = future.result()  # propagates worker exceptions
+                    collected_results.append(result)
+                except Exception as exc:
+                    print(f"Day generated an exception: {exc}")
                 pbar.update(1)
 
     # ======================================================================
