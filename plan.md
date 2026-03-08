@@ -2,7 +2,7 @@
 
 The pipeline will use a **Discrete Sliding Window** to process the AMLworld dataset.
 
-1. **Data Ingestion:** Load the transactions from `1_filtered_normal_transactions.parquet` and `2_filtered_laundering_transactions.parquet` exactly as they are. Maintain all transaction types and currencies to preserve the global graph topology.
+1. **Data Ingestion:** Load the transactions from `1_filtered_transactions.parquet` exactly as they are. Maintain all transaction types and currencies to preserve the global graph topology.
 2. **Window Slicing:** Group transactions into temporal windows defined by `WINDOW_DAYS` (e.g., 3 days or 7 days), advancing the window chronologically by `STEP_SIZE` (1 day).
 3. **Graph Construction:** Build a directed graph (`nx.DiGraph`) for each window.
 4. **Edge Aggregation:** For any two nodes $A$ and $B$, aggregate their transactions within the window into two distinct edge attributes:

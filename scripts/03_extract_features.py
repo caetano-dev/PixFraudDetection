@@ -395,8 +395,11 @@ def main() -> None:
 
     # Load raw laundering data and accounts for ground truth labels
     print("Loading ground truth labels...")
-    laundering_df = pd.read_parquet(DATA_PATH / "2_filtered_laundering_transactions.parquet")
-    accounts_df = pd.read_parquet(DATA_PATH / "3_filtered_accounts.parquet")
+    all_tx_df = pd.read_parquet(DATA_PATH / "1_filtered_transactions.parquet")
+    accounts_df = pd.read_parquet(DATA_PATH / "2_filtered_accounts.parquet")
+    
+    laundering_df = all_tx_df[all_tx_df["is_laundering"] == 1].copy()
+    del all_tx_df
 
     # Map from_account and to_account to actual Entity IDs
     laundering_df = laundering_df.merge(
