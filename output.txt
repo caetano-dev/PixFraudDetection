@@ -85,16 +85,16 @@ Aggregate Evaluation Summary (Mean Across All Days)
 
 [BETWEENNESS]
 ----------------------------------------
-  Mean ROC-AUC:            0.6366
-  Mean Average Precision:  0.0641
+  Mean ROC-AUC:            0.6389
+  Mean Average Precision:  0.0644
 
   Mean Precision@K:
     @    1: 100.0000% (lift: 102.16x)
     @    2: 100.0000% (lift: 102.16x)
-    @   10: 81.1111% (lift: 70.26x)
-    @   50: 34.6667% (lift: 28.82x)
-    @  100: 39.7778% (lift: 34.04x)
-    @  500: 27.2222% (lift: 19.87x)
+    @   10: 90.0000% (lift: 89.16x)
+    @   50: 40.2222% (lift: 36.49x)
+    @  100: 32.6667% (lift: 28.71x)
+    @  500: 24.5333% (lift: 18.12x)
 
 ============================================================
 Leiden Community Detection Analysis

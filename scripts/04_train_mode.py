@@ -11,7 +11,7 @@ This script executes the final phase of the TCC:
 import pandas as pd
 import numpy as np
 import xgboost as xgb
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import average_precision_score, roc_auc_score, f1_score
 import shap
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -87,36 +87,67 @@ def main():
     print(f"\nClass Imbalance Ratio (Neg/Pos) in Train: {pos_weight:.2f}")
 
     # 4. Train XGBoost Model with Validation Early Stopping
-    print("\nTraining XGBoost Classifier...")
+    # 
+    # --- 1. OPTIMIZED HYPERPARAMETERS ---
+    # Use sqrt of imbalance to prevent Precision collapse while aiding Recall
+    imbalance_ratio = len(y_train[y_train == 0]) / len(y_train[y_train == 1])
+    tuned_scale_pos_weight = np.sqrt(imbalance_ratio) 
+
+    print("\nTraining XGBoost Classifier with Tuned Graph Parameters...")
     model = xgb.XGBClassifier(
-        n_estimators=500,
-        max_depth=6,
-        learning_rate=0.05,
-        scale_pos_weight=pos_weight,
+        objective='binary:logistic',
+        eval_metric='aucpr',
+        scale_pos_weight=tuned_scale_pos_weight,
+        learning_rate=0.05,          # Slower, more robust convergence
+        max_depth=5,                 # Restrict depth to prevent noise memorization
+        subsample=0.8,               # Row stochasticity
+        colsample_bytree=0.8,        # Feature stochasticity
+        min_child_weight=3,          # Require more evidence to create a leaf
+        n_estimators=1000,
         random_state=42,
-        eval_metric="aucpr",
-        early_stopping_rounds=50,
-        n_jobs=-1
+        tree_method='hist',           # Faster execution for large datasets
+        early_stopping_rounds=50
     )
     
     model.fit(
-        X_train, 
-        y_train,
+        X_train, y_train,
         eval_set=[(X_val, y_val)],
         verbose=50
     )
-    
-    print(f"\nBest iteration: {model.best_iteration}")
 
-    # 5. Evaluation Metrics
+    # --- 2. DYNAMIC THRESHOLD TUNING (ON VALIDATION SET) ---
+    from sklearn.metrics import precision_recall_curve
+    
+    print("\nExtracting Optimal F1 Threshold from Validation Set...")
+    val_probs = model.predict_proba(X_val)[:, 1]
+    precisions, recalls, thresholds = precision_recall_curve(y_val, val_probs)
+    
+    # Calculate F1 for all thresholds, ignoring division by zero
+    f1_scores = np.divide(
+        2 * precisions * recalls, 
+        precisions + recalls, 
+        out=np.zeros_like(precisions), 
+        where=(precisions + recalls) != 0
+    )
+    best_threshold_idx = np.argmax(f1_scores)
+    optimal_threshold = thresholds[best_threshold_idx] if best_threshold_idx < len(thresholds) else 0.5
+    print(f"Optimal Threshold Found: {optimal_threshold:.4f}")
+
+    # --- 3. EVALUATION (ON TEST SET) ---
     print("\nEvaluating on Future Temporal Window (Test Set)...")
     y_probs = model.predict_proba(X_test)[:, 1]
     
     auprc = average_precision_score(y_test, y_probs)
     roc_auc = roc_auc_score(y_test, y_probs)
     
+    # Apply the empirically proven threshold instead of 0.5
+    y_pred = (y_probs >= optimal_threshold).astype(int)
+    f1 = f1_score(y_test, y_pred)
+
     print(f"Test AUPRC:   {auprc:.4f}")
     print(f"Test ROC-AUC: {roc_auc:.4f}")
+    print(f"Test F1-Score: {f1:.4f} (at {optimal_threshold:.4f} threshold)")
+
     
     print("\nTest Precision@K:")
     baseline_fraud_rate = np.mean(y_test)

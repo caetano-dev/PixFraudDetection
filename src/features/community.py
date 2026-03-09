@@ -202,12 +202,32 @@ class LeidenCommunityExtractor(FeatureExtractor):
                 G_undirected, resolution=self._resolution
             )
 
-            for community_members in raw_communities:
+            # Compute modularity using igraph's native method so we can
+            # mathematically defend the clustering quality at thesis defence.
+            # We need a fresh igraph conversion here because _run_leiden_on_graph
+            # returns plain Python lists; igraph.modularity() requires the
+            # membership vector aligned to its own vertex ordering.
+            _ig_for_mod = ig.Graph.from_networkx(G_undirected)
+            _nx_names_mod: list = _ig_for_mod.vs["_nx_name"]
+            _name_to_idx: dict = {name: idx for idx, name in enumerate(_nx_names_mod)}
+
+            # Build a membership vector in igraph vertex order from the
+            # community lists returned by _run_leiden_on_graph.
+            _membership: list[int] = [0] * _ig_for_mod.vcount()
+            for comm_idx, community_members in enumerate(raw_communities):
+                for node in community_members:
+                    if node in _name_to_idx:
+                        _membership[_name_to_idx[node]] = comm_idx
+
+            mod_score: float = _ig_for_mod.modularity(_membership)
+
+            for comm_idx, community_members in enumerate(raw_communities):
                 community_size = len(community_members)
                 for node in community_members:
                     node_features[node] = {
                         "leiden_id": next_community_id,
                         "leiden_size": community_size,
+                        "leiden_modularity": mod_score,
                     }
                 next_community_id += 1
 
@@ -233,21 +253,38 @@ class LeidenCommunityExtractor(FeatureExtractor):
                     sub_communities = _run_leiden_on_graph(
                         subgraph, resolution=self._resolution
                     )
+
+                    # Compute per-component modularity for the fallback path.
+                    _ig_sub = ig.Graph.from_networkx(subgraph)
+                    _sub_names: list = _ig_sub.vs["_nx_name"]
+                    _sub_name_to_idx: dict = {
+                        name: idx for idx, name in enumerate(_sub_names)
+                    }
+                    _sub_membership: list[int] = [0] * _ig_sub.vcount()
+                    for comm_idx, community_members in enumerate(sub_communities):
+                        for node in community_members:
+                            if node in _sub_name_to_idx:
+                                _sub_membership[_sub_name_to_idx[node]] = comm_idx
+                    sub_mod_score: float = _ig_sub.modularity(_sub_membership)
+
                     for community_members in sub_communities:
                         community_size = len(community_members)
                         for node in community_members:
                             node_features[node] = {
                                 "leiden_id": next_community_id,
                                 "leiden_size": community_size,
+                                "leiden_modularity": sub_mod_score,
                             }
                         next_community_id += 1
                 except Exception:
                     # Last resort: treat the entire component as one community.
+                    # Modularity of a single-community partition is 0 by definition.
                     community_size = len(component)
                     for node in component:
                         node_features[node] = {
                             "leiden_id": next_community_id,
                             "leiden_size": community_size,
+                            "leiden_modularity": 0.0,
                         }
                     next_community_id += 1
 
@@ -259,9 +296,12 @@ class LeidenCommunityExtractor(FeatureExtractor):
         missing_nodes = all_nodes - set(node_features.keys())
         if missing_nodes:
             for node in missing_nodes:
+                # Singleton communities have no cross-community edges, so their
+                # contribution to modularity is 0.
                 node_features[node] = {
                     "leiden_id": next_community_id,
                     "leiden_size": 1,
+                    "leiden_modularity": 0.0,
                 }
                 next_community_id += 1
 

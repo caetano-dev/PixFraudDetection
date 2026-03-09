@@ -68,10 +68,6 @@ def process_window_lazy(
     """
     Worker function that loads only a single day of data from disk into RAM.
     """
-    import pyarrow.dataset as ds
-    import pandas as pd
-    import networkx as nx
-
     # 1. Disk-Stream only the rows matching this specific date
     day_edges = ds.dataset(edges_path, format="parquet").to_table(
         filter=ds.field("window_date") == date_str
@@ -89,8 +85,8 @@ def process_window_lazy(
         "pr_vol_85": PageRankVolumeExtractor(alpha=0.85),
         "pr_vol_75": PageRankVolumeExtractor(alpha=0.75),
         "pr_count": PageRankFrequencyExtractor(alpha=0.85),
-        "hits": HITSExtractor(max_iter=100),
-        "betweenness": BetweennessExtractor(k=50),
+        "hits": HITSExtractor(max_iter=150), 
+        "betweenness": BetweennessExtractor(k=80),
         "k_core": KCoreExtractor(),
     }
 
@@ -140,8 +136,10 @@ def process_window_lazy(
             "hits_auth": daily_metrics.get("hits", {}).get(node, {}).get("hits_auth", 0.0),
             "leiden_macro_id": daily_metrics.get("leiden_macro", {}).get(node, {}).get("leiden_id", -1),
             "leiden_macro_size": daily_metrics.get("leiden_macro", {}).get(node, {}).get("leiden_size", 0),
+            "leiden_macro_modularity": daily_metrics.get("leiden_macro", {}).get(node, {}).get("leiden_modularity", 0.0),
             "leiden_micro_id": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_id", -1),
             "leiden_micro_size": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_size", 0),
+            "leiden_micro_modularity": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_modularity", 0.0),
             "degree": G.degree(node),
             "in_degree": G.in_degree(node),
             "out_degree": G.out_degree(node),
@@ -335,6 +333,11 @@ def _analyze_leiden_effectiveness(results_df: pd.DataFrame) -> None:
 
     print("\n[Leiden Effectiveness Summary]")
     print("-" * 50)
+
+    if "leiden_modularity" in valid_df.columns:
+        mean_modularity = valid_df["leiden_modularity"].mean()
+        print(f"Mean Leiden Modularity (Q): {mean_modularity:.4f}")
+
 
     small_community_threshold = 10
     small_communities = final_df[final_df["leiden_size"] <= small_community_threshold]
@@ -582,7 +585,11 @@ def main() -> None:
 
     if RUN_LEIDEN:
         leiden_analysis_df = results_df.rename(
-            columns={"leiden_macro_id": "leiden_id", "leiden_macro_size": "leiden_size"}
+            columns={
+                "leiden_macro_id": "leiden_id",
+                "leiden_macro_size": "leiden_size",
+                "leiden_macro_modularity": "leiden_modularity",
+            }
         )
         _analyze_leiden_effectiveness(leiden_analysis_df)
 
@@ -605,7 +612,7 @@ def main() -> None:
         "pagerank_rank_change",
     ]
     if RUN_LEIDEN:
-        summary_cols += ["leiden_macro_size", "leiden_micro_size"]
+        summary_cols += ["leiden_macro_size", "leiden_micro_size", "leiden_macro_modularity", "leiden_micro_modularity"]
 
     print(results_df[[c for c in summary_cols if c in results_df.columns]].describe())
 
