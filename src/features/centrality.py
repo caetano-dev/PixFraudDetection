@@ -32,8 +32,7 @@ class PageRankVolumeExtractor(FeatureExtractor):
     PageRank weighted by aggregated transaction *volume*.
 
     Uses ``weight='weight'``, where the ``weight`` edge attribute is the
-    Oddball-inspired composite weight computed by
-    :func:`src.graph.builder.build_daily_graph`:
+    Oddball-inspired composite weight computed by the DuckDB aggregation script (02_aggregate_graph.sql):
 
         W_edge = volume * log2(1 + count) * (1 + 1 / (1 + CV))
 

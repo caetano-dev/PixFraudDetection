@@ -40,7 +40,7 @@ def compute_precision_at_k(y_true: np.ndarray, y_probs: np.ndarray, k_values: li
 def main():
     features_path = DATA_PATH / OUTPUT_FEATURES_FILE
     if not features_path.exists():
-        raise FileNotFoundError(f"Missing {features_path}. Run 02_extract_features.py first.")
+        raise FileNotFoundError(f"Missing {features_path}. Run 03_extract_features.py first.")
 
     print(f"Loading feature matrix from {features_path}...")
     df = pd.read_parquet(features_path)

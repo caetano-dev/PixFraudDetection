@@ -3,7 +3,7 @@ Abstract base class for the Strategy Pattern feature extractors.
 
 Every concrete feature extractor in this package inherits from
 :class:`FeatureExtractor` and must implement the single ``extract``
-method.  The orchestrator in ``scripts/02_extract_features.py`` treats
+method.  The orchestrator in ``scripts/03_extract_features.py`` treats
 all extractors through this uniform interface, making it trivial to
 enable, disable, or swap algorithms without touching the pipeline loop.
 
@@ -12,7 +12,7 @@ Strategy Pattern roles
 * **Strategy interface** → :class:`FeatureExtractor` (this module)
 * **Concrete strategies** → :mod:`src.features.centrality`,
   :mod:`src.features.community`, :mod:`src.features.stability`
-* **Context** → ``scripts/02_extract_features.py``
+* **Context** → ``scripts/03_extract_features.py``
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ class FeatureExtractor(ABC):
         ----------
         G : nx.DiGraph
             The directed transaction graph for the current temporal window,
-            as produced by :func:`src.graph.builder.build_daily_graph`.
+            as constructed from the DuckDB aggregated edge Parquet files.
 
         Returns
         -------

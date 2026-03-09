@@ -163,8 +163,7 @@ class LeidenCommunityExtractor(FeatureExtractor):
         Parameters
         ----------
         G : nx.DiGraph
-            Directed transaction graph for the current window, as produced by
-            :func:`src.graph.builder.build_daily_graph`.
+            Directed transaction graph for the current window.
 
         Returns
         -------

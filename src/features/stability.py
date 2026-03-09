@@ -64,7 +64,7 @@ class RankStabilityTracker:
     --------
     >>> tracker = RankStabilityTracker(top_k=100, threshold_percentile=95.0)
     >>> for current_date, window_df in generator:
-    ...     G = build_daily_graph(window_df)
+    ...     G = nx.from_pandas_edgelist(day_edges, source="source", target="target", edge_attr=["weight"], create_using=nx.DiGraph)
     ...     pr_scores = PageRankVolumeExtractor().extract(G)
     ...     # Flatten to {node: score} for the tracker
     ...     flat_scores = {n: v["pagerank"] for n, v in pr_scores.items()}

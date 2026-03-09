@@ -204,8 +204,7 @@ def compute_daily_evaluation_metrics(
         ``{node_id: authority_score}`` for the current window.
     bad_actors : set
         Set of entity IDs identified as bad actors **up to** the current date
-        (time-aware labels — no future leakage).  Produced by
-        :func:`src.data.loader.get_bad_actors_up_to_date`.
+        (time-aware labels — no future leakage). Pre-computed during the feature extraction initialization.
     k_values : list[int], optional
         K values forwarded to :func:`evaluate_ranking_effectiveness`.
 
