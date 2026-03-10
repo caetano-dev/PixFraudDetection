@@ -27,7 +27,7 @@ import networkx as nx
 import pyarrow.dataset as ds
 from tqdm import tqdm
 
-from src.config import DATA_PATH
+from src.config import DATA_PATH, PR_ALPHA_DEEP, PR_ALPHA_SHALLOW, PR_MAX_ITER, BETWEENNESS_K
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
@@ -82,11 +82,11 @@ def process_window_lazy(
 
     # ---- Instantiate extractors locally (picklability guarantee) ----------
     extractors: dict[str, FeatureExtractor] = {
-        "pr_vol_85": PageRankVolumeExtractor(alpha=0.85),
-        "pr_vol_75": PageRankVolumeExtractor(alpha=0.75),
-        "pr_count": PageRankFrequencyExtractor(alpha=0.85),
-        "hits": HITSExtractor(max_iter=150), 
-        "betweenness": BetweennessExtractor(k=80),
+        "pr_vol_deep": PageRankVolumeExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
+        "pr_vol_shallow": PageRankVolumeExtractor(alpha=PR_ALPHA_SHALLOW, max_iter=PR_MAX_ITER),
+        "pr_count": PageRankFrequencyExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
+        "hits": HITSExtractor(max_iter=150),
+        "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
         "k_core": KCoreExtractor(),
     }
 
@@ -129,9 +129,9 @@ def process_window_lazy(
         record: dict = {
             "date": current_date.date(),
             "entity_id": node,
-            "pagerank_vol_85": daily_metrics.get("pr_vol_85", {}).get(node, {}).get("pagerank", 0.0),
-            "pagerank_vol_75": daily_metrics.get("pr_vol_75", {}).get(node, {}).get("pagerank", 0.0),
-            "pagerank_count": daily_metrics.get("pr_count", {}).get(node, {}).get("pagerank_count", 0.0),
+            "pr_vol_deep": daily_metrics.get("pr_vol_deep", {}).get(node, {}).get("pagerank", 0.0),
+            "pr_vol_shallow": daily_metrics.get("pr_vol_shallow", {}).get(node, {}).get("pagerank", 0.0),
+            "pr_count": daily_metrics.get("pr_count", {}).get(node, {}).get("pagerank_count", 0.0),
             "hits_hub": daily_metrics.get("hits", {}).get(node, {}).get("hits_hub", 0.0),
             "hits_auth": daily_metrics.get("hits", {}).get(node, {}).get("hits_auth", 0.0),
             "leiden_macro_id": daily_metrics.get("leiden_macro", {}).get(node, {}).get("leiden_id", -1),
@@ -160,8 +160,16 @@ def process_window_lazy(
     eval_metric_records: list[dict] = []
 
     if run_flags.get("run_evaluation", False):
-        pagerank_scores = {
-            node: daily_metrics.get("pr_vol_85", {}).get(node, {}).get("pagerank", 0.0)
+        pr_vol_deep_scores = {
+            node: daily_metrics.get("pr_vol_deep", {}).get(node, {}).get("pagerank", 0.0)
+            for node in G.nodes()
+        }
+        pr_vol_shallow_scores = {
+            node: daily_metrics.get("pr_vol_shallow", {}).get(node, {}).get("pagerank", 0.0)
+            for node in G.nodes()
+        }
+        pr_count_scores = {
+            node: daily_metrics.get("pr_count", {}).get(node, {}).get("pagerank_count", 0.0)
             for node in G.nodes()
         }
         hits_hubs = {
@@ -181,7 +189,7 @@ def process_window_lazy(
             for node in G.nodes()
         }
 
-        if pagerank_scores:
+        if pr_vol_deep_scores:
             evaluation_k_values = run_flags.get("evaluation_k_values", [])
             valid_k_values = [k for k in evaluation_k_values if k <= len(G)]
             if valid_k_values:
@@ -190,7 +198,9 @@ def process_window_lazy(
                 eval_metrics = compute_daily_evaluation_metrics(
                     bad_actors=bad_actors_up_to_date,
                     k_values=valid_k_values,
-                    pagerank=pagerank_scores,
+                    pr_vol_deep=pr_vol_deep_scores,
+                    pr_vol_shallow=pr_vol_shallow_scores,
+                    pr_count=pr_count_scores,
                     hits_hub=hits_hubs,
                     hits_auth=hits_auths,
                     betweenness=betweenness_scores,
@@ -216,7 +226,7 @@ def process_window_lazy(
     # ---- PageRank scores for sequential rank stability step ---------------
     pr_scores: dict = {
         node: feats.get("pagerank", 0.0)
-        for node, feats in daily_metrics.get("pr_vol_85", {}).items()
+        for node, feats in daily_metrics.get("pr_vol_deep", {}).items()
     }
 
     del day_edges
@@ -508,7 +518,7 @@ def main() -> None:
                 all_rank_stability.append(
                     {
                         "date": pd.to_datetime(result["date"]).date(),
-                        "algorithm": "pr_vol_85",
+                        "algorithm": "pr_vol_deep",
                         "stability_score": stability_result["stability_score"],
                         "num_new_entrants": stability_result["num_new_entrants"],
                         "num_dropouts": stability_result["num_dropouts"],
@@ -553,7 +563,7 @@ def main() -> None:
         print("Aggregate Evaluation Summary (Mean Across All Days)")
         print("=" * 60)
 
-        for algo in ["pagerank", "hits_hub", "hits_auth", "k_core", "betweenness"]:
+        for algo in ["pr_vol_deep", "pr_vol_shallow", "pr_count", "hits_hub", "hits_auth", "k_core", "betweenness"]:
             algo_df = metrics_df[metrics_df["algorithm"] == algo]
             if algo_df.empty:
                 continue
@@ -597,9 +607,9 @@ def main() -> None:
     print("Feature Statistics Summary")
     print("=" * 60)
     summary_cols = [
-        "pagerank_vol_85",
-        "pagerank_vol_75",
-        "pagerank_count",
+        "pr_vol_deep",
+        "pr_vol_shallow",
+        "pr_count",
         "hits_hub",
         "hits_auth",
         "betweenness",
@@ -618,7 +628,7 @@ def main() -> None:
 
     if RUN_RANK_STABILITY and results_df["is_rank_anomaly"].sum() > 0:
         print("\n" + "=" * 60)
-        print("Rank Anomaly Analysis (reference: pr_vol_85)")
+        print("Rank Anomaly Analysis (reference: pr_vol_deep)")
         print("=" * 60)
         anomaly_df = results_df[results_df["is_rank_anomaly"] == 1]
         fraud_in_anomalies = anomaly_df["is_fraud"].sum()

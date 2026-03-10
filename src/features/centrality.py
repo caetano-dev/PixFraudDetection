@@ -30,28 +30,14 @@ from src.features.base import FeatureExtractor
 class PageRankVolumeExtractor(FeatureExtractor):
     """
     PageRank weighted by aggregated transaction *volume*.
-
-    Uses ``weight='weight'``, where the ``weight`` edge attribute is the
-    Oddball-inspired composite weight computed by the DuckDB aggregation script (02_aggregate_graph.sql):
-
-        W_edge = volume * log2(1 + count) * (1 + 1 / (1 + CV))
-
-    A high score identifies "heavy-hitter" nodes that are central to large
-    flows of money — a primary signal for layering in AML detection.
-
-    Parameters
-    ----------
-    alpha : float
-        PageRank damping factor.  Defaults to :data:`src.config.PAGERANK_ALPHA`
-        (0.85 — the standard NetworkX / Google value).
-
-    Returns (via ``extract``)
-    -------------------------
-    ``{"pagerank": float}`` per node, or ``{}`` on algorithm failure.
     """
-
-    def __init__(self, alpha: float = PAGERANK_ALPHA) -> None:
+    def __init__(self, alpha: float, max_iter: int) -> None:
         self._alpha = alpha
+        self._max_iter = max_iter
+
+    @property
+    def name(self) -> str:
+        return f"PageRankVolumeExtractor(alpha={self._alpha})"
 
     def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float]]:
         """
@@ -72,7 +58,7 @@ class PageRankVolumeExtractor(FeatureExtractor):
             return {}
 
         try:
-            scores: dict = nx.pagerank(G, weight="weight", alpha=self._alpha)
+            scores: dict = nx.pagerank(G, weight="weight", alpha=self._alpha, max_iter=self._max_iter)
         except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
             return {}
 
@@ -82,27 +68,14 @@ class PageRankVolumeExtractor(FeatureExtractor):
 class PageRankFrequencyExtractor(FeatureExtractor):
     """
     PageRank weighted by transaction *frequency* (count).
-
-    Uses ``weight='count'``, where the ``count`` edge attribute is the raw
-    number of individual transactions that were aggregated onto each directed
-    edge by :func:`src.graph.builder.build_daily_graph`.
-
-    A high score identifies "smurfing" nodes involved in a high number of
-    transactions regardless of individual transaction size — a key pattern
-    in structuring / smurfing AML typologies.
-
-    Parameters
-    ----------
-    alpha : float
-        PageRank damping factor.  Defaults to :data:`src.config.PAGERANK_ALPHA`.
-
-    Returns (via ``extract``)
-    -------------------------
-    ``{"pagerank_count": float}`` per node, or ``{}`` on algorithm failure.
     """
-
-    def __init__(self, alpha: float = PAGERANK_ALPHA) -> None:
+    def __init__(self, alpha: float, max_iter: int) -> None:
         self._alpha = alpha
+        self._max_iter = max_iter
+
+    @property
+    def name(self) -> str:
+        return f"PageRankFrequencyExtractor(alpha={self._alpha})"
 
     def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float]]:
         """
@@ -124,7 +97,7 @@ class PageRankFrequencyExtractor(FeatureExtractor):
             return {}
 
         try:
-            scores: dict = nx.pagerank(G, weight="count", alpha=self._alpha)
+            scores: dict = nx.pagerank(G, weight="count", alpha=self._alpha, max_iter=self._max_iter)
         except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
             return {}
 
@@ -219,7 +192,7 @@ class BetweennessExtractor(FeatureExtractor):
 
     def __init__(self, k: int = 50, seed: int = 42) -> None:
         self._k = k
-        self._seed = seed
+        self._seed = seed if seed is not None else 42
 
     @property
     def name(self) -> str:

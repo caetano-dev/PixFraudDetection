@@ -19,12 +19,26 @@ _DATASET_CONFIG = {
     "SMALL": {
         "data_path": Path("data/HI_Small"),
         "window_days": 3,
+        "pr_alpha_deep": 0.85,       # 6.6 hops expected walk
+        "pr_alpha_shallow": 0.75,    # 4 hops expected walk
+        "pr_max_iter": 100,
+        "betweenness_k": 80          # Monte Carlo pivot nodes
     },
     "LARGE": {
         "data_path": Path("data/HI_Large"),
         "window_days": 7,
+        "pr_alpha_deep": 0.95,       # 20 hops expected walk (required for 14-hop cycles)
+        "pr_alpha_shallow": 0.75,    # 4 hops expected walk
+        "pr_max_iter": 1000,         # Required for alpha=0.95 convergence
+        "betweenness_k": 500         # Scaled up for larger graph
     },
 }
+
+# Expose these variables at the module level
+PR_ALPHA_DEEP: float = _DATASET_CONFIG[DATASET_SIZE]["pr_alpha_deep"]
+PR_ALPHA_SHALLOW: float = _DATASET_CONFIG[DATASET_SIZE]["pr_alpha_shallow"]
+PR_MAX_ITER: int = _DATASET_CONFIG[DATASET_SIZE]["pr_max_iter"]
+BETWEENNESS_K: int = _DATASET_CONFIG[DATASET_SIZE]["betweenness_k"]
 
 DATA_PATH: Path = _DATASET_CONFIG[DATASET_SIZE]["data_path"]
 
