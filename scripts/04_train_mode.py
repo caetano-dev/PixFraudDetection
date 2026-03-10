@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 from sklearn.metrics import average_precision_score, roc_auc_score, f1_score
+from sklearn.ensemble import IsolationForest
 import shap
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -154,6 +155,34 @@ def main():
     k_vals = [10, 50, 100, 500]
     prec_at_k = compute_precision_at_k(y_test, y_probs, k_vals)
     for k, prec in prec_at_k.items():
+        lift = prec / baseline_fraud_rate if baseline_fraud_rate > 0 else 0
+        print(f"  @ {k:>3}: {prec:.4%} (Lift: {lift:.2f}x)")
+
+    # 5. UNSUPERVISED BENCHMARK — Isolation Forest
+    print("\n========================================")
+    print("[UNSUPERVISED BENCHMARK] Training Isolation Forest...")
+    print("========================================")
+
+    train_fraud_rate = float(np.mean(y_train))
+
+    iso_forest = IsolationForest(
+        n_estimators=200,
+        contamination=train_fraud_rate,
+        random_state=42,
+        n_jobs=-1
+    )
+    iso_forest.fit(X_train)
+    iso_scores = -iso_forest.decision_function(X_test)
+
+    iso_auprc  = average_precision_score(y_test, iso_scores)
+    iso_roc_auc = roc_auc_score(y_test, iso_scores)
+
+    print(f"Isolation Forest Test AUPRC:   {iso_auprc:.4f}")
+    print(f"Isolation Forest Test ROC-AUC: {iso_roc_auc:.4f}")
+
+    print("\nIsolation Forest Test Precision@K:")
+    iso_prec_at_k = compute_precision_at_k(y_test, iso_scores, k_vals)
+    for k, prec in iso_prec_at_k.items():
         lift = prec / baseline_fraud_rate if baseline_fraud_rate > 0 else 0
         print(f"  @ {k:>3}: {prec:.4%} (Lift: {lift:.2f}x)")
 
