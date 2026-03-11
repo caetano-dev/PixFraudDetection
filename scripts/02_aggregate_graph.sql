@@ -10,10 +10,27 @@ WITH RawTx AS (
     SELECT
         from_account,
         to_account,
-        amount_sent_c,
         is_laundering,
         -- DuckDB natively parses Parquet logical types. No manual epoch math required.
-        CAST(timestamp AS TIMESTAMP) AS ts
+        CAST(timestamp AS TIMESTAMP) AS ts,
+        amount_sent_c * CASE payment_currency
+            WHEN 'US Dollar' THEN 1.0
+            WHEN 'Euro' THEN 1.05
+            WHEN 'UK Pound' THEN 1.25
+            WHEN 'Swiss Franc' THEN 1.10
+            WHEN 'Australian Dollar' THEN 0.70
+            WHEN 'Canadian Dollar' THEN 0.75
+            WHEN 'Brazil Real' THEN 0.20
+            WHEN 'Shekel' THEN 0.28
+            WHEN 'Saudi Riyal' THEN 0.27
+            WHEN 'Yuan' THEN 0.15
+            WHEN 'Mexican Peso' THEN 0.05
+            WHEN 'Ruble' THEN 0.013
+            WHEN 'Rupee' THEN 0.012
+            WHEN 'Yen' THEN 0.007
+            WHEN 'Bitcoin' THEN 30000.0
+            ELSE 1.0
+        END AS amount_sent_usd
     FROM read_parquet([
         'data/HI_Small/1_filtered_transactions.parquet',
     ])
@@ -34,7 +51,7 @@ ResolvedTx AS (
         t.ts,
         src.entity_id AS source_entity,
         tgt.entity_id AS target_entity,
-        t.amount_sent_c / (src_c.entity_count * tgt_c.entity_count) AS adj_sent
+        t.amount_sent_usd / (src_c.entity_count * tgt_c.entity_count) AS adj_sent
     FROM RawTx t
     JOIN AccMap src ON t.from_account = src.acc_num
     JOIN AccMap tgt ON t.to_account = tgt.acc_num
