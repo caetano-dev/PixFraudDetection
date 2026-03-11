@@ -22,7 +22,8 @@ _DATASET_CONFIG = {
         "pr_alpha_deep": 0.85,       # 6.6 hops expected walk
         "pr_alpha_shallow": 0.75,    # 4 hops expected walk
         "pr_max_iter": 100,
-        "betweenness_k": 80          # Monte Carlo pivot nodes
+        "betweenness_k": 80,          # Monte Carlo pivot nodes
+        "hits_max_iter": 500         # Add this
     },
     "LARGE": {
         "data_path": Path("data/HI_Large"),
@@ -30,7 +31,8 @@ _DATASET_CONFIG = {
         "pr_alpha_deep": 0.95,       # 20 hops expected walk (required for 14-hop cycles)
         "pr_alpha_shallow": 0.75,    # 4 hops expected walk
         "pr_max_iter": 1000,         # Required for alpha=0.95 convergence
-        "betweenness_k": 500         # Scaled up for larger graph
+        "betweenness_k": 500,        # Scaled up for larger graph
+        "hits_max_iter": 1000        # Add this
     },
 }
 
@@ -48,16 +50,6 @@ DATA_PATH: Path = _DATASET_CONFIG[DATASET_SIZE]["data_path"]
 # Number of days covered by each temporal window snapshot.
 WINDOW_DAYS: int = _DATASET_CONFIG[DATASET_SIZE]["window_days"]
 
-# How many days to advance the window on each iteration.
-STEP_SIZE: int = 1
-
-# ============================================================================
-# INPUT FILE NAMES
-# ============================================================================
-NORMAL_TRANSACTIONS_FILE: str = "1_filtered_normal_transactions.parquet"
-LAUNDERING_TRANSACTIONS_FILE: str = "2_filtered_laundering_transactions.parquet"
-ACCOUNTS_FILE: str = "3_filtered_accounts.parquet"
-
 # ============================================================================
 # OUTPUT FILE NAMES
 # ============================================================================
@@ -68,10 +60,7 @@ OUTPUT_METRICS_FILE: str = "sliding_window_metrics.parquet"
 # ALGORITHM HYPER-PARAMETERS
 # ============================================================================
 # Maximum iterations for the HITS algorithm before declaring non-convergence.
-HITS_MAX_ITER: int = 100
-
-# PageRank damping factor (standard NetworkX default).
-PAGERANK_ALPHA: float = 0.85
+HITS_MAX_ITER: int = _DATASET_CONFIG[DATASET_SIZE]["hits_max_iter"]
 
 # ============================================================================
 # EVALUATION SETTINGS

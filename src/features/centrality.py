@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import networkx as nx
 
-from src.config import HITS_MAX_ITER, PAGERANK_ALPHA
 from src.features.base import FeatureExtractor
 
 
@@ -128,8 +127,12 @@ class HITSExtractor(FeatureExtractor):
     algorithm failure.
     """
 
-    def __init__(self, max_iter: int = HITS_MAX_ITER) -> None:
+    def __init__(self, max_iter: int = 500) -> None:
         self._max_iter = max_iter
+
+    @property
+    def name(self) -> str:
+        return f"HITSExtractor(max_iter={self._max_iter})"
 
     def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float]]:
         """
