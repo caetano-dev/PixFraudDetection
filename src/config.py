@@ -19,20 +19,24 @@ _DATASET_CONFIG = {
     "SMALL": {
         "data_path": Path("data/HI_Small"),
         "window_days": 3,
-        "pr_alpha_deep": 0.85,       # 6.6 hops expected walk
-        "pr_alpha_shallow": 0.75,    # 4 hops expected walk
+        "pr_alpha_deep": 0.85,           # 6.6 hops expected walk
+        "pr_alpha_shallow": 0.75,        # 4 hops expected walk
         "pr_max_iter": 100,
-        "betweenness_k": 80,          # Monte Carlo pivot nodes
-        "hits_max_iter": 500         # Add this
+        "betweenness_k": 80,             # Monte Carlo pivot nodes
+        "hits_max_iter": 500,
+        "leiden_resolution_macro": 1.0,  # Coarser communities
+        "leiden_resolution_micro": 2.0,  # Finer communities
     },
     "LARGE": {
         "data_path": Path("data/HI_Large"),
         "window_days": 7,
-        "pr_alpha_deep": 0.95,       # 20 hops expected walk (required for 14-hop cycles)
-        "pr_alpha_shallow": 0.75,    # 4 hops expected walk
-        "pr_max_iter": 1000,         # Required for alpha=0.95 convergence
-        "betweenness_k": 500,        # Scaled up for larger graph
-        "hits_max_iter": 1000        # Add this
+        "pr_alpha_deep": 0.95,           # 20 hops expected walk (required for 14-hop cycles)
+        "pr_alpha_shallow": 0.75,        # 4 hops expected walk
+        "pr_max_iter": 1000,             # Required for alpha=0.95 convergence
+        "betweenness_k": 500,            # Scaled up for larger graph
+        "hits_max_iter": 1000,
+        "leiden_resolution_macro": 2.0,  # Coarser communities (higher baseline for large graph)
+        "leiden_resolution_micro": 5.0,  # Finer communities
     },
 }
 
@@ -77,10 +81,11 @@ RUN_EVALUATION: bool = True
 # Toggle Leiden community detection entirely.
 RUN_LEIDEN: bool = True
 
-# Resolution parameter passed to Leiden.
+# Resolution parameters passed to Leiden.
 # Higher values → smaller, more granular communities.
 # Lower values  → larger, coarser communities.
-LEIDEN_RESOLUTION: float = 1.0
+LEIDEN_RESOLUTION_MACRO: float = _DATASET_CONFIG[DATASET_SIZE]["leiden_resolution_macro"]
+LEIDEN_RESOLUTION_MICRO: float = _DATASET_CONFIG[DATASET_SIZE]["leiden_resolution_micro"]
 
 # ============================================================================
 # RANK STABILITY ANALYSIS SETTINGS

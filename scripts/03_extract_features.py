@@ -27,7 +27,7 @@ import networkx as nx
 import pyarrow.dataset as ds
 from tqdm import tqdm
 
-from src.config import DATA_PATH, PR_ALPHA_DEEP, PR_ALPHA_SHALLOW, PR_MAX_ITER, BETWEENNESS_K, HITS_MAX_ITER
+from src.config import DATA_PATH, PR_ALPHA_DEEP, PR_ALPHA_SHALLOW, PR_MAX_ITER, BETWEENNESS_K, HITS_MAX_ITER, LEIDEN_RESOLUTION_MACRO, LEIDEN_RESOLUTION_MICRO
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
@@ -91,8 +91,8 @@ def process_window_lazy(
     }
 
     if run_flags.get("run_leiden", False):
-        extractors["leiden_macro"] = LeidenCommunityExtractor(resolution=1.0)
-        extractors["leiden_micro"] = LeidenCommunityExtractor(resolution=2.0)
+        extractors["leiden_macro"] = LeidenCommunityExtractor(resolution=LEIDEN_RESOLUTION_MACRO)
+        extractors["leiden_micro"] = LeidenCommunityExtractor(resolution=LEIDEN_RESOLUTION_MICRO)
 
     current_date = pd.to_datetime(date_str)
 
