@@ -45,6 +45,7 @@ def main():
 
     print(f"Loading feature matrix from {features_path}...")
     df = pd.read_parquet(features_path)
+    print("Is time_variance in the dataset?:", "time_variance" in df.columns)
 
     # 1. Feature Engineering & Cleanup
     # Ensure data is sorted by time to prevent any future leakage
@@ -195,7 +196,8 @@ def main():
 
     # Save the SHAP summary plot for the thesis document
     plt.figure(figsize=(10, 8))
-    shap.summary_plot(shap_values, X_test_sample, show=False)
+    #shap.summary_plot(shap_values, X_test_sample, show=False)
+    shap.summary_plot(shap_values, X_test_sample, show=False, max_display=30)
     
     output_dir = Path("notebooks")
     output_dir.mkdir(exist_ok=True)

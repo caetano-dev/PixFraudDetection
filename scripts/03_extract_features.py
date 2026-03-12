@@ -107,7 +107,7 @@ def process_window_lazy(
 
     # ---- Node stats lookup -----------------------------------------------
     node_stats = (
-        day_nodes.set_index("entity_id")[["vol_sent", "vol_recv", "tx_count"]]
+        day_nodes.set_index("entity_id")[["vol_sent", "vol_recv", "tx_count", "time_variance"]]
         .to_dict(orient="index")
     )
 
@@ -146,6 +146,7 @@ def process_window_lazy(
             "vol_sent": vol_s,
             "vol_recv": vol_r,
             "tx_count": ns.get("tx_count", 0),
+            "time_variance": ns.get("time_variance", 0.0),
             "flow_ratio": vol_s / (vol_r + 1.0),
             "betweenness": daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0),
             "k_core": daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0),
@@ -461,7 +462,7 @@ def main() -> None:
 
     # CRITICAL LIMIT FOR 8GB RAM: Do not exceed 2 workers.
     # Each worker will load 1 day into RAM.
-    max_workers = 2
+    max_workers = 6
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     collected_results: list[dict] = []
@@ -618,6 +619,7 @@ def main() -> None:
         "vol_sent",
         "vol_recv",
         "tx_count",
+        "time_variance",
         "flow_ratio",
         "pagerank_rank_change",
     ]

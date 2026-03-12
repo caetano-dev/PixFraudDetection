@@ -69,7 +69,8 @@ SELECT
     c.window_date, 
     r.source_entity,
     r.target_entity,
-    r.adj_sent
+    r.adj_sent,
+    r.ts
 FROM Calendar c
 JOIN ResolvedTx r 
   ON r.ts > (c.window_date - INTERVAL 3 DAY) 
@@ -84,6 +85,7 @@ COPY (
         SUM(adj_sent) AS volume,
         COUNT(*) AS count,
         COALESCE(STDDEV_SAMP(adj_sent), 0.0) AS amount_std,
+        COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM ts)), 0.0) AS time_variance,
         SUM(adj_sent) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(adj_sent), 0.0) / ((SUM(adj_sent) / COUNT(*)) + 1e-9)))) AS weight
     FROM WindowedTx
     GROUP BY window_date, source_entity, target_entity
@@ -96,7 +98,8 @@ COPY (
             window_date, 
             source_entity AS entity_id, 
             SUM(adj_sent) AS vol_sent, 
-            COUNT(*) AS tx_count_sent
+            COUNT(*) AS tx_count_sent,
+            COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM ts)), 0.0) AS time_variance
         FROM WindowedTx 
         GROUP BY window_date, source_entity
     ),
@@ -114,7 +117,8 @@ COPY (
         COALESCE(s.entity_id, r.entity_id) AS entity_id,
         COALESCE(s.vol_sent, 0.0) AS vol_sent,
         COALESCE(r.vol_recv, 0.0) AS vol_recv,
-        COALESCE(s.tx_count_sent, 0) + COALESCE(r.tx_count_recv, 0) AS tx_count
+        COALESCE(s.tx_count_sent, 0) + COALESCE(r.tx_count_recv, 0) AS tx_count,
+        COALESCE(s.time_variance, 0.0) AS time_variance
     FROM NodeSent s
     FULL OUTER JOIN NodeRecv r
         ON s.window_date = r.window_date AND s.entity_id = r.entity_id
