@@ -16,15 +16,16 @@ Execution model: Map (Parallel Extraction) -> Reduce (Sequential Rank Stability)
 
 from __future__ import annotations
 
+import gc
 import math
 import multiprocessing
 import sys
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
-import pandas as pd
+import duckdb
 import networkx as nx
-import pyarrow.dataset as ds
+import pandas as pd
 from tqdm import tqdm
 
 from src.config import DATA_PATH, PR_ALPHA_DEEP, PR_ALPHA_SHALLOW, PR_MAX_ITER, BETWEENNESS_K, HITS_MAX_ITER, LEIDEN_RESOLUTION_MACRO, LEIDEN_RESOLUTION_MICRO
@@ -59,7 +60,7 @@ from src.features.stability import RankStabilityTracker
 # Top-level worker function (must be picklable for ProcessPoolExecutor)
 # ---------------------------------------------------------------------------
 
-def process_window_lazy(
+def process_window(
     date_str: str,
     edges_path: Path,
     nodes_path: Path,
@@ -68,16 +69,22 @@ def process_window_lazy(
     """
     Worker function that loads only a single day of data from disk into RAM.
     """
-    # 1. Disk-Stream only the rows matching this specific date
-    day_edges = ds.dataset(edges_path, format="parquet").to_table(
-        filter=ds.field("window_date") == date_str
-    ).to_pandas()
+    # 1. Disk-stream only rows matching this date via DuckDB's out-of-core engine
+    query_edges = (
+        f"SELECT * FROM read_parquet('{str(edges_path)}') "
+        f"WHERE window_date = '{date_str}'"
+    )
+    day_edges = duckdb.query(query_edges).df()
 
-    day_nodes = ds.dataset(nodes_path, format="parquet").to_table(
-        filter=ds.field("window_date") == date_str
-    ).to_pandas()
+    query_nodes = (
+        f"SELECT * FROM read_parquet('{str(nodes_path)}') "
+        f"WHERE window_date = '{date_str}'"
+    )
+    day_nodes = duckdb.query(query_nodes).df()
 
-    if day_edges.empty:
+    if day_edges.empty or day_nodes.empty:
+        del day_edges, day_nodes
+        gc.collect()
         return {"date": date_str, "features": [], "metrics": [], "pr_scores": {}}
 
     # ---- Instantiate extractors locally (picklability guarantee) ----------
@@ -230,16 +237,17 @@ def process_window_lazy(
         for node, feats in daily_metrics.get("pr_vol_deep", {}).items()
     }
 
-    del day_edges
-    del day_nodes
-    del G
-
-    return {
+    result = {
         "date": date_str,
         "features": features,
         "metrics": eval_metric_records,
         "pr_scores": pr_scores,
     }
+
+    del G, day_edges, day_nodes, node_stats, daily_metrics
+    gc.collect()
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -398,14 +406,14 @@ def main() -> None:
     edges_path = DATA_PATH / "aggregated_edges.parquet"
     nodes_path = DATA_PATH / "aggregated_nodes.parquet"
 
-    print(f"Scanning unique dates from {edges_path} (Lazy Load)...")
-    # Lazy load the dataset without pulling it into RAM
-    edges_dataset = ds.dataset(edges_path, format="parquet")
-
-    # Extract only the window_date column to find out what days we need to process
-    date_table = edges_dataset.to_table(columns=["window_date"])
-    unique_dates = sorted(list(set(date_table["window_date"].to_pylist())))
-    print(f"Found {len(unique_dates)} temporal windows.\n")
+    print("Extracting unique temporal windows...")
+    query_dates = (
+        f"SELECT DISTINCT window_date "
+        f"FROM read_parquet('{str(edges_path)}') "
+        f"ORDER BY window_date"
+    )
+    unique_dates = duckdb.query(query_dates).df()["window_date"].tolist()
+    print(f"Found {len(unique_dates)} windows to process.")
 
     # Load raw laundering data and accounts for ground truth labels
     print("Loading ground truth labels...")
@@ -460,9 +468,8 @@ def main() -> None:
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    # CRITICAL LIMIT FOR 8GB RAM: Do not exceed 2 workers.
-    # Each worker will load 1 day into RAM.
-    max_workers = 6
+    # Enforce strict sequential execution for large datasets to prevent OOM.
+    max_workers = 3
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     collected_results: list[dict] = []
@@ -475,7 +482,7 @@ def main() -> None:
                 "bad_actors": date_bad_actors[date_str],
             }
             future = executor.submit(
-                process_window_lazy,
+                process_window,
                 date_str,
                 edges_path,
                 nodes_path,
