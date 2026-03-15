@@ -469,7 +469,7 @@ def main() -> None:
     }
 
     # Enforce strict sequential execution for large datasets to prevent OOM.
-    max_workers = 3
+    max_workers = 6
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     collected_results: list[dict] = []

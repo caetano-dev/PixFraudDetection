@@ -12,12 +12,12 @@ from pathlib import Path
 # DATASET SELECTION
 # ============================================================================
 # Set to "SMALL" or "LARGE" to switch the active dataset.
-DATASET_SIZE: str = "SMALL"
+DATASET_SIZE: str = "LARGE"
 
 # Dataset-specific settings
 _DATASET_CONFIG = {
     "SMALL": {
-        "data_path": Path("data/HI_Small"),
+        "data_path": Path("data/LI_Small"),
         "window_days": 3,
         "pr_alpha_deep": 0.85,           # 6.6 hops expected walk
         "pr_alpha_shallow": 0.75,        # 4 hops expected walk
@@ -27,8 +27,19 @@ _DATASET_CONFIG = {
         "leiden_resolution_macro": 1.0,  # Coarser communities
         "leiden_resolution_micro": 2.0,  # Finer communities
     },
+    "MEDIUM": {
+        "data_path": Path("data/LI_Medium"),
+        "window_days": 7,
+        "pr_alpha_deep": 0.95,           # 20 hops expected walk (required for 14-hop cycles)
+        "pr_alpha_shallow": 0.75,        # 4 hops expected walk
+        "pr_max_iter": 1000,             # Required for alpha=0.95 convergence
+        "betweenness_k": 500,            # Scaled up for larger graph
+        "hits_max_iter": 1000,
+        "leiden_resolution_macro": 2.0,  # Coarser communities (higher baseline for large graph)
+        "leiden_resolution_micro": 5.0,  # Finer communities
+    },
     "LARGE": {
-        "data_path": Path("data/HI_Large"),
+        "data_path": Path("data/LI_Large"),
         "window_days": 7,
         "pr_alpha_deep": 0.95,           # 20 hops expected walk (required for 14-hop cycles)
         "pr_alpha_shallow": 0.75,        # 4 hops expected walk
