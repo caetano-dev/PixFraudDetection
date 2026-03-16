@@ -5,7 +5,6 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-# Config for column mapping
 RAW_HEADER = [
     "Timestamp", "From Bank", "Account", "To Bank", "Account", 
     "Amount Received", "Receiving Currency", "Amount Paid", 
@@ -18,8 +17,7 @@ CLEAN_HEADER = [
     "payment_currency", "payment_format", "is_laundering"
 ]
 
-# Strict cutoff dates to prevent "future leakage" where only fraud exists
-# Based on the AMLSim documentation
+# https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml/data
 CUTOFF_CONFIG = {
     "HI_Small": "2022-09-10",
     "LI_Small": "2022-09-10",
@@ -30,13 +28,6 @@ CUTOFF_CONFIG = {
 }
 
 def process_dataset(dataset_name: str, base_dir: str = "data"):
-    """
-    Process raw AMLworld CSVs via memory-safe disk streaming:
-    1. Read data in chunks of 1 million rows to prevent OOM errors.
-    2. Enforce explicit datetime formatting for extreme parsing speed.
-    3. Filter out 'post-simulation' dates where artifacts occur.
-    4. Stream directly to Parquet files on disk.
-    """
     data_path = Path(base_dir) / dataset_name
     raw_tx_file = data_path / "transactions.csv"
     raw_acct_file = data_path / "accounts.csv"
@@ -50,12 +41,9 @@ def process_dataset(dataset_name: str, base_dir: str = "data"):
 
     output = data_path / "1_filtered_transactions.parquet"
 
-    print(f"Processing {dataset_name} in chunks to prevent OOM errors...")
-
     normal_writer = None
     
     total_rows = 0
-    dropped_count = 0
 
     chunk_iter = pd.read_csv(raw_tx_file, chunksize=1_000_000, low_memory=False)
 
@@ -69,7 +57,6 @@ def process_dataset(dataset_name: str, base_dir: str = "data"):
 
         if cutoff_date:
             chunk = chunk[chunk['timestamp'] <= cutoff_date]
-            dropped_count += (initial_chunk_size - len(chunk))
 
         if not chunk.empty:
             table_n = pa.Table.from_pandas(chunk, preserve_index=False)
@@ -77,13 +64,10 @@ def process_dataset(dataset_name: str, base_dir: str = "data"):
                 normal_writer = pq.ParquetWriter(str(output), table_n.schema)
             normal_writer.write_table(table_n)
 
-        print(f"  - Processed chunk {i+1} ({total_rows:,} rows read so far)")
+        print(f"Chunk {i}, {total_rows:,} rows read")
 
     if normal_writer: 
       normal_writer.close()
-
-    if cutoff_date:
-        print(f"  - Dropped {dropped_count:,} post-simulation transactions (artifacts).")
     
     print(f"  - Saved to {output}")
 

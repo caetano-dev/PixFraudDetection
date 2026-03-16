@@ -5,58 +5,37 @@ PRAGMA enable_progress_bar=true;
 PRAGMA enable_profiling='query_tree';
 
 -- 1. Materialize the windowed transactions
+ -- Weirdnodes - any transactions originally made in a currency other than the euro were converted to euros using the exchange rate applicable on the exact date of the transaction
+ -- Anomaly Detection in Graphs of Bank Transactions for Anti Money Laundering Applications: the money amounts are converted to a single currency.
 CREATE TEMP TABLE WindowedTx AS
 WITH RawTx AS (
     SELECT
-        from_account,
-        to_account,
-        is_laundering,
-        -- DuckDB natively parses Parquet logical types. No manual epoch math required.
-        CAST(timestamp AS TIMESTAMP) AS ts,
-        amount_sent_c * CASE payment_currency
-            WHEN 'US Dollar' THEN 1.0
-            WHEN 'Euro' THEN 1.05
-            WHEN 'UK Pound' THEN 1.25
-            WHEN 'Swiss Franc' THEN 1.10
-            WHEN 'Australian Dollar' THEN 0.70
-            WHEN 'Canadian Dollar' THEN 0.75
-            WHEN 'Brazil Real' THEN 0.20
-            WHEN 'Shekel' THEN 0.28
-            WHEN 'Saudi Riyal' THEN 0.27
-            WHEN 'Yuan' THEN 0.15
-            WHEN 'Mexican Peso' THEN 0.05
-            WHEN 'Ruble' THEN 0.013
-            WHEN 'Rupee' THEN 0.012
-            WHEN 'Yen' THEN 0.007
-            WHEN 'Bitcoin' THEN 30000.0
-            ELSE 1.0
-        END AS amount_sent_usd
-    FROM read_parquet([
-        'data/LI_Medium/1_filtered_transactions.parquet',
-    ])
+        t.from_account,
+        t.to_account,
+        t.is_laundering,
+        CAST(t.timestamp AS TIMESTAMP) AS ts,
+        t.amount_sent_c * fx.rate AS amount_sent_usd
+    FROM read_parquet('data/LI_Large/1_filtered_transactions.parquet') t
+    LEFT JOIN read_parquet('data/fx_rates.parquet') fx
+      ON t.payment_currency = fx.currency
+     AND CAST(t.timestamp AS DATE) = fx.date
 ),
 AccMap AS (
     SELECT 
         "Account Number" AS acc_num, 
         "Entity ID" AS entity_id
-    FROM read_parquet('data/LI_Medium/2_filtered_accounts.parquet')
-),
-AccCounts AS (
-    SELECT acc_num, COUNT(*) AS entity_count
-    FROM AccMap
-    GROUP BY acc_num
+    FROM read_parquet('data/LI_Large/2_filtered_accounts.parquet')
 ),
 ResolvedTx AS (
     SELECT
         t.ts,
         src.entity_id AS source_entity,
         tgt.entity_id AS target_entity,
-        t.amount_sent_usd / (src_c.entity_count * tgt_c.entity_count) AS adj_sent
+        t.amount_sent_usd AS adj_sent,
+        CAST(t.is_laundering AS INTEGER) AS is_laundering
     FROM RawTx t
     JOIN AccMap src ON t.from_account = src.acc_num
     JOIN AccMap tgt ON t.to_account = tgt.acc_num
-    JOIN AccCounts src_c ON t.from_account = src_c.acc_num
-    JOIN AccCounts tgt_c ON t.to_account = tgt_c.acc_num
 ),
 Calendar AS (
     SELECT unnest(generate_series(
@@ -70,30 +49,31 @@ SELECT
     r.source_entity,
     r.target_entity,
     r.adj_sent,
+    r.is_laundering,
     r.ts
 FROM Calendar c
 JOIN ResolvedTx r 
-  ON r.ts > (c.window_date - INTERVAL 7 DAY) 
+  ON r.ts > (c.window_date - INTERVAL 7 DAY)
  AND r.ts <= c.window_date;
 
 -- 2. Aggregate and Export Edges
 COPY (
     SELECT
         strftime(window_date, '%Y-%m-%d') AS window_date,
-        source_entity AS source,
-        target_entity AS target,
+        source_entity AS source, --Anomaly Detection in Graphs of Bank Transactions for Anti Money Laundering Applications
+        target_entity AS target, 
         SUM(adj_sent) AS volume,
         COUNT(*) AS count,
-        COALESCE(STDDEV_SAMP(adj_sent), 0.0) AS amount_std,
+        COALESCE(STDDEV_SAMP(adj_sent), 0.0) AS amount_std, -- OddBall
         COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM ts)), 0.0) AS time_variance,
-        SUM(adj_sent) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(adj_sent), 0.0) / ((SUM(adj_sent) / COUNT(*)) + 1e-9)))) AS weight
+        SUM(adj_sent) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(adj_sent), 0.0) / ((SUM(adj_sent) / COUNT(*)) + 1e-9)))) AS weight --OddBall
     FROM WindowedTx
     GROUP BY window_date, source_entity, target_entity
-) TO 'data/LI_Medium/aggregated_edges.parquet' (FORMAT PARQUET);
+) TO 'data/LI_Large/aggregated_edges.parquet' (FORMAT PARQUET);
 
 -- 3. Aggregate and Export Nodes
 COPY (
-    WITH NodeSent AS (
+    WITH NodeSent AS ( --Anomaly Detection in Graphs of Bank Transactions for Anti Money Laundering Applications
         SELECT 
             window_date, 
             source_entity AS entity_id, 
@@ -111,6 +91,24 @@ COPY (
             COUNT(*) AS tx_count_recv
         FROM WindowedTx 
         GROUP BY window_date, target_entity
+    ),
+    EntityFraud AS (
+        SELECT
+            entity_id,
+            MAX(is_fraud) AS is_fraud
+        FROM (
+            SELECT
+                source_entity AS entity_id,
+                CASE WHEN is_laundering = 1 THEN 1 ELSE 0 END AS is_fraud
+            FROM WindowedTx
+            UNION ALL
+            SELECT
+                target_entity AS entity_id,
+                CASE WHEN is_laundering = 1 THEN 1 ELSE 0 END AS is_fraud
+            FROM WindowedTx
+        ) f
+        WHERE entity_id IS NOT NULL
+        GROUP BY entity_id
     )
     SELECT
         strftime(COALESCE(s.window_date, r.window_date), '%Y-%m-%d') AS window_date,
@@ -118,8 +116,11 @@ COPY (
         COALESCE(s.vol_sent, 0.0) AS vol_sent,
         COALESCE(r.vol_recv, 0.0) AS vol_recv,
         COALESCE(s.tx_count_sent, 0) + COALESCE(r.tx_count_recv, 0) AS tx_count,
-        COALESCE(s.time_variance, 0.0) AS time_variance
+        COALESCE(s.time_variance, 0.0) AS time_variance,
+        COALESCE(ef.is_fraud, 0) AS is_fraud
     FROM NodeSent s
     FULL OUTER JOIN NodeRecv r
         ON s.window_date = r.window_date AND s.entity_id = r.entity_id
-) TO 'data/LI_Medium/aggregated_nodes.parquet' (FORMAT PARQUET);
+    LEFT JOIN EntityFraud ef
+        ON COALESCE(s.entity_id, r.entity_id) = ef.entity_id
+) TO 'data/LI_Large/aggregated_nodes.parquet' (FORMAT PARQUET);

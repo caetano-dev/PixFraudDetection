@@ -115,10 +115,10 @@ def process_window(
     )
 
     # ---- Node stats lookup -----------------------------------------------
-    node_stats = (
-        day_nodes.set_index("entity_id")[["vol_sent", "vol_recv", "tx_count", "time_variance"]]
-        .to_dict(orient="index")
-    )
+    node_stat_columns = ["vol_sent", "vol_recv", "tx_count", "time_variance"]
+    if "is_fraud" in day_nodes.columns:
+        node_stat_columns.append("is_fraud")
+    node_stats = day_nodes.set_index("entity_id")[node_stat_columns].to_dict(orient="index")
 
     # ---- Run all extractors ----------------------------------------------
     daily_metrics: dict[str, dict] = {}
@@ -156,7 +156,8 @@ def process_window(
             "vol_recv": vol_r,
             "tx_count": ns.get("tx_count", 0),
             "time_variance": ns.get("time_variance", 0.0),
-            "flow_ratio": vol_s / (vol_r + 1.0),
+            "is_fraud": int(ns.get("is_fraud", 0) or 0),
+            "flow_ratio": vol_s / (vol_r if vol_r > 0 else vol_s),
             "betweenness": daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0),
             "k_core": daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0),
         }
@@ -475,7 +476,7 @@ def main() -> None:
     }
 
     # Strict single-worker mode to avoid in-memory accumulation and OOM.
-    max_workers = 1
+    max_workers = 3
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     all_daily_metrics: list[dict] = []
@@ -578,35 +579,7 @@ def main() -> None:
         del rank_input_df
         gc.collect()
 
-    print("\nDetecting accounts schema...")
-    account_header_df = con.execute(
-        f"SELECT * FROM read_parquet('{accounts_path}') LIMIT 1"
-    ).df()
-    account_columns = set(account_header_df.columns)
-    del account_header_df
-    gc.collect()
-
-    if "Is Laundering" in account_columns:
-        fraud_label_col = "Is Laundering"
-    elif "is_laundering" in account_columns:
-        fraud_label_col = "is_laundering"
-    elif "is_fraud" in account_columns:
-        fraud_label_col = "is_fraud"
-    else:
-        raise ValueError(
-            "No supported fraud label column found in accounts parquet. "
-            "Expected one of: Is Laundering, is_laundering, is_fraud."
-        )
-
-    if "Entity ID" in account_columns:
-        account_entity_col = "Entity ID"
-    elif "entity_id" in account_columns:
-        account_entity_col = "entity_id"
-    else:
-        raise ValueError(
-            "No supported account entity ID column found. "
-            "Expected 'Entity ID' or 'entity_id'."
-        )
+    print("\nUsing pre-aggregated is_fraud labels from aggregated_nodes.parquet...")
 
     stability_join = ""
     stability_select = (
@@ -630,11 +603,8 @@ def main() -> None:
         COPY (
             SELECT
                 f.*,
-                COALESCE(CAST(a.{_quote_ident(fraud_label_col)} AS INTEGER), 0) AS is_fraud,
                 {stability_select}
             FROM read_parquet('{feature_chunks_dir / "*.parquet"}') f
-            LEFT JOIN read_parquet('{accounts_path}') a
-                ON CAST(f.entity_id AS VARCHAR) = CAST(a.{_quote_ident(account_entity_col)} AS VARCHAR)
             {stability_join}
         ) TO '{features_out}' (FORMAT PARQUET);
         """

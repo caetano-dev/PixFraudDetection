@@ -16,3 +16,4 @@ xgboost
 shap
 pyarrow
 duckdb
+yfinance

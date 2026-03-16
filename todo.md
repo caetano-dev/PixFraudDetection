@@ -38,3 +38,7 @@ The following parameters and strategies found in the code have no explicit refer
 .. Laundering Rate (1 per N Trans)  981   1942       905    1948       807     1750
 ..                                  SMALL           MEDIUM           LARGE
 ```
+
+Longest laundering chain per dataset:
+
+8, 12 and 69 days
