@@ -50,4 +50,4 @@ rates_df['date'] = rates_df['date'].dt.date
 usd_df = pd.DataFrame({'date': calendar.date, 'rate': 1.0, 'currency': 'US Dollar'})
 rates_df = pd.concat([rates_df, usd_df], ignore_index=True)
 
-rates_df.to_parquet('data/LI_Medium/fx_rates.parquet', engine='pyarrow')
+rates_df.to_parquet('data/fx_rates.parquet', engine='pyarrow')
