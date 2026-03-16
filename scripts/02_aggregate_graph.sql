@@ -1,4 +1,4 @@
-PRAGMA memory_limit='4GB';
+PRAGMA memory_limit='6GB';
 PRAGMA threads=8;
 PRAGMA temp_directory='./duckdb_spill_dir';
 PRAGMA enable_progress_bar=true;

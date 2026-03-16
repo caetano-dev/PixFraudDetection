@@ -45,7 +45,7 @@ def process_dataset(dataset_name: str, base_dir: str = "data"):
     
     total_rows = 0
 
-    chunk_iter = pd.read_csv(raw_tx_file, chunksize=1_000_000, low_memory=False)
+    chunk_iter = pd.read_csv(raw_tx_file, chunksize=3_000_000, low_memory=False)
 
     for i, chunk in enumerate(chunk_iter):
         initial_chunk_size = len(chunk)
