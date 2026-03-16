@@ -19,7 +19,9 @@ from __future__ import annotations
 import gc
 import math
 import multiprocessing
+import shutil
 import sys
+import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -157,10 +159,6 @@ def process_window(
             "flow_ratio": vol_s / (vol_r + 1.0),
             "betweenness": daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0),
             "k_core": daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0),
-            # Placeholders — will be overwritten during sequential post-processing
-            "pagerank_rank_change": 0,
-            "is_rank_anomaly": 0,
-            "is_fraud": 1 if node in bad_actors_up_to_date else 0,
         }
         features.append(record)
 
@@ -400,86 +398,95 @@ def main() -> None:
     print(f"Rank Stability: {'Enabled' if RUN_RANK_STABILITY else 'Disabled'}")
     print("=" * 60)
 
-    # ======================================================================
-    # 1. Scanning unique dates (Lazy Load)
-    # ======================================================================
     edges_path = DATA_PATH / "aggregated_edges.parquet"
     nodes_path = DATA_PATH / "aggregated_nodes.parquet"
+    transactions_path = DATA_PATH / "1_filtered_transactions.parquet"
+    accounts_path = DATA_PATH / "2_filtered_accounts.parquet"
+    features_out = DATA_PATH / OUTPUT_FEATURES_FILE
+    feature_chunks_dir = Path(tempfile.mkdtemp(prefix="feature_chunks_"))
+
+    def _quote_ident(identifier: str) -> str:
+        return '"' + identifier.replace('"', '""') + '"'
+
+    con = duckdb.connect()
 
     print("Extracting unique temporal windows...")
-    query_dates = (
-        f"SELECT DISTINCT window_date "
-        f"FROM read_parquet('{str(edges_path)}') "
-        f"ORDER BY window_date"
-    )
-    unique_dates = duckdb.query(query_dates).df()["window_date"].tolist()
+    unique_dates_df = con.execute(
+        f"""
+        SELECT DISTINCT CAST(window_date AS DATE) AS window_date
+        FROM read_parquet('{edges_path}')
+        ORDER BY window_date
+        """
+    ).df()
+    unique_dates = unique_dates_df["window_date"].astype(str).tolist()
+    del unique_dates_df
+    gc.collect()
+
     print(f"Found {len(unique_dates)} windows to process.")
+    if not unique_dates:
+        print("No windows found. Nothing to process.")
+        shutil.rmtree(feature_chunks_dir, ignore_errors=False)
+        con.close()
+        return
 
-    # Load raw laundering data and accounts for ground truth labels
-    print("Loading ground truth labels...")
-    all_tx_df = pd.read_parquet(DATA_PATH / "1_filtered_transactions.parquet")
-    accounts_df = pd.read_parquet(DATA_PATH / "2_filtered_accounts.parquet")
-    
-    laundering_df = all_tx_df[all_tx_df["is_laundering"] == 1].copy()
-    del all_tx_df
-
-    # Map from_account and to_account to actual Entity IDs
-    laundering_df = laundering_df.merge(
-        accounts_df, left_on="from_account", right_on="Account Number", how="inner"
-    ).rename(columns={"Entity ID": "source_entity"}).drop(columns=["Account Number"])
-
-    laundering_df = laundering_df.merge(
-        accounts_df, left_on="to_account", right_on="Account Number", how="inner"
-    ).rename(columns={"Entity ID": "target_entity"}).drop(columns=["Account Number"])
-
-    # Safely convert PyArrow timestamps
-    if pd.api.types.is_numeric_dtype(laundering_df["timestamp"]):
-        laundering_df["timestamp"] = pd.to_datetime(laundering_df["timestamp"], unit="ns")
-    else:
-        laundering_df["timestamp"] = pd.to_datetime(laundering_df["timestamp"])
-
-    laundering_df["timestamp"] = laundering_df["timestamp"].dt.tz_localize(None)
-
-    # ======================================================================
-    # 2. Pre-compute fraud labels per window date
-    # ======================================================================
-    print("Pre-computing per-window fraud labels...")
     date_bad_actors: dict[str, set] = {}
-    for date_str in unique_dates:
-        cutoff_dt = pd.to_datetime(date_str)
-        mask = laundering_df["timestamp"] <= cutoff_dt
-        laundering_txns = laundering_df.loc[mask]
-        bad_actors: set = set()
-        if "source_entity" in laundering_txns.columns:
-            bad_actors = set(laundering_txns["source_entity"]).union(
-                set(laundering_txns["target_entity"])
-            )
-        date_bad_actors[date_str] = bad_actors
+    if RUN_EVALUATION:
+        print("Pre-computing per-window fraud labels with DuckDB...")
+        for date_str in unique_dates:
+            bad_actor_df = con.execute(
+                f"""
+                WITH laundering_entities AS (
+                    SELECT
+                        COALESCE(
+                            TRY_CAST(tx.timestamp AS TIMESTAMP),
+                            TO_TIMESTAMP(TRY_CAST(tx.timestamp AS DOUBLE) / 1000000000.0)
+                        ) AS tx_timestamp,
+                        CAST(a_from."Entity ID" AS VARCHAR) AS source_entity,
+                        CAST(a_to."Entity ID" AS VARCHAR) AS target_entity
+                    FROM read_parquet('{transactions_path}') tx
+                    INNER JOIN read_parquet('{accounts_path}') a_from
+                        ON CAST(tx.from_account AS VARCHAR) = CAST(a_from."Account Number" AS VARCHAR)
+                    INNER JOIN read_parquet('{accounts_path}') a_to
+                        ON CAST(tx.to_account AS VARCHAR) = CAST(a_to."Account Number" AS VARCHAR)
+                    WHERE tx.is_laundering = 1
+                )
+                SELECT DISTINCT entity_id
+                FROM (
+                    SELECT source_entity AS entity_id
+                    FROM laundering_entities
+                    WHERE tx_timestamp <= CAST(? AS TIMESTAMP)
+                    UNION ALL
+                    SELECT target_entity AS entity_id
+                    FROM laundering_entities
+                    WHERE tx_timestamp <= CAST(? AS TIMESTAMP)
+                )
+                WHERE entity_id IS NOT NULL
+                """,
+                [date_str, date_str],
+            ).df()
+            date_bad_actors[date_str] = set(bad_actor_df["entity_id"].tolist())
+            del bad_actor_df
+            gc.collect()
 
-    # Free memory
-    del laundering_df, accounts_df
-
-    # ======================================================================
-    # 4. Parallel Map: ProcessPoolExecutor over temporal windows
-    # ======================================================================
     run_flags_base: dict = {
         "run_evaluation": RUN_EVALUATION,
         "run_leiden": RUN_LEIDEN,
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    # Enforce strict sequential execution for large datasets to prevent OOM.
-    max_workers = 6
+    # Strict single-worker mode to avoid in-memory accumulation and OOM.
+    max_workers = 1
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
-    collected_results: list[dict] = []
+    all_daily_metrics: list[dict] = []
+    written_chunk_files = 0
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = {}
+        futures: dict = {}
         for date_str in unique_dates:
             run_flags = {
                 **run_flags_base,
-                "bad_actors": date_bad_actors[date_str],
+                "bad_actors": date_bad_actors.get(date_str, set()),
             }
             future = executor.submit(
                 process_window,
@@ -494,72 +501,149 @@ def main() -> None:
             for future in as_completed(futures):
                 try:
                     result = future.result()  # propagates worker exceptions
-                    collected_results.append(result)
+
+                    if result["features"]:
+                        feature_df = pd.DataFrame(result["features"])
+                        chunk_path = feature_chunks_dir / f"features_{result['date']}.parquet"
+                        feature_df.to_parquet(chunk_path, index=False)
+                        written_chunk_files += 1
+                        del feature_df
+
+                    if RUN_EVALUATION and result["metrics"]:
+                        all_daily_metrics.extend(result["metrics"])
+
+                    del result
+                    gc.collect()
                 except Exception as exc:
                     print(f"Day generated an exception: {exc}")
                 pbar.update(1)
 
-    # ======================================================================
-    # 5. Sequential Reduce: Rank Stability Post-Processing
-    #    (RankStabilityTracker is stateful — Day T depends on Day T-1)
-    # ======================================================================
-    print("\nApplying sequential rank stability post-processing...")
+    if written_chunk_files == 0:
+        print("Warning: No features were generated!")
+        shutil.rmtree(feature_chunks_dir, ignore_errors=False)
+        con.close()
+        return
 
-    # Sort chronologically so the tracker sees dates in order
-    collected_results.sort(key=lambda r: r["date"])
+    stability_tmp_file: Path | None = None
 
-    stability_tracker = RankStabilityTracker(
-        top_k=RANK_STABILITY_TOP_K,
-        threshold_percentile=RANK_ANOMALY_PERCENTILE,
-    )
+    if RUN_RANK_STABILITY:
+        print("\nApplying sequential rank stability post-processing...")
+        rank_input_df = con.execute(
+            f"""
+            SELECT
+                CAST(date AS DATE) AS window_date,
+                CAST(entity_id AS VARCHAR) AS entity_id,
+                pr_vol_deep
+            FROM read_parquet('{feature_chunks_dir / "*.parquet"}')
+            ORDER BY window_date, entity_id
+            """
+        ).df()
 
-    all_rank_stability: list[dict] = []
+        stability_tracker = RankStabilityTracker(
+            top_k=RANK_STABILITY_TOP_K,
+            threshold_percentile=RANK_ANOMALY_PERCENTILE,
+        )
+        stability_rows: list[dict] = []
 
-    for result in collected_results:
-        if RUN_RANK_STABILITY:
-            stability_result = stability_tracker.compute(result["pr_scores"])
+        for window_date, date_slice in rank_input_df.groupby("window_date", sort=True):
+            current_scores = dict(
+                zip(
+                    date_slice["entity_id"],
+                    date_slice["pr_vol_deep"],
+                )
+            )
+            stability_result = stability_tracker.compute(current_scores)
+            if stability_result is None:
+                continue
 
-            if stability_result is not None:
-                rank_changes: dict = stability_result["rank_changes"]
-                anomalies: set = stability_result["anomalies"]
-
-                all_rank_stability.append(
+            rank_changes: dict = stability_result["rank_changes"]
+            anomalies: set = stability_result["anomalies"]
+            for entity_id in date_slice["entity_id"]:
+                stability_rows.append(
                     {
-                        "date": pd.to_datetime(result["date"]).date(),
-                        "algorithm": "pr_vol_deep",
-                        "stability_score": stability_result["stability_score"],
-                        "num_new_entrants": stability_result["num_new_entrants"],
-                        "num_dropouts": stability_result["num_dropouts"],
-                        "num_anomalies": stability_result["num_anomalies"],
+                        "window_date": pd.to_datetime(window_date).date(),
+                        "entity_id": entity_id,
+                        "pagerank_rank_change": rank_changes.get(entity_id, 0),
+                        "is_rank_anomaly": 1 if entity_id in anomalies else 0,
                     }
                 )
 
-                # Patch the placeholder rank stability fields in each feature record
-                for feat in result["features"]:
-                    node = feat["entity_id"]
-                    feat["pagerank_rank_change"] = rank_changes.get(node, 0)
-                    feat["is_rank_anomaly"] = 1 if node in anomalies else 0
+        if stability_rows:
+            stability_temp_dir = Path(tempfile.mkdtemp(prefix="rank_stability_"))
+            stability_tmp_file = stability_temp_dir / "rank_stability.parquet"
+            stability_df = pd.DataFrame(stability_rows)
+            stability_df.to_parquet(stability_tmp_file, index=False)
+            del stability_df
 
-    # ======================================================================
-    # 6. Flatten and compile final DataFrames
-    # ======================================================================
-    print("\nCompiling results...")
+        del rank_input_df
+        gc.collect()
 
-    all_features: list[dict] = []
-    all_daily_metrics: list[dict] = []
-    for result in collected_results:
-        all_features.extend(result["features"])
-        all_daily_metrics.extend(result["metrics"])
+    print("\nDetecting accounts schema...")
+    account_header_df = con.execute(
+        f"SELECT * FROM read_parquet('{accounts_path}') LIMIT 1"
+    ).df()
+    account_columns = set(account_header_df.columns)
+    del account_header_df
+    gc.collect()
 
-    results_df = pd.DataFrame(all_features)
+    if "Is Laundering" in account_columns:
+        fraud_label_col = "Is Laundering"
+    elif "is_laundering" in account_columns:
+        fraud_label_col = "is_laundering"
+    elif "is_fraud" in account_columns:
+        fraud_label_col = "is_fraud"
+    else:
+        raise ValueError(
+            "No supported fraud label column found in accounts parquet. "
+            "Expected one of: Is Laundering, is_laundering, is_fraud."
+        )
 
-    if results_df.empty:
-        print("Warning: No features were generated!")
-        return
+    if "Entity ID" in account_columns:
+        account_entity_col = "Entity ID"
+    elif "entity_id" in account_columns:
+        account_entity_col = "entity_id"
+    else:
+        raise ValueError(
+            "No supported account entity ID column found. "
+            "Expected 'Entity ID' or 'entity_id'."
+        )
 
-    features_out = DATA_PATH / OUTPUT_FEATURES_FILE
-    print(f"Saving features to {features_out}...")
-    results_df.to_parquet(features_out, index=False)
+    stability_join = ""
+    stability_select = (
+        "0::BIGINT AS pagerank_rank_change,\n"
+        "                0::INTEGER AS is_rank_anomaly"
+    )
+    if stability_tmp_file is not None and stability_tmp_file.exists():
+        stability_join = (
+            f"LEFT JOIN read_parquet('{stability_tmp_file}') s\n"
+            f"            ON CAST(f.date AS DATE) = CAST(s.window_date AS DATE)\n"
+            f"            AND CAST(f.entity_id AS VARCHAR) = CAST(s.entity_id AS VARCHAR)"
+        )
+        stability_select = (
+            "COALESCE(s.pagerank_rank_change, 0) AS pagerank_rank_change,\n"
+            "                COALESCE(s.is_rank_anomaly, 0) AS is_rank_anomaly"
+        )
+
+    print(f"Saving features to {features_out} via DuckDB out-of-core join...")
+    con.execute(
+        f"""
+        COPY (
+            SELECT
+                f.*,
+                COALESCE(CAST(a.{_quote_ident(fraud_label_col)} AS INTEGER), 0) AS is_fraud,
+                {stability_select}
+            FROM read_parquet('{feature_chunks_dir / "*.parquet"}') f
+            LEFT JOIN read_parquet('{accounts_path}') a
+                ON CAST(f.entity_id AS VARCHAR) = CAST(a.{_quote_ident(account_entity_col)} AS VARCHAR)
+            {stability_join}
+        ) TO '{features_out}' (FORMAT PARQUET);
+        """
+    )
+
+    print("Cleaning temporary artifacts...")
+    shutil.rmtree(feature_chunks_dir, ignore_errors=False)
+    if stability_tmp_file is not None and stability_tmp_file.exists():
+        shutil.rmtree(stability_tmp_file.parent, ignore_errors=False)
 
     if RUN_EVALUATION and all_daily_metrics:
         metrics_df = pd.DataFrame(all_daily_metrics)
@@ -602,14 +686,35 @@ def main() -> None:
                         print(f"    @{k:>5}: {mean_prec:.4%} (lift: {mean_lift:.2f}x)")
 
     if RUN_LEIDEN:
-        leiden_analysis_df = results_df.rename(
-            columns={
-                "leiden_macro_id": "leiden_id",
-                "leiden_macro_size": "leiden_size",
-                "leiden_macro_modularity": "leiden_modularity",
-            }
+        final_columns = set(
+            con.execute(
+                f"SELECT * FROM read_parquet('{features_out}') LIMIT 1"
+            ).df().columns
         )
-        _analyze_leiden_effectiveness(leiden_analysis_df)
+        required_leiden_cols = {
+            "date",
+            "entity_id",
+            "leiden_macro_id",
+            "leiden_macro_size",
+            "leiden_macro_modularity",
+            "is_fraud",
+        }
+        if required_leiden_cols.issubset(final_columns):
+            leiden_analysis_df = con.execute(
+                f"""
+                SELECT
+                    date,
+                    entity_id,
+                    leiden_macro_id AS leiden_id,
+                    leiden_macro_size AS leiden_size,
+                    leiden_macro_modularity AS leiden_modularity,
+                    is_fraud
+                FROM read_parquet('{features_out}')
+                """
+            ).df()
+            _analyze_leiden_effectiveness(leiden_analysis_df)
+            del leiden_analysis_df
+            gc.collect()
 
     print("\n" + "=" * 60)
     print("Feature Statistics Summary")
@@ -633,31 +738,60 @@ def main() -> None:
     if RUN_LEIDEN:
         summary_cols += ["leiden_macro_size", "leiden_micro_size", "leiden_macro_modularity", "leiden_micro_modularity"]
 
-    print(results_df[[c for c in summary_cols if c in results_df.columns]].describe())
+    output_columns = set(
+        con.execute(f"SELECT * FROM read_parquet('{features_out}') LIMIT 1").df().columns
+    )
+    selected_summary_cols = [c for c in summary_cols if c in output_columns]
+    if selected_summary_cols:
+        summary_df = con.execute(
+            f"""
+            SELECT {", ".join(_quote_ident(c) for c in selected_summary_cols)}
+            FROM read_parquet('{features_out}')
+            """
+        ).df()
+        print(summary_df.describe())
+        del summary_df
+        gc.collect()
 
-    if RUN_RANK_STABILITY and results_df["is_rank_anomaly"].sum() > 0:
-        print("\n" + "=" * 60)
-        print("Rank Anomaly Analysis (reference: pr_vol_deep)")
-        print("=" * 60)
-        anomaly_df = results_df[results_df["is_rank_anomaly"] == 1]
-        fraud_in_anomalies = anomaly_df["is_fraud"].sum()
-        total_anomaly_flags = len(anomaly_df)
-        overall_fraud_rate = results_df["is_fraud"].mean()
-        anomaly_fraud_rate = (
-            anomaly_df["is_fraud"].mean() if total_anomaly_flags > 0 else 0
-        )
+    if RUN_RANK_STABILITY and {"is_rank_anomaly", "is_fraud"}.issubset(output_columns):
+        anomaly_stats = con.execute(
+            f"""
+            SELECT
+                SUM(CASE WHEN is_rank_anomaly = 1 THEN 1 ELSE 0 END) AS total_anomaly_flags,
+                SUM(CASE WHEN is_rank_anomaly = 1 THEN CAST(is_fraud AS DOUBLE) ELSE 0 END) AS fraud_in_anomalies,
+                AVG(CAST(is_fraud AS DOUBLE)) AS overall_fraud_rate,
+                AVG(CASE WHEN is_rank_anomaly = 1 THEN CAST(is_fraud AS DOUBLE) END) AS anomaly_fraud_rate
+            FROM read_parquet('{features_out}')
+            """
+        ).df().iloc[0]
+        total_anomaly_flags = int(anomaly_stats["total_anomaly_flags"] or 0)
+        fraud_in_anomalies = float(anomaly_stats["fraud_in_anomalies"] or 0.0)
+        overall_fraud_rate = float(anomaly_stats["overall_fraud_rate"] or 0.0)
+        anomaly_fraud_rate = float(anomaly_stats["anomaly_fraud_rate"] or 0.0)
 
-        print(f"Total rank anomaly flags: {total_anomaly_flags:,}")
-        print(
-            f"Fraud among rank anomalies: {fraud_in_anomalies:,} "
-            f"({anomaly_fraud_rate:.2%})"
-        )
-        print(f"Overall fraud rate: {overall_fraud_rate:.2%}")
-        if overall_fraud_rate > 0:
+        if total_anomaly_flags > 0:
+            print("\n" + "=" * 60)
+            print("Rank Anomaly Analysis (reference: pr_vol_deep)")
+            print("=" * 60)
+            print(f"Total rank anomaly flags: {total_anomaly_flags:,}")
             print(
-                f"Lift from rank anomaly detection: "
-                f"{anomaly_fraud_rate / overall_fraud_rate:.2f}x"
+                f"Fraud among rank anomalies: {fraud_in_anomalies:,.0f} "
+                f"({anomaly_fraud_rate:.2%})"
             )
+            print(f"Overall fraud rate: {overall_fraud_rate:.2%}")
+            if overall_fraud_rate > 0:
+                print(
+                    f"Lift from rank anomaly detection: "
+                    f"{anomaly_fraud_rate / overall_fraud_rate:.2f}x"
+                )
+
+    con.close()
+
+    if RUN_RANK_STABILITY:
+        print("\n" + "=" * 60)
+        print("Rank Stability Processing")
+        print("=" * 60)
+        print("Rank stability features were materialized via out-of-core DuckDB joins.")
 
     print("\nDone!")
 
