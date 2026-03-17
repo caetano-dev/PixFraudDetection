@@ -58,20 +58,12 @@ from src.features.community import KCoreExtractor, LeidenCommunityExtractor
 from src.features.stability import RankStabilityTracker
 
 
-# ---------------------------------------------------------------------------
-# Top-level worker function (must be picklable for ProcessPoolExecutor)
-# ---------------------------------------------------------------------------
-
-def process_window(
+def process_window( # weirdnodes, ensemble, bank transactions papers
     date_str: str,
     edges_path: Path,
     nodes_path: Path,
     run_flags: dict,
 ) -> dict:
-    """
-    Worker function that loads only a single day of data from disk into RAM.
-    """
-    # 1. Disk-stream only rows matching this date via DuckDB's out-of-core engine
     query_edges = (
         f"SELECT * FROM read_parquet('{str(edges_path)}') "
         f"WHERE window_date = '{date_str}'"
@@ -89,7 +81,6 @@ def process_window(
         gc.collect()
         return {"date": date_str, "features": [], "metrics": [], "pr_scores": {}}
 
-    # ---- Instantiate extractors locally (picklability guarantee) ----------
     extractors: dict[str, FeatureExtractor] = {
         "pr_vol_deep": PageRankVolumeExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
         "pr_vol_shallow": PageRankVolumeExtractor(alpha=PR_ALPHA_SHALLOW, max_iter=PR_MAX_ITER),
@@ -105,7 +96,6 @@ def process_window(
 
     current_date = pd.to_datetime(date_str)
 
-    # ---- Build NetworkX DiGraph ------------------------------------------
     G = nx.from_pandas_edgelist(
         day_edges,
         source="source",
@@ -114,21 +104,17 @@ def process_window(
         create_using=nx.DiGraph,
     )
 
-    # ---- Node stats lookup -----------------------------------------------
     node_stat_columns = ["vol_sent", "vol_recv", "tx_count", "time_variance"]
     if "is_fraud" in day_nodes.columns:
         node_stat_columns.append("is_fraud")
     node_stats = day_nodes.set_index("entity_id")[node_stat_columns].to_dict(orient="index")
 
-    # ---- Run all extractors ----------------------------------------------
     daily_metrics: dict[str, dict] = {}
     for key, extractor in extractors.items():
         daily_metrics[key] = extractor.extract(G)
 
-    # ---- Retrieve pre-computed fraud labels ------------------------------
-    bad_actors_up_to_date: set = run_flags.get("bad_actors", set())
+    bad_actors_up_to_date: set = run_flags.get("bad_actors", set()) # AMLworld, graph based anomaly survey
 
-    # ---- Compile per-node features (rank stability = placeholder 0) ------
     features: list[dict] = []
     for node in G.nodes():
         ns = node_stats.get(node, {})
@@ -163,7 +149,6 @@ def process_window(
         }
         features.append(record)
 
-    # ---- Evaluation metrics ----------------------------------------------
     eval_metric_records: list[dict] = []
 
     if run_flags.get("run_evaluation", False):
@@ -248,10 +233,6 @@ def process_window(
 
     return result
 
-
-# ---------------------------------------------------------------------------
-# Post-processing analysis
-# ---------------------------------------------------------------------------
 
 def _analyze_leiden_effectiveness(results_df: pd.DataFrame) -> None:
     print("\n" + "=" * 60)
@@ -386,10 +367,6 @@ def _analyze_leiden_effectiveness(results_df: pd.DataFrame) -> None:
             )
 
 
-# ---------------------------------------------------------------------------
-# Main entry point
-# ---------------------------------------------------------------------------
-
 def main() -> None:
     print("=" * 60)
     print("Graph Feature Generation Pipeline")
@@ -475,7 +452,6 @@ def main() -> None:
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    # Strict single-worker mode to avoid in-memory accumulation and OOM.
     max_workers = 3
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 

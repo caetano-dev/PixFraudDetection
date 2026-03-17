@@ -86,14 +86,8 @@ class RankStabilityTracker:
 
         self._top_k = top_k
         self._threshold_percentile = threshold_percentile
-
-        # Internal state: scores from the previous window.
-        # Empty dict signals "first window — no stability data yet".
         self.previous_scores: dict = {}
 
-    # ------------------------------------------------------------------
-    # Private helpers (mirror the original utils functions 1-to-1)
-    # ------------------------------------------------------------------
 
     @staticmethod
     def _rank_nodes_by_score(scores: dict, descending: bool = True) -> list[tuple]:
@@ -178,8 +172,7 @@ class RankStabilityTracker:
         biggest_risers: list = sorted_changes[:10]
         biggest_fallers: list = sorted_changes[-10:][::-1]
 
-        # Jaccard stability score of the top-K sets
-        if prev_top_k or curr_top_k:
+        if prev_top_k or curr_top_k: #Jaccard - Ensemble paper
             stability_score: float | None = len(prev_top_k & curr_top_k) / len(
                 prev_top_k | curr_top_k
             )
@@ -223,10 +216,6 @@ class RankStabilityTracker:
         return {
             node for node, change in rank_changes.items() if abs(change) >= threshold
         }
-
-    # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
 
     def compute(self, current_scores: dict) -> dict | None:
         """
