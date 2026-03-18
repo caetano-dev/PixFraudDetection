@@ -598,7 +598,7 @@ def main() -> None:
         metrics_df.to_parquet(metrics_path, index=False)
 
         print("\n" + "=" * 60)
-        print("Aggregate Evaluation Summary (Mean Across All Days)")
+        print("Aggregate Evaluation Summary (Mean & Median Across All Days)")
         print("=" * 60)
 
         for algo in ["pr_vol_deep", "pr_vol_shallow", "pr_count", "hits_hub", "hits_auth", "k_core", "betweenness"]:
@@ -610,12 +610,18 @@ def main() -> None:
             print("-" * 40)
 
             mean_roc = float(algo_df["roc_auc"].mean())
+            median_roc = float(algo_df["roc_auc"].median())
             mean_ap = float(algo_df["average_precision"].mean())
+            median_ap = float(algo_df["average_precision"].median())
 
             if not math.isnan(mean_roc):
                 print(f"  Mean ROC-AUC:            {mean_roc:.4f}")
+            if not math.isnan(median_roc):
+                print(f"  Median ROC-AUC:          {median_roc:.4f}")
             if not math.isnan(mean_ap):
                 print(f"  Mean Average Precision:  {mean_ap:.4f}")
+            if not math.isnan(median_ap):
+                print(f"  Median Average Precision:{median_ap:.4f}")
 
             print("\n  Mean Precision@K:")
             for k in EVALUATION_K_VALUES:
@@ -630,6 +636,20 @@ def main() -> None:
                             else 0.0
                         )
                         print(f"    @{k:>5}: {mean_prec:.4%} (lift: {mean_lift:.2f}x)")
+
+            print("\n  Median Precision@K:")
+            for k in EVALUATION_K_VALUES:
+                col = f"precision_at_{k}"
+                if col in algo_df.columns:
+                    median_prec = float(algo_df[col].median())
+                    if not math.isnan(median_prec):
+                        lift_col = f"lift_at_{k}"
+                        median_lift = (
+                            float(algo_df[lift_col].median())
+                            if lift_col in algo_df.columns
+                            else 0.0
+                        )
+                        print(f"    @{k:>5}: {median_prec:.4%} (lift: {median_lift:.2f}x)")
 
     if RUN_LEIDEN:
         final_columns = set(
