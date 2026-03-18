@@ -1,14 +1,5 @@
 """
 Subgraph motif counting feature extractor based on AMLworld paper (Section 3.2).
-
-This module implements memory-efficient O(V⋅D²) algorithms for laundering topology
-detection in large multi-day cumulative graphs. It strictly avoids naive subgraph
-isomorphism (O(V³)) to stay within 6GB memory constraints.
-
-Motif patterns:
-- Fan-out / Fan-in: High-degree node patterns
-- Scatter-Gather / Gather-Scatter: 2-hop multipath structures
-- Bounded Simple Cycles: Short cycles (length ≤ 4)
 """
 
 from __future__ import annotations
@@ -19,38 +10,16 @@ from src.features.base import FeatureExtractor
 
 
 class SubgraphMotifExtractor(FeatureExtractor):
-    """
-    Extract subgraph motif counts from transaction graphs.
-    
-    Uses highly optimized set intersection algorithms for multi-hop patterns
-    and bounded generators for cycle detection to avoid combinatorial explosion.
-    
-    Parameters
-    ----------
-    fan_threshold : int, optional
-        Minimum degree to count as fan-out/fan-in pattern (default: 5)
-    cycle_bound : int, optional
-        Maximum cycle length to search (default: 4)
-    """
-    
-    def __init__(self, fan_threshold: int = 5, cycle_bound: int = 4):
+    def __init__(self, fan_threshold: int = 5, cycle_bound: int = 14, max_degree: int = 16):
         self.fan_threshold = fan_threshold
         self.cycle_bound = cycle_bound
+        self.max_degree = max_degree
     
+    @property
+    def name(self) -> str:
+        return f"SubgraphMotifExtractor(fan={self.fan_threshold}, max_deg={self.max_degree}, max_cycle={self.cycle_bound})"
+
     def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float | int]]:
-        """
-        Extract motif features using memory-efficient algorithms.
-        
-        Parameters
-        ----------
-        G : nx.DiGraph
-            The directed transaction graph
-            
-        Returns
-        -------
-        dict
-            Nested dictionary mapping node_id -> {feature_name: count}
-        """
         if not G.nodes():
             return {}
         
@@ -65,52 +34,63 @@ class SubgraphMotifExtractor(FeatureExtractor):
             for node in G.nodes()
         }
         
-        # Fan-out / Fan-in: O(V)
+        # 1. Fan-out / Fan-in (Strictly bounded)
         for node in G.nodes():
             out_deg = G.out_degree(node)
             in_deg = G.in_degree(node)
             
-            if out_deg > self.fan_threshold:
+            if self.fan_threshold <= out_deg <= self.max_degree:
                 features[node]["fan_out_count"] = 1
-            if in_deg > self.fan_threshold:
+            if self.fan_threshold <= in_deg <= self.max_degree:
                 features[node]["fan_in_count"] = 1
         
-        # Scatter-Gather / Gather-Scatter: O(V⋅D²) via set intersections
+        # 2. Scatter-Gather / Gather-Scatter (Pruned to max 16x16 operations)
         for u in G.nodes():
             u_successors = set(G.successors(u))
             
-            if len(u_successors) < 2:
+            # Prune: U must fit the specific low-degree laundering profile
+            if not (2 <= len(u_successors) <= self.max_degree):
                 continue
             
-            # For each 2nd-hop node V, check if multiple paths exist from U
             second_hop_nodes = set()
             for mid in u_successors:
-                second_hop_nodes.update(G.successors(mid))
+                # Prune: Intermediate routing accounts also obey degree limits
+                if G.out_degree(mid) <= self.max_degree:
+                    second_hop_nodes.update(G.successors(mid))
             
             for v in second_hop_nodes:
                 if v == u:
                     continue
                 
-                # Count how many paths U -> mid -> V exist
                 v_predecessors = set(G.predecessors(v))
+                
+                # Prune: Target V must fit the low-degree profile
+                if not (2 <= len(v_predecessors) <= self.max_degree):
+                    continue
+                    
                 shared_nodes = u_successors & v_predecessors
                 
                 if len(shared_nodes) >= 2:
-                    # U has scatter-gather pattern (U -> [mid1, mid2, ...] -> V)
                     features[u]["scatter_gather_count"] += 1
-                    # V has gather-scatter pattern ([mid1, mid2, ...] -> V)
                     features[v]["gather_scatter_count"] += 1
         
-        # Bounded Simple Cycles: O(V⋅D^k) with strict bound
-        try:
-            # Use length_bound to prevent infinite generator hanging
-            cycles = nx.simple_cycles(G, length_bound=self.cycle_bound)
-            
-            for cycle in cycles:
-                for node in cycle:
-                    if node in features:
+        # 3. Bounded Simple Cycles (Operating on a decimated subgraph)
+        # Pruning dead-ends and mega-hubs reduces the graph size by 90%+ 
+        valid_cycle_nodes = [
+            n for n in G.nodes() 
+            if G.in_degree(n) > 0 
+            and G.out_degree(n) > 0 
+            and G.degree(n) <= self.max_degree
+        ]
+        
+        if valid_cycle_nodes:
+            cycle_subgraph = G.subgraph(valid_cycle_nodes)
+            try:
+                cycles = nx.simple_cycles(cycle_subgraph, length_bound=self.cycle_bound)
+                for cycle in cycles:
+                    for node in cycle:
                         features[node]["cycle_count"] += 1
-        except (nx.NetworkXError, nx.NetworkXNoCycle):
-            pass
+            except (nx.NetworkXError, nx.NetworkXNoCycle):
+                pass
         
         return features
