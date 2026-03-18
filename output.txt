@@ -10,6 +10,267 @@ Found 9 windows to process.
 Pre-computing per-window fraud labels with DuckDB...
 Launching ProcessPoolExecutor with 3 workers...
 
+Processing days: 100%|███████████████████████████████████████████████████████████████████████████████| 9/9 [03:58<00:00, 26.51s/day]
+
+Applying sequential rank stability post-processing...
+
+Using pre-aggregated is_fraud labels from aggregated_nodes.parquet...
+Saving features to data/HI_Small/sliding_window_features.parquet via DuckDB out-of-core join...
+Cleaning temporary artifacts...
+Saving metrics to data/HI_Small/sliding_window_metrics.parquet...
+
+============================================================
+Aggregate Evaluation Summary (Mean & Median Across All Days)
+============================================================
+
+[PR_VOL_DEEP]
+----------------------------------------
+  Mean ROC-AUC:            0.5544
+  Median ROC-AUC:          0.5436
+  Mean Average Precision:  0.0525
+  Median Average Precision:0.0517
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 98.88x)
+    @    2: 100.0000% (lift: 98.88x)
+    @   10: 95.5556% (lift: 88.70x)
+    @   50: 49.1111% (lift: 43.03x)
+    @  100: 39.2222% (lift: 32.49x)
+    @  500: 20.8000% (lift: 15.12x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 66.19x)
+    @    2: 100.0000% (lift: 66.19x)
+    @   10: 100.0000% (lift: 66.19x)
+    @   50: 50.0000% (lift: 29.47x)
+    @  100: 40.0000% (lift: 24.11x)
+    @  500: 21.6000% (lift: 13.26x)
+
+[PR_VOL_SHALLOW]
+----------------------------------------
+  Mean ROC-AUC:            0.5544
+  Median ROC-AUC:          0.5433
+  Mean Average Precision:  0.0547
+  Median Average Precision:0.0540
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 98.88x)
+    @    2: 100.0000% (lift: 98.88x)
+    @   10: 96.6667% (lift: 89.64x)
+    @   50: 51.1111% (lift: 44.31x)
+    @  100: 41.2222% (lift: 33.62x)
+    @  500: 22.0444% (lift: 15.89x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 66.19x)
+    @    2: 100.0000% (lift: 66.19x)
+    @   10: 100.0000% (lift: 66.19x)
+    @   50: 52.0000% (lift: 32.15x)
+    @  100: 41.0000% (lift: 25.45x)
+    @  500: 23.0000% (lift: 14.33x)
+
+[PR_COUNT]
+----------------------------------------
+  Mean ROC-AUC:            0.5594
+  Median ROC-AUC:          0.5509
+  Mean Average Precision:  0.0667
+  Median Average Precision:0.0649
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 98.88x)
+    @    2: 100.0000% (lift: 98.88x)
+    @   10: 96.6667% (lift: 89.64x)
+    @   50: 63.5556% (lift: 55.11x)
+    @  100: 50.8889% (lift: 40.96x)
+    @  500: 26.9556% (lift: 19.86x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 66.19x)
+    @    2: 100.0000% (lift: 66.19x)
+    @   10: 100.0000% (lift: 66.19x)
+    @   50: 66.0000% (lift: 38.85x)
+    @  100: 51.0000% (lift: 30.14x)
+    @  500: 27.8000% (lift: 16.54x)
+
+[HITS_HUB]
+----------------------------------------
+  Mean ROC-AUC:            0.5670
+  Median ROC-AUC:          0.5602
+  Mean Average Precision:  0.0274
+  Median Average Precision:0.0300
+
+  Mean Precision@K:
+    @    1: 55.5556% (lift: 66.30x)
+    @    2: 61.1111% (lift: 53.14x)
+    @   10: 44.4444% (lift: 35.30x)
+    @   50: 17.5556% (lift: 15.02x)
+    @  100: 13.2222% (lift: 11.42x)
+    @  500: 6.7556% (lift: 5.35x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 40.47x)
+    @    2: 50.0000% (lift: 40.47x)
+    @   10: 40.0000% (lift: 36.42x)
+    @   50: 16.0000% (lift: 13.24x)
+    @  100: 13.0000% (lift: 7.94x)
+    @  500: 6.8000% (lift: 5.31x)
+
+[HITS_AUTH]
+----------------------------------------
+  Mean ROC-AUC:            0.5542
+  Median ROC-AUC:          0.5570
+  Mean Average Precision:  0.0228
+  Median Average Precision:0.0240
+
+  Mean Precision@K:
+    @    1: 66.6667% (lift: 72.30x)
+    @    2: 55.5556% (lift: 50.54x)
+    @   10: 37.7778% (lift: 28.83x)
+    @   50: 12.6667% (lift: 9.69x)
+    @  100: 8.3333% (lift: 6.32x)
+    @  500: 4.0000% (lift: 2.97x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 54.05x)
+    @    2: 50.0000% (lift: 40.47x)
+    @   10: 30.0000% (lift: 32.38x)
+    @   50: 14.0000% (lift: 9.27x)
+    @  100: 8.0000% (lift: 5.42x)
+    @  500: 4.0000% (lift: 2.60x)
+
+[K_CORE]
+----------------------------------------
+  Mean ROC-AUC:            0.6435
+  Median ROC-AUC:          0.6407
+  Mean Average Precision:  0.0553
+  Median Average Precision:0.0610
+
+  Mean Precision@K:
+    @    1: 66.6667% (lift: 39.50x)
+    @    2: 61.1111% (lift: 36.07x)
+    @   10: 63.3333% (lift: 41.65x)
+    @   50: 55.3333% (lift: 36.84x)
+    @  100: 50.0000% (lift: 34.96x)
+    @  500: 29.7111% (lift: 21.08x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 46.86x)
+    @    2: 50.0000% (lift: 33.09x)
+    @   10: 70.0000% (lift: 42.17x)
+    @   50: 62.0000% (lift: 34.38x)
+    @  100: 56.0000% (lift: 35.08x)
+    @  500: 31.6000% (lift: 19.78x)
+
+[BETWEENNESS]
+----------------------------------------
+  Mean ROC-AUC:            0.6108
+  Median ROC-AUC:          0.6064
+  Mean Average Precision:  0.0574
+  Median Average Precision:0.0575
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 98.88x)
+    @    2: 94.4444% (lift: 95.21x)
+    @   10: 78.8889% (lift: 71.81x)
+    @   50: 42.2222% (lift: 35.27x)
+    @  100: 36.6667% (lift: 29.37x)
+    @  500: 23.5778% (lift: 17.41x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 66.19x)
+    @    2: 100.0000% (lift: 54.05x)
+    @   10: 80.0000% (lift: 48.64x)
+    @   50: 44.0000% (lift: 29.19x)
+    @  100: 38.0000% (lift: 23.83x)
+    @  500: 24.0000% (lift: 15.89x)
+
+============================================================
+Leiden Community Detection Analysis
+============================================================
+
+Analysis based on final day: 2022-09-10 00:00:00
+Total nodes with community assignment: 1,124
+Total communities detected: 437
+Overall fraud rate: 0.0000%
+
+[Community Size Distribution]
+--------------------------------------------------
+Size       Communities  Nodes      Fraud    Rate       Lift    
+------------------------------------------------------------
+1          261          261        0        0.0000%   nanx
+2-4        147          360        0        0.0000%   nanx
+5-9        14           77         0        0.0000%   nanx
+10-49      14           362        0        0.0000%   nanx
+50-99      1            64         0        0.0000%   nanx
+
+[Top 10 Communities by Fraud Rate (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift    
+--------------------------------------------------
+0          47       0        0.0000%      0.00x
+1          64       0        0.0000%      0.00x
+2          43       0        0.0000%      0.00x
+3          26       0        0.0000%      0.00x
+4          24       0        0.0000%      0.00x
+5          30       0        0.0000%      0.00x
+6          24       0        0.0000%      0.00x
+7          36       0        0.0000%      0.00x
+8          21       0        0.0000%      0.00x
+9          25       0        0.0000%      0.00x
+
+[Leiden Effectiveness Summary]
+--------------------------------------------------
+Mean Leiden Modularity (Q): 0.6822
+Average community fraud rate: 0.0000%
+Overall fraud rate: 0.0000%
+
+============================================================
+Feature Statistics Summary
+============================================================
+        pr_vol_deep  pr_vol_shallow      pr_count  ...  leiden_micro_size  leiden_macro_modularity  leiden_micro_modularity
+count  1.116737e+06    1.116737e+06  1.116737e+06  ...       1.116737e+06             1.116737e+06             1.116737e+06
+mean   6.788958e-06    6.780498e-06  6.792196e-06  ...       1.030025e+03             6.413791e-01             6.299573e-01
+std    1.461161e-05    1.242807e-05  1.286375e-05  ...       2.082025e+03             1.946014e-01             1.940634e-01
+min    0.000000e+00    0.000000e+00  0.000000e+00  ...       0.000000e+00             0.000000e+00             0.000000e+00
+25%    3.537675e-06    3.910482e-06  4.043463e-06  ...       2.100000e+01             5.744702e-01             5.581744e-01
+50%    5.751505e-06    6.159583e-06  5.740327e-06  ...       1.090000e+02             6.777551e-01             6.672881e-01
+75%    7.963210e-06    7.953112e-06  8.219375e-06  ...       8.320000e+02             6.817074e-01             6.698234e-01
+max    3.402760e-03    2.853358e-03  3.058359e-03  ...       8.873000e+03             8.750989e-01             8.681814e-01
+
+[8 rows x 18 columns]
+
+============================================================
+Rank Anomaly Analysis (reference: pr_vol_deep)
+============================================================
+Total rank anomaly flags: 44,667
+Fraud among rank anomalies: 360 (0.81%)
+Overall fraud rate: 0.49%
+Lift from rank anomaly detection: 1.63x
+
+============================================================
+Rank Stability Processing
+============================================================
+Rank stability features were materialized via out-of-core DuckDB joins.
+
+
+
+
+
+
+
+
+============================================================
+Graph Feature Generation Pipeline
+Dataset: SMALL
+Evaluation:     Enabled
+Leiden:         Enabled
+Rank Stability: Enabled
+============================================================
+Extracting unique temporal windows...
+Found 9 windows to process.
+Pre-computing per-window fraud labels with DuckDB...
+Launching ProcessPoolExecutor with 3 workers...
+
 Processing days: 100%|███████████████████████████| 9/9 [06:49<00:00, 45.47s/day]
 
 Applying sequential rank stability post-processing...
@@ -262,81 +523,48 @@ Rank Stability Processing
 ============================================================
 Rank stability features were materialized via out-of-core DuckDB joins.
 
+Loading feature matrix from data/HI_Small/sliding_window_features.parquet...
+Is time_variance in the dataset?: True
+
 [Temporal Split Enforced]
-Training set:   851,449 rows (up to 2022-09-07)
-Validation set: 283,817 rows (up to 2022-09-09)
-Testing set:    283,817 rows (up to 2022-09-10)
+Training set:   670,042 rows (up to 2022-09-07)
+Validation set: 223,347 rows (up to 2022-09-08)
+Testing set:    223,348 rows (up to 2022-09-10)
 
-Class Imbalance Ratio (Neg/Pos) in Train: 105.47
+Class Imbalance Ratio (Neg/Pos) in Train: 201.74
 
-Training XGBoost Classifier with Tuned Graph Parameters...
-[0]	validation_0-aucpr:0.09457
-[50]	validation_0-aucpr:0.12045
-[100]	validation_0-aucpr:0.12175
-[150]	validation_0-aucpr:0.12257
-[200]	validation_0-aucpr:0.12355
-[250]	validation_0-aucpr:0.12354
-[300]	validation_0-aucpr:0.12436
-[350]	validation_0-aucpr:0.12440
-[400]	validation_0-aucpr:0.12521
-[450]	validation_0-aucpr:0.12553
-[462]	validation_0-aucpr:0.12552
+Optimal Parameters Found via Successive Halving: {'colsample_bytree': np.float64(0.7838501639099957), 'learning_rate': np.float64(0.003523464812190403), 'max_depth': 2, 'n_estimators': 739, 'reg_lambda': np.float64(0.48861563555387233), 'scale_pos_weight': np.float64(4.55635212401633), 'subsample': np.float64(0.9633294328968971)}
 
 Extracting Optimal F1 Threshold from Validation Set...
-Optimal Threshold Found: 0.4036
+Optimal Threshold Found: 0.1281
 
 Evaluating on Future Temporal Window (Test Set)...
-Test AUPRC:   0.1361
-Test ROC-AUC: 0.7327
-Test F1-Score: 0.1568 (at 0.4036 threshold)
+Test AUPRC:   0.1062
+Test ROC-AUC: 0.8041
+Test F1-Score: 0.1530 (at 0.1281 threshold)
 
 Test Precision@K:
-  @  10: 100.0000% (Lift: 36.23x)
-  @  50: 100.0000% (Lift: 36.23x)
-  @ 100: 97.0000% (Lift: 35.14x)
-  @ 500: 67.2000% (Lift: 24.35x)
+  @  10: 90.0000% (Lift: 177.42x)
+  @  50: 80.0000% (Lift: 157.70x)
+  @ 100: 62.0000% (Lift: 122.22x)
+  @ 500: 26.8000% (Lift: 52.83x)
 
 ========================================
-[UNSUPERVISED BENCHMARK] Training Isolation Forest...
+[SUPERVISED BENCHMARK] Training LightGBM with Successive Halving...
 ========================================
-Isolation Forest Test AUPRC:   0.1251
-Isolation Forest Test ROC-AUC: 0.6699
 
-Isolation Forest Test Precision@K:
-  @  10: 100.0000% (Lift: 36.23x)
-  @  50: 100.0000% (Lift: 36.23x)
-  @ 100: 96.0000% (Lift: 34.78x)
-  @ 500: 70.0000% (Lift: 25.36x)
-Training set:   1,153,056 rows (up to 2022-09-07)
-Validation set: 384,352 rows (up to 2022-09-09)
-Testing set:    384,352 rows (up to 2022-09-10)
+Optimal LightGBM Parameters Found: {'learning_rate': np.float64(0.009055671373369193), 'n_estimators': 574, 'num_leaves': 7042, 'reg_lambda': np.float64(4.71822569445811), 'scale_pos_weight': np.float64(4.961372443656412)}
 
-Class Imbalance Ratio (Neg/Pos) in Train: 53.17
+Extracting Optimal F1 Threshold for LightGBM from Validation Set...
+Optimal LightGBM Threshold Found: 0.0804
 
-Optimal Parameters Found via Successive Halving: {'colsample_bytree': np.float64(0.5115312125207079), 'learning_rate': np.float64(0.019371443775759143), 'max_depth': 15, 'n_estimators': 691, 'reg_lambda': np.float64(0.009908223296571764), 'scale_pos_weight': np.float64(9.763799669573132), 'subsample': np.float64(0.6163856702151521)}
+Evaluating LightGBM on Test Set...
+LightGBM Test AUPRC:   0.1215
+LightGBM Test ROC-AUC: 0.8403
+LightGBM Test F1-Score: 0.1142 (at 0.0804 threshold)
 
-Extracting Optimal F1 Threshold from Validation Set...
-Optimal Threshold Found: 0.1890
-
-Evaluating on Future Temporal Window (Test Set)...
-Test AUPRC:   0.1107
-Test ROC-AUC: 0.7081
-Test F1-Score: 0.1413 (at 0.1890 threshold)
-
-Test Precision@K:
-  @  10: 100.0000% (Lift: 52.22x)
-  @  50: 100.0000% (Lift: 52.22x)
-  @ 100: 98.0000% (Lift: 51.18x)
-  @ 500: 69.2000% (Lift: 36.14x)
-
-========================================
-[UNSUPERVISED BENCHMARK] Training Isolation Forest...
-========================================
-Isolation Forest Test AUPRC:   0.1098
-Isolation Forest Test ROC-AUC: 0.6782
-
-Isolation Forest Test Precision@K:
-  @  10: 100.0000% (Lift: 52.22x)
-  @  50: 96.0000% (Lift: 50.13x)
-  @ 100: 95.0000% (Lift: 49.61x)
-  @ 500: 67.6000% (Lift: 35.30x)
+LightGBM Test Precision@K:
+  @  10: 100.0000% (Lift: 197.13x)
+  @  50: 92.0000% (Lift: 181.36x)
+  @ 100: 74.0000% (Lift: 145.88x)
+  @ 500: 27.0000% (Lift: 53.23x)
