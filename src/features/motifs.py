@@ -10,14 +10,25 @@ from src.features.base import FeatureExtractor
 
 
 class SubgraphMotifExtractor(FeatureExtractor):
-    def __init__(self, fan_threshold: int = 5, cycle_bound: int = 14, max_degree: int = 16):
+    def __init__(
+        self, 
+        fan_threshold: int = 5, 
+        cycle_bound: int = 5, 
+        max_degree: int = 16, 
+        max_cycles: int = 1000
+    ):
         self.fan_threshold = fan_threshold
         self.cycle_bound = cycle_bound
         self.max_degree = max_degree
+        self.max_cycles = max_cycles
     
     @property
     def name(self) -> str:
-        return f"SubgraphMotifExtractor(fan={self.fan_threshold}, max_deg={self.max_degree}, max_cycle={self.cycle_bound})"
+        return (
+            f"SubgraphMotifExtractor(fan={self.fan_threshold}, "
+            f"max_deg={self.max_degree}, cycle_bound={self.cycle_bound}, "
+            f"max_cycles_cap={self.max_cycles})"
+        )
 
     def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float | int]]:
         if not G.nodes():
@@ -86,11 +97,19 @@ class SubgraphMotifExtractor(FeatureExtractor):
         if valid_cycle_nodes:
             cycle_subgraph = G.subgraph(valid_cycle_nodes)
             try:
-                cycles = nx.simple_cycles(cycle_subgraph, length_bound=self.cycle_bound)
-                for cycle in cycles:
+                # Evaluate the generator lazily and break at max_cycles
+                cycle_generator = nx.simple_cycles(cycle_subgraph, length_bound=self.cycle_bound)
+                cycles_found = 0
+                
+                for cycle in cycle_generator:
                     for node in cycle:
                         features[node]["cycle_count"] += 1
-            except (nx.NetworkXError, nx.NetworkXNoCycle):
+                    
+                    cycles_found += 1
+                    if cycles_found >= self.max_cycles:
+                        break
+                        
+            except (nx.NetworkXError, nx.NetworkXNoCycle, NotImplementedError):
                 pass
         
         return features

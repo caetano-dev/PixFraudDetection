@@ -89,7 +89,7 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
         "hits": HITSExtractor(max_iter=HITS_MAX_ITER),
         "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
         "k_core": KCoreExtractor(),
-        "motifs": SubgraphMotifExtractor(fan_threshold=5, cycle_bound=14, max_degree=16),
+        "motifs": SubgraphMotifExtractor(fan_threshold=5, cycle_bound=5, max_degree=16, max_cycles=1000),
     }
 
     if run_flags.get("run_leiden", False):
