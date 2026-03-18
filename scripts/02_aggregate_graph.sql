@@ -15,7 +15,7 @@ WITH RawTx AS (
         t.is_laundering,
         CAST(t.timestamp AS TIMESTAMP) AS ts,
         t.amount_sent_c * fx.rate AS amount_sent_usd
-    FROM read_parquet('data/LI_Large/1_filtered_transactions.parquet') t
+    FROM read_parquet('data/LI_Medium/1_filtered_transactions.parquet') t
     LEFT JOIN read_parquet('data/fx_rates.parquet') fx
       ON t.payment_currency = fx.currency
      AND CAST(t.timestamp AS DATE) = fx.date
@@ -24,7 +24,7 @@ AccMap AS (
     SELECT 
         "Account Number" AS acc_num, 
         "Entity ID" AS entity_id
-    FROM read_parquet('data/LI_Large/2_filtered_accounts.parquet')
+    FROM read_parquet('data/LI_Medium/2_filtered_accounts.parquet')
 ),
 ResolvedTx AS (
     SELECT
@@ -53,7 +53,7 @@ SELECT
     r.ts
 FROM Calendar c
 JOIN ResolvedTx r 
-  ON r.ts > (c.window_date - INTERVAL 7 DAY)
+  ON r.ts > (c.window_date - INTERVAL 5 DAY)
  AND r.ts <= c.window_date;
 
 -- 2. Aggregate and Export Edges
@@ -69,7 +69,7 @@ COPY (
         SUM(adj_sent) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(adj_sent), 0.0) / ((SUM(adj_sent) / COUNT(*)) + 1e-9)))) AS weight --OddBall
     FROM WindowedTx
     GROUP BY window_date, source_entity, target_entity
-) TO 'data/LI_Large/aggregated_edges.parquet' (FORMAT PARQUET);
+) TO 'data/LI_Medium/aggregated_edges.parquet' (FORMAT PARQUET);
 
 -- 3. Aggregate and Export Nodes
 COPY (
@@ -123,4 +123,4 @@ COPY (
         ON s.window_date = r.window_date AND s.entity_id = r.entity_id
     LEFT JOIN EntityFraud ef
         ON COALESCE(s.entity_id, r.entity_id) = ef.entity_id
-) TO 'data/LI_Large/aggregated_nodes.parquet' (FORMAT PARQUET);
+) TO 'data/LI_Medium/aggregated_nodes.parquet' (FORMAT PARQUET);
