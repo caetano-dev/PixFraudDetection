@@ -12,7 +12,7 @@ from pathlib import Path
 # DATASET SELECTION
 # ============================================================================
 # Set to "SMALL" or "LARGE" to switch the active dataset.
-DATASET_SIZE: str = "MEDIUM"
+DATASET_SIZE: str = "SMALL"
 
 # Dataset-specific settings
 _DATASET_CONFIG = {

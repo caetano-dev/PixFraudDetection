@@ -307,3 +307,36 @@ Isolation Forest Test Precision@K:
   @  50: 100.0000% (Lift: 36.23x)
   @ 100: 96.0000% (Lift: 34.78x)
   @ 500: 70.0000% (Lift: 25.36x)
+Training set:   1,153,056 rows (up to 2022-09-07)
+Validation set: 384,352 rows (up to 2022-09-09)
+Testing set:    384,352 rows (up to 2022-09-10)
+
+Class Imbalance Ratio (Neg/Pos) in Train: 53.17
+
+Optimal Parameters Found via Successive Halving: {'colsample_bytree': np.float64(0.5115312125207079), 'learning_rate': np.float64(0.019371443775759143), 'max_depth': 15, 'n_estimators': 691, 'reg_lambda': np.float64(0.009908223296571764), 'scale_pos_weight': np.float64(9.763799669573132), 'subsample': np.float64(0.6163856702151521)}
+
+Extracting Optimal F1 Threshold from Validation Set...
+Optimal Threshold Found: 0.1890
+
+Evaluating on Future Temporal Window (Test Set)...
+Test AUPRC:   0.1107
+Test ROC-AUC: 0.7081
+Test F1-Score: 0.1413 (at 0.1890 threshold)
+
+Test Precision@K:
+  @  10: 100.0000% (Lift: 52.22x)
+  @  50: 100.0000% (Lift: 52.22x)
+  @ 100: 98.0000% (Lift: 51.18x)
+  @ 500: 69.2000% (Lift: 36.14x)
+
+========================================
+[UNSUPERVISED BENCHMARK] Training Isolation Forest...
+========================================
+Isolation Forest Test AUPRC:   0.1098
+Isolation Forest Test ROC-AUC: 0.6782
+
+Isolation Forest Test Precision@K:
+  @  10: 100.0000% (Lift: 52.22x)
+  @  50: 96.0000% (Lift: 50.13x)
+  @ 100: 95.0000% (Lift: 49.61x)
+  @ 500: 67.6000% (Lift: 35.30x)
