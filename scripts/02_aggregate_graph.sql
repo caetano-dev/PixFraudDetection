@@ -53,7 +53,7 @@ COPY (
         SUM(r.adj_sent) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) / ((SUM(r.adj_sent) / COUNT(*)) + 1e-9)))) AS weight
     FROM Calendar c
     JOIN ResolvedTx r 
-      ON r.tx_date >= (c.window_date - INTERVAL 7 DAY)
+      ON r.tx_date >= (c.window_date - INTERVAL 1 DAY)
      AND r.tx_date < c.window_date -- STRICTLY BEFORE TARGET DAY
     GROUP BY c.window_date, r.source_entity, r.target_entity
 ) TO 'data/HI_Small/lookback_edges.parquet' (FORMAT PARQUET);

@@ -5,15 +5,16 @@ This script executes the final phase of the TCC:
 1. Loads the extracted temporal graph features.
 2. Performs a strict chronological Train/Validation/Test split.
 3. Trains an XGBoost classifier with dynamic class-imbalance weighting and early stopping.
-4. Evaluates performance using Precision@K and AUPRC.
-5. Generates SHAP values to empirically rank algorithm effectiveness.
+4. Trains a LightGBM classifier as a supervised benchmark using HalvingRandomSearchCV.
+5. Evaluates both models using Precision@K, AUPRC, ROC-AUC, and F1-Score.
+6. Generates SHAP values to empirically rank algorithm effectiveness.
 """
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import lightgbm as lgb
 from sklearn.metrics import average_precision_score, roc_auc_score, f1_score
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.ensemble import IsolationForest
 from sklearn.experimental import enable_halving_search_cv
 from sklearn.model_selection import HalvingRandomSearchCV
 from scipy.stats import loguniform, uniform, randint
@@ -179,31 +180,84 @@ def main():
         lift = prec / baseline_fraud_rate if baseline_fraud_rate > 0 else 0
         print(f"  @ {k:>3}: {prec:.4%} (Lift: {lift:.2f}x)")
 
-    # 5. UNSUPERVISED BENCHMARK — Isolation Forest
+    # 5. SUPERVISED BENCHMARK — LightGBM Classifier
     print("\n========================================")
-    print("[UNSUPERVISED BENCHMARK] Training Isolation Forest...")
+    print("[SUPERVISED BENCHMARK] Training LightGBM with Successive Halving...")
     print("========================================")
 
-    train_fraud_rate = float(np.mean(y_train))
+    # Parameter ranges strictly defined by the paper's Table 10 for LightGBM (Range-large, Small dataset)
+    lgb_param_distributions = {
+        'n_estimators': randint(10, 1001),             # num_round: (10, 1000)
+        'num_leaves': randint(1, 16385),               # num_leaves: (1, 16384)
+        'learning_rate': loguniform(10**-2.5, 10**-1), # learning_rate: 10^(-2.5, -1)
+        'reg_lambda': loguniform(10**-2.2, 10**2),     # lambda_l2: 10^(-2.2, 2)
+        'scale_pos_weight': uniform(1, 9)              # scale_pos_weight: (1, 10) -> loc=1, scale=9
+    }
 
-    iso_forest = IsolationForest(
-        n_estimators=200,
-        contamination=train_fraud_rate,
+    lgb_base_model = lgb.LGBMClassifier(
+        objective='binary',
+        metric='auc',
         random_state=42,
-        n_jobs=-1
+        n_jobs=-1,
+        verbose=-1
     )
-    iso_forest.fit(X_train)
-    iso_scores = -iso_forest.decision_function(X_test)
 
-    iso_auprc  = average_precision_score(y_test, iso_scores)
-    iso_roc_auc = roc_auc_score(y_test, iso_scores)
+    # Apply Table 9 parameters for Multi-bank Small dataset
+    # factor (η) = 2
+    # min_resources (r0) = 0.1 (10% of training set)
+    lgb_r0_fraction = 0.1
+    lgb_min_resources = max(int(lgb_r0_fraction * len(X_train)), 1000)
 
-    print(f"Isolation Forest Test AUPRC:   {iso_auprc:.4f}")
-    print(f"Isolation Forest Test ROC-AUC: {iso_roc_auc:.4f}")
+    lgb_search = HalvingRandomSearchCV(
+        estimator=lgb_base_model,
+        param_distributions=lgb_param_distributions,
+        factor=2,                                # η = 2 from Table 9
+        resource='n_samples',
+        min_resources=lgb_min_resources,         # r0 = 0.1 from Table 9
+        max_resources='auto',
+        scoring='average_precision',
+        random_state=42,
+        n_jobs=-1,
+        cv=tscv
+    )
 
-    print("\nIsolation Forest Test Precision@K:")
-    iso_prec_at_k = compute_precision_at_k(y_test, iso_scores, k_vals)
-    for k, prec in iso_prec_at_k.items():
+    lgb_search.fit(X_train, y_train)
+    
+    lgb_model = lgb_search.best_estimator_
+    print(f"\nOptimal LightGBM Parameters Found: {lgb_search.best_params_}")
+
+    # Dynamic threshold tuning on validation set
+    print("\nExtracting Optimal F1 Threshold for LightGBM from Validation Set...")
+    lgb_val_probs = lgb_model.predict_proba(X_val)[:, 1]
+    lgb_precisions, lgb_recalls, lgb_thresholds = precision_recall_curve(y_val, lgb_val_probs)
+    
+    lgb_f1_scores = np.divide(
+        2 * lgb_precisions * lgb_recalls,
+        lgb_precisions + lgb_recalls,
+        out=np.zeros_like(lgb_precisions),
+        where=(lgb_precisions + lgb_recalls) != 0
+    )
+    lgb_best_threshold_idx = np.argmax(lgb_f1_scores)
+    lgb_optimal_threshold = lgb_thresholds[lgb_best_threshold_idx] if lgb_best_threshold_idx < len(lgb_thresholds) else 0.5
+    print(f"Optimal LightGBM Threshold Found: {lgb_optimal_threshold:.4f}")
+
+    # Evaluation on test set
+    print("\nEvaluating LightGBM on Test Set...")
+    lgb_y_probs = lgb_model.predict_proba(X_test)[:, 1]
+    
+    lgb_auprc = average_precision_score(y_test, lgb_y_probs)
+    lgb_roc_auc = roc_auc_score(y_test, lgb_y_probs)
+    
+    lgb_y_pred = (lgb_y_probs >= lgb_optimal_threshold).astype(int)
+    lgb_f1 = f1_score(y_test, lgb_y_pred)
+
+    print(f"LightGBM Test AUPRC:   {lgb_auprc:.4f}")
+    print(f"LightGBM Test ROC-AUC: {lgb_roc_auc:.4f}")
+    print(f"LightGBM Test F1-Score: {lgb_f1:.4f} (at {lgb_optimal_threshold:.4f} threshold)")
+
+    print("\nLightGBM Test Precision@K:")
+    lgb_prec_at_k = compute_precision_at_k(y_test, lgb_y_probs, k_vals)
+    for k, prec in lgb_prec_at_k.items():
         lift = prec / baseline_fraud_rate if baseline_fraud_rate > 0 else 0
         print(f"  @ {k:>3}: {prec:.4%} (Lift: {lift:.2f}x)")
 
