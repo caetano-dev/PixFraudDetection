@@ -13,6 +13,9 @@ import numpy as np
 import xgboost as xgb
 from sklearn.metrics import average_precision_score, roc_auc_score, f1_score
 from sklearn.ensemble import IsolationForest
+from sklearn.experimental import enable_halving_search_cv
+from sklearn.model_selection import HalvingRandomSearchCV
+from scipy.stats import loguniform, uniform, randint
 import shap
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -88,34 +91,40 @@ def main():
     pos_weight = num_neg / num_pos if num_pos > 0 else 1.0
     print(f"\nClass Imbalance Ratio (Neg/Pos) in Train: {pos_weight:.2f}")
 
-    # 4. Train XGBoost Model with Validation Early Stopping
-    # 
-    # --- 1. OPTIMIZED HYPERPARAMETERS ---
-    # Use sqrt of imbalance to prevent Precision collapse while aiding Recall
-    imbalance_ratio = len(y_train[y_train == 0]) / len(y_train[y_train == 1])
-    tuned_scale_pos_weight = np.sqrt(imbalance_ratio) 
+param_distributions = {
+        'n_estimators': randint(10, 1001),           # num_round: (10, 1000)
+        'max_depth': randint(1, 16),                 # max_depth: (1, 15)
+        'learning_rate': loguniform(10**-2.5, 10**-1), # learning_rate: 10^(-2.5, -1)
+        'reg_lambda': loguniform(10**-2.2, 10**2),   # lambda: 10^(-2.2, 2)
+        'scale_pos_weight': uniform(1, 9),           # scale_pos_weight: (1, 10) -> loc=1, scale=9
+        'colsample_bytree': uniform(0.5, 0.5),       # colsample_bytree: (0.5, 1.0) -> loc=0.5, scale=0.5
+        'subsample': uniform(0.5, 0.5)               # subsample: (0.5, 1.0) -> loc=0.5, scale=0.5
+    }
 
-    print("\nTraining XGBoost Classifier with Tuned Graph Parameters...")
-    model = xgb.XGBClassifier(
+    base_model = xgb.XGBClassifier(
         objective='binary:logistic',
         eval_metric='aucpr',
-        scale_pos_weight=tuned_scale_pos_weight,
-        learning_rate=0.05,          # Slower, more robust convergence
-        max_depth=5,                 # Restrict depth to prevent noise memorization
-        subsample=0.8,               # Row stochasticity
-        colsample_bytree=0.8,        # Feature stochasticity
-        min_child_weight=3,          # Require more evidence to create a leaf
-        n_estimators=1000,
         random_state=42,
-        tree_method='hist',           # Faster execution for large datasets
-        early_stopping_rounds=50
+        tree_method='hist'
     )
+
+    # The paper uses successive halving with \eta=2 (factor) for large multi-bank datasets
+    search = HalvingRandomSearchCV(
+        estimator=base_model,
+        param_distributions=param_distributions,
+        factor=2, 
+        resource='n_samples',
+        max_resources='auto',
+        scoring='average_precision', # Optimizing for AUPRC
+        random_state=42,
+        n_jobs=-1,
+        cv=3 # Define appropriate folds to respect temporal structure if necessary
+    )
+
+    search.fit(X_train, y_train)
     
-    model.fit(
-        X_train, y_train,
-        eval_set=[(X_val, y_val)],
-        verbose=50
-    )
+    model = search.best_estimator_
+    print(f"\nOptimal Parameters Found via Successive Halving: {search.best_params_}")
 
     # --- 2. DYNAMIC THRESHOLD TUNING (ON VALIDATION SET) ---
     from sklearn.metrics import precision_recall_curve
