@@ -55,6 +55,7 @@ from src.features.centrality import (
     PageRankVolumeExtractor,
 )
 from src.features.community import KCoreExtractor, LeidenCommunityExtractor
+from src.features.motifs import SubgraphMotifExtractor
 from src.features.stability import RankStabilityTracker
 
 
@@ -88,6 +89,7 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
         "hits": HITSExtractor(max_iter=HITS_MAX_ITER),
         "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
         "k_core": KCoreExtractor(),
+        "motifs": SubgraphMotifExtractor(fan_threshold=5, cycle_bound=4),
     }
 
     if run_flags.get("run_leiden", False):
@@ -147,6 +149,11 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
             "flow_ratio": vol_s / (vol_r if vol_r > 0 else vol_s),
             "betweenness": daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0),
             "k_core": daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0),
+            "fan_out_count": daily_metrics.get("motifs", {}).get(node, {}).get("fan_out_count", 0),
+            "fan_in_count": daily_metrics.get("motifs", {}).get(node, {}).get("fan_in_count", 0),
+            "scatter_gather_count": daily_metrics.get("motifs", {}).get(node, {}).get("scatter_gather_count", 0),
+            "gather_scatter_count": daily_metrics.get("motifs", {}).get(node, {}).get("gather_scatter_count", 0),
+            "cycle_count": daily_metrics.get("motifs", {}).get(node, {}).get("cycle_count", 0),
         }
         features.append(record)
 
@@ -701,6 +708,11 @@ def main() -> None:
         "time_variance",
         "flow_ratio",
         "pagerank_rank_change",
+        "fan_out_count",
+        "fan_in_count",
+        "scatter_gather_count",
+        "gather_scatter_count",
+        "cycle_count",
     ]
     if RUN_LEIDEN:
         summary_cols += ["leiden_macro_size", "leiden_micro_size", "leiden_macro_modularity", "leiden_micro_modularity"]

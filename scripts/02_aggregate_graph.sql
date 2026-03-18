@@ -40,21 +40,26 @@ SELECT unnest(generate_series(
     INTERVAL 1 DAY
 ))::DATE AS window_date;
 
--- 3. LOOKBACK EDGES (Strictly T-7 to T-1) -> For NetworkX Topology
+-- 3. LOOKBACK EDGES (Cumulative Expanding Window: All History up to T-1) -> For NetworkX Topology
+-- Time-decayed cumulative graph to prevent temporal blindness while maintaining zero future leakage
 COPY (
     SELECT
         strftime(c.window_date, '%Y-%m-%d') AS window_date,
         r.source_entity AS source,
-        r.target_entity AS target, 
-        SUM(r.adj_sent) AS volume,
+        r.target_entity AS target,
+        -- Exponential time decay: older transactions weighted less (lambda = 0.05 per day)
+        -- decay_factor = exp(-0.05 * days_ago)
+        SUM(r.adj_sent * EXP(-0.05 * (c.window_date - r.tx_date))) AS volume,
         COUNT(*) AS count,
         COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) AS amount_std,
         COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM r.ts)), 0.0) AS time_variance,
-        SUM(r.adj_sent) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) / ((SUM(r.adj_sent) / COUNT(*)) + 1e-9)))) AS weight
+        -- Weight uses decayed volume for edge strength
+        SUM(r.adj_sent * EXP(-0.05 * (c.window_date - r.tx_date))) * 
+        LOG2(1 + COUNT(*)) * 
+        (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) / ((SUM(r.adj_sent) / COUNT(*)) + 1e-9)))) AS weight
     FROM Calendar c
     JOIN ResolvedTx r 
-      ON r.tx_date >= (c.window_date - INTERVAL 1 DAY)
-     AND r.tx_date < c.window_date -- STRICTLY BEFORE TARGET DAY
+      ON r.tx_date < c.window_date -- CUMULATIVE: All history strictly before target day (no lower bound = expanding window)
     GROUP BY c.window_date, r.source_entity, r.target_entity
 ) TO 'data/HI_Small/lookback_edges.parquet' (FORMAT PARQUET);
 
