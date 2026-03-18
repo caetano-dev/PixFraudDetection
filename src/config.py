@@ -17,7 +17,7 @@ DATASET_SIZE: str = "SMALL"
 # Dataset-specific settings
 _DATASET_CONFIG = {
     "SMALL": {
-        "data_path": Path("data/LI_Small"),
+        "data_path": Path("data/HI_Small"),
         "window_days": 3,
         "pr_alpha_deep": 0.85,           # 6.6 hops expected walk
         "pr_alpha_shallow": 0.75,        # 4 hops expected walk

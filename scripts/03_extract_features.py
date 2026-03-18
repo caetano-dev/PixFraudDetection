@@ -116,7 +116,8 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
     bad_actors_up_to_date: set = run_flags.get("bad_actors", set()) # AMLworld, graph based anomaly survey
 
     features: list[dict] = []
-    for node in G.nodes():
+    # Iterate over target nodes transacting today, not the historical graph nodes
+    for node in day_nodes["entity_id"].unique():
         ns = node_stats.get(node, {})
         vol_s = ns.get("vol_sent", 0.0)
         vol_r = ns.get("vol_recv", 0.0)
@@ -135,9 +136,9 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
             "leiden_micro_id": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_id", -1),
             "leiden_micro_size": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_size", 0),
             "leiden_micro_modularity": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_modularity", 0.0),
-            "degree": G.degree(node),
-            "in_degree": G.in_degree(node),
-            "out_degree": G.out_degree(node),
+            "degree": G.degree(node) if G.has_node(node) else 0,
+            "in_degree": G.in_degree(node) if G.has_node(node) else 0,
+            "out_degree": G.out_degree(node) if G.has_node(node) else 0,
             "vol_sent": vol_s,
             "vol_recv": vol_r,
             "tx_count": ns.get("tx_count", 0),
@@ -376,8 +377,8 @@ def main() -> None:
     print(f"Rank Stability: {'Enabled' if RUN_RANK_STABILITY else 'Disabled'}")
     print("=" * 60)
 
-    edges_path = DATA_PATH / "aggregated_edges.parquet"
-    nodes_path = DATA_PATH / "aggregated_nodes.parquet"
+    edges_path = DATA_PATH / "lookback_edges.parquet"
+    nodes_path = DATA_PATH / "target_nodes.parquet" 
     transactions_path = DATA_PATH / "1_filtered_transactions.parquet"
     accounts_path = DATA_PATH / "2_filtered_accounts.parquet"
     features_out = DATA_PATH / OUTPUT_FEATURES_FILE
