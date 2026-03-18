@@ -1,165 +1,266 @@
 ============================================================
-Aggregate Evaluation Summary (Mean Across All Days)
+Graph Feature Generation Pipeline
+Dataset: SMALL
+Evaluation:     Enabled
+Leiden:         Enabled
+Rank Stability: Enabled
+============================================================
+Extracting unique temporal windows...
+Found 9 windows to process.
+Pre-computing per-window fraud labels with DuckDB...
+Launching ProcessPoolExecutor with 3 workers...
+
+Processing days: 100%|███████████████████████████| 9/9 [06:49<00:00, 45.47s/day]
+
+Applying sequential rank stability post-processing...
+
+Using pre-aggregated is_fraud labels from aggregated_nodes.parquet...
+Saving features to data/LI_Small/sliding_window_features.parquet via DuckDB out-of-core join...
+Cleaning temporary artifacts...
+Saving metrics to data/LI_Small/sliding_window_metrics.parquet...
+
+============================================================
+Aggregate Evaluation Summary (Mean & Median Across All Days)
 ============================================================
 
 [PR_VOL_DEEP]
 ----------------------------------------
-  Mean ROC-AUC:            0.5592
-  Mean Average Precision:  0.0531
+  Mean ROC-AUC:            0.5371
+  Median ROC-AUC:          0.5356
+  Mean Average Precision:  0.0517
+  Median Average Precision:0.0526
 
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 102.16x)
-    @    2: 100.0000% (lift: 102.16x)
-    @   10: 94.4444% (lift: 89.93x)
-    @   50: 53.1111% (lift: 46.60x)
-    @  100: 40.6667% (lift: 34.29x)
-    @  500: 19.4667% (lift: 14.79x)
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 151.99x)
+    @    2: 100.0000% (lift: 151.99x)
+    @   10: 100.0000% (lift: 151.99x)
+    @   50: 60.8889% (lift: 85.90x)
+    @  100: 43.2222% (lift: 57.85x)
+    @  500: 19.8889% (lift: 23.94x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 94.48x)
+    @    2: 100.0000% (lift: 94.48x)
+    @   10: 100.0000% (lift: 94.48x)
+    @   50: 66.0000% (lift: 43.46x)
+    @  100: 44.0000% (lift: 34.96x)
+    @  500: 20.6000% (lift: 18.14x)
 
 [PR_VOL_SHALLOW]
 ----------------------------------------
-  Mean ROC-AUC:            0.5609
-  Mean Average Precision:  0.0574
+  Mean ROC-AUC:            0.5372
+  Median ROC-AUC:          0.5355
+  Mean Average Precision:  0.0562
+  Median Average Precision:0.0543
 
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 102.16x)
-    @    2: 100.0000% (lift: 102.16x)
-    @   10: 96.6667% (lift: 92.89x)
-    @   50: 56.6667% (lift: 50.23x)
-    @  100: 44.1111% (lift: 37.70x)
-    @  500: 20.7333% (lift: 16.04x)
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 151.99x)
+    @    2: 100.0000% (lift: 151.99x)
+    @   10: 100.0000% (lift: 151.99x)
+    @   50: 66.2222% (lift: 91.32x)
+    @  100: 47.6667% (lift: 62.02x)
+    @  500: 21.6222% (lift: 25.73x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 94.48x)
+    @    2: 100.0000% (lift: 94.48x)
+    @   10: 100.0000% (lift: 94.48x)
+    @   50: 70.0000% (lift: 47.24x)
+    @  100: 49.0000% (lift: 36.02x)
+    @  500: 22.8000% (lift: 20.79x)
 
 [PR_COUNT]
 ----------------------------------------
-  Mean ROC-AUC:            0.5653
-  Mean Average Precision:  0.0703
+  Mean ROC-AUC:            0.5429
+  Median ROC-AUC:          0.5411
+  Mean Average Precision:  0.0696
+  Median Average Precision:0.0662
 
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 102.16x)
-    @    2: 100.0000% (lift: 102.16x)
-    @   10: 96.6667% (lift: 92.89x)
-    @   50: 73.3333% (lift: 64.62x)
-    @  100: 52.3333% (lift: 45.20x)
-    @  500: 26.3778% (lift: 20.69x)
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 151.99x)
+    @    2: 100.0000% (lift: 151.99x)
+    @   10: 100.0000% (lift: 151.99x)
+    @   50: 76.6667% (lift: 103.00x)
+    @  100: 56.1111% (lift: 72.70x)
+    @  500: 26.5333% (lift: 31.90x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 94.48x)
+    @    2: 100.0000% (lift: 94.48x)
+    @   10: 100.0000% (lift: 94.48x)
+    @   50: 78.0000% (lift: 60.47x)
+    @  100: 57.0000% (lift: 43.46x)
+    @  500: 27.6000% (lift: 22.49x)
 
 [HITS_HUB]
 ----------------------------------------
-  Mean ROC-AUC:            0.6575
-  Mean Average Precision:  0.0347
+  Mean ROC-AUC:            0.6468
+  Median ROC-AUC:          0.6378
+  Mean Average Precision:  0.0332
+  Median Average Precision:0.0332
 
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 102.16x)
-    @    2: 94.4444% (lift: 83.40x)
-    @   10: 70.0000% (lift: 53.73x)
-    @   50: 29.3333% (lift: 24.93x)
-    @  100: 18.8889% (lift: 16.72x)
-    @  500: 9.4444% (lift: 7.53x)
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 151.99x)
+    @    2: 100.0000% (lift: 151.99x)
+    @   10: 92.2222% (lift: 127.14x)
+    @   50: 46.0000% (lift: 57.68x)
+    @  100: 26.5556% (lift: 34.09x)
+    @  500: 9.8444% (lift: 11.75x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 94.48x)
+    @    2: 100.0000% (lift: 94.48x)
+    @   10: 100.0000% (lift: 94.48x)
+    @   50: 52.0000% (lift: 49.13x)
+    @  100: 27.0000% (lift: 26.46x)
+    @  500: 9.4000% (lift: 8.73x)
 
 [HITS_AUTH]
 ----------------------------------------
-  Mean ROC-AUC:            0.5988
-  Mean Average Precision:  0.0252
+  Mean ROC-AUC:            0.6059
+  Median ROC-AUC:          0.5967
+  Mean Average Precision:  0.0270
+  Median Average Precision:0.0266
 
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 102.16x)
-    @    2: 94.4444% (lift: 83.40x)
-    @   10: 61.1111% (lift: 47.26x)
-    @   50: 13.5556% (lift: 10.66x)
-    @  100: 8.2222% (lift: 6.69x)
-    @  500: 4.1778% (lift: 3.25x)
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 151.99x)
+    @    2: 100.0000% (lift: 151.99x)
+    @   10: 94.4444% (lift: 127.51x)
+    @   50: 40.6667% (lift: 49.57x)
+    @  100: 21.3333% (lift: 26.05x)
+    @  500: 5.7111% (lift: 7.02x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 94.48x)
+    @    2: 100.0000% (lift: 94.48x)
+    @   10: 100.0000% (lift: 94.48x)
+    @   50: 46.0000% (lift: 43.46x)
+    @  100: 25.0000% (lift: 23.62x)
+    @  500: 6.0000% (lift: 5.67x)
 
 [K_CORE]
 ----------------------------------------
-  Mean ROC-AUC:            0.6752
-  Mean Average Precision:  0.0574
+  Mean ROC-AUC:            0.6654
+  Median ROC-AUC:          0.6598
+  Mean Average Precision:  0.0557
+  Median Average Precision:0.0598
 
-  Mean Precision@K:
-    @    1: 66.6667% (lift: 41.95x)
-    @    2: 77.7778% (lift: 53.29x)
-    @   10: 71.1111% (lift: 56.92x)
-    @   50: 45.1111% (lift: 30.41x)
-    @  100: 40.1111% (lift: 28.57x)
-    @  500: 27.8889% (lift: 20.01x)
+  Mean Precision@K:
+    @    1: 88.8889% (lift: 125.48x)
+    @    2: 88.8889% (lift: 129.65x)
+    @   10: 75.5556% (lift: 100.07x)
+    @   50: 59.7778% (lift: 68.92x)
+    @  100: 49.1111% (lift: 56.95x)
+    @  500: 27.8222% (lift: 30.09x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 78.30x)
+    @    2: 100.0000% (lift: 81.75x)
+    @   10: 80.0000% (lift: 62.64x)
+    @   50: 68.0000% (lift: 64.25x)
+    @  100: 55.0000% (lift: 51.97x)
+    @  500: 29.6000% (lift: 27.97x)
 
 [BETWEENNESS]
 ----------------------------------------
-  Mean ROC-AUC:            0.6403
-  Mean Average Precision:  0.0652
+  Mean ROC-AUC:            0.6399
+  Median ROC-AUC:          0.6401
+  Mean Average Precision:  0.0536
+  Median Average Precision:0.0524
 
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 102.16x)
-    @    2: 100.0000% (lift: 102.16x)
-    @   10: 90.0000% (lift: 90.40x)
-    @   50: 42.4444% (lift: 36.59x)
-    @  100: 35.4444% (lift: 31.40x)
-    @  500: 25.5556% (lift: 19.19x)
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 151.99x)
+    @    2: 100.0000% (lift: 151.99x)
+    @   10: 82.2222% (lift: 129.00x)
+    @   50: 37.7778% (lift: 50.18x)
+    @  100: 30.6667% (lift: 40.24x)
+    @  500: 22.9333% (lift: 25.90x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 94.48x)
+    @    2: 100.0000% (lift: 94.48x)
+    @   10: 80.0000% (lift: 66.14x)
+    @   50: 40.0000% (lift: 45.35x)
+    @  100: 31.0000% (lift: 30.23x)
+    @  500: 23.6000% (lift: 22.30x)
 
 ============================================================
 Leiden Community Detection Analysis
 ============================================================
 
-Analysis based on final day: 2022-09-10
-Total nodes with community assignment: 157,747
-Total communities detected: 3,253
-Overall fraud rate: 2.8102%
+Analysis based on final day: 2022-09-10 00:00:00
+Total nodes with community assignment: 213,679
+Total communities detected: 3,945
+Overall fraud rate: 1.8776%
 
 [Community Size Distribution]
 --------------------------------------------------
-Size       Communities  Nodes      Fraud    Rate       Lift
+Size       Communities  Nodes      Fraud    Rate       Lift    
 ------------------------------------------------------------
-1          1            1          0        0.0000%   0.00x
-2-4        1301         3327       50       1.5029%   0.53x
-5-9        427          2789       62       2.2230%   0.79x
-10-49      880          21042      512      2.4332%   0.87x
-50-99      328          23333      625      2.6786%   0.95x
-100-499    297          51586      1475     2.8593%   1.02x
-500+       19           55669      1709     3.0699%   1.09x
+1          1            1          0        0.0000%   0.00x
+2-4        1652         4192       61       1.4552%   0.78x
+5-9        504          3332       35       1.0504%   0.56x
+10-49      934          22066      344      1.5590%   0.83x
+50-99      401          28556      472      1.6529%   0.88x
+100-499    426          74442      1373     1.8444%   0.98x
+500+       27           81090      1727     2.1297%   1.13x
 
 [Top 10 Communities by Fraud Rate (min 3 members)]
 ----------------------------------------------------------------------
-Comm ID    Size     Fraud    Rate         Lift
+Comm ID    Size     Fraud    Rate         Lift    
 --------------------------------------------------
-1904       5        2        40.0000%      14.23x
-1742       6        2        33.3333%      11.86x
-2150       3        1        33.3333%      11.86x
-2154       3        1        33.3333%      11.86x
-2183       3        1        33.3333%      11.86x
-2208       3        1        33.3333%      11.86x
-2227       3        1        33.3333%      11.86x
-2235       3        1        33.3333%      11.86x
-2236       3        1        33.3333%      11.86x
-2238       3        1        33.3333%      11.86x
+2807       3        2        66.6667%      35.51x
+2295       4        2        50.0000%      26.63x
+2372       4        2        50.0000%      26.63x
+2434       4        2        50.0000%      26.63x
+2447       4        2        50.0000%      26.63x
+2507       4        2        50.0000%      26.63x
+1847       9        3        33.3333%      17.75x
+2544       3        1        33.3333%      17.75x
+2599       3        1        33.3333%      17.75x
+2666       3        1        33.3333%      17.75x
+
+[Potential Fraud Rings: 100% Fraud Communities (size >= 2)]
+--------------------------------------------------
+Found 4 communities that are 100% fraudulent
+Total nodes in these communities: 8
+Size distribution: {'count': 4.0, 'mean': 2.0, 'std': 0.0, 'min': 2.0, '25%': 2.0, '50%': 2.0, '75%': 2.0, 'max': 2.0}
 
 [Leiden Effectiveness Summary]
 --------------------------------------------------
-Mean Leiden Modularity (Q): 0.5295
-Fraud in small communities (size <= 10): 125 / 4,433 (2.82%)
-Average community fraud rate: 2.0599%
-Overall fraud rate: 2.8102%
-Fraud in high-concentration communities (>2x avg rate): 743 / 4,433 (16.76%)
+Mean Leiden Modularity (Q): 0.5301
+Fraud in small communities (size <= 10): 106 / 4,012 (2.64%)
+Average community fraud rate: 1.4602%
+Overall fraud rate: 1.8776%
+Fraud in high-concentration communities (>2x avg rate): 728 / 4,012 (18.15%)
 
 ============================================================
 Feature Statistics Summary
 ============================================================
-        pr_vol_deep  pr_vol_shallow      pr_count      hits_hub  ...  leiden_macro_size  leiden_micro_size  leiden_macro_modularity  leiden_micro_modularity
-count  1.419083e+06    1.419083e+06  1.419083e+06  1.419083e+06  ...       1.419083e+06       1.419083e+06             1.419083e+06             1.419083e+06
-mean   6.342124e-06    6.342124e-06  6.342124e-06  6.342124e-06  ...       1.846921e+03       1.274991e+03             5.295054e-01             5.123218e-01
-std    1.347349e-05    1.146255e-05  1.262705e-05  2.034912e-03  ...       2.949430e+03       2.308696e+03             7.746687e-02             8.147591e-02
-min    9.750693e-07    1.600873e-06  9.986310e-07 -7.990779e-17  ...       1.000000e+00       1.000000e+00             4.210566e-01             3.986853e-01
-25%    3.269808e-06    3.667983e-06  3.395995e-06 -0.000000e+00  ...       7.000000e+01       5.400000e+01             4.601105e-01             4.375786e-01
-50%    4.858775e-06    5.308062e-06  4.916512e-06  4.698405e-34  ...       1.920000e+02       1.360000e+02             5.744399e-01             5.597179e-01
-75%    7.075619e-06    7.107698e-06  7.465867e-06  4.809015e-27  ...       2.790000e+03       1.562000e+03             6.043420e-01             5.903480e-01
-max    3.645418e-03    3.111577e-03  3.215254e-03  9.433603e-01  ...       1.075200e+04       8.998000e+03             6.068819e-01             5.950862e-01
+        pr_vol_deep  ...  leiden_micro_modularity
+count  1.921760e+06  ...             1.921760e+06
+mean   4.683207e-06  ...             5.141204e-01
+std    8.917120e-06  ...             8.230547e-02
+min    7.401595e-07  ...             3.955688e-01
+25%    2.427835e-06  ...             4.426400e-01
+50%    3.687125e-06  ...             5.600660e-01
+75%    5.264592e-06  ...             5.924410e-01
+max    2.237592e-03  ...             5.972130e-01
 
-[8 rows x 17 columns]
+[8 rows x 18 columns]
 
 ============================================================
 Rank Anomaly Analysis (reference: pr_vol_deep)
 ============================================================
-Total rank anomaly flags: 62,104
-Fraud among rank anomalies: 2,284 (3.68%)
-Overall fraud rate: 1.55%
-Lift from rank anomaly detection: 2.37x
+Total rank anomaly flags: 84,120
+Fraud among rank anomalies: 2,647 (3.15%)
+Overall fraud rate: 1.88%
+Lift from rank anomaly detection: 1.67x
 
+============================================================
+Rank Stability Processing
+============================================================
+Rank stability features were materialized via out-of-core DuckDB joins.
 
 [Temporal Split Enforced]
 Training set:   851,449 rows (up to 2022-09-07)
