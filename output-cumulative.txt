@@ -228,3 +228,56 @@ Rank Stability Processing
 Rank stability features were materialized via out-of-core DuckDB joins.
 
 Done!
+
+[Temporal Split Enforced]
+Training set:   670,042 rows (up to 2022-09-07)
+Validation set: 223,347 rows (up to 2022-09-08)
+Testing set:    223,348 rows (up to 2022-09-10)
+
+Class Imbalance Ratio (Neg/Pos) in Train: 201.74
+
+/usr/local/lib/python3.12/dist-packages/xgboost/core.py:751: UserWarning: [21:51:36] WARNING: /__w/xgboost/xgboost/src/common/error_msg.cc:62: Falling back to prediction using DMatrix due to mismatched devices. This might lead to higher memory usage and slower performance. XGBoost is running on: cuda:0, while the input data is on: cpu.
+Potential solutions:
+- Use a data structure that matches the device ordinal in the booster.
+- Set the device for booster before call to inplace_predict.
+
+This warning will only be shown once.
+
+  return func(**kwargs)
+
+
+Optimal Parameters Found via Successive Halving: {'colsample_bytree': np.float64(0.5079831261101071), 'learning_rate': np.float64(0.007020058616347516), 'max_depth': 12, 'n_estimators': 376, 'reg_lambda': np.float64(4.6741944893727805), 'scale_pos_weight': np.float64(6.489969920043588), 'subsample': np.float64(0.9165974558680822)}
+
+Extracting Optimal F1 Threshold from Validation Set...
+Optimal Threshold Found: 0.2264
+
+Evaluating on Future Temporal Window (Test Set)...
+Test AUPRC:   0.1373
+Test ROC-AUC: 0.8486
+Test F1-Score: 0.1937 (at 0.2264 threshold)
+
+Test Precision@K:
+  @  10: 90.0000% (Lift: 177.42x)
+  @  50: 86.0000% (Lift: 169.53x)
+  @ 100: 73.0000% (Lift: 143.90x)
+  @ 500: 29.0000% (Lift: 57.17x)
+
+========================================
+[SUPERVISED BENCHMARK] Training LightGBM with Successive Halving...
+========================================
+
+Optimal LightGBM Parameters Found: {'learning_rate': np.float64(0.011529492158443996), 'n_estimators': 870, 'num_leaves': 5391, 'reg_lambda': np.float64(7.488150347525896), 'scale_pos_weight': np.float64(6.387926357773329)}
+
+Extracting Optimal F1 Threshold for LightGBM from Validation Set...
+Optimal LightGBM Threshold Found: 0.0601
+
+Evaluating LightGBM on Test Set...
+LightGBM Test AUPRC:   0.1371
+LightGBM Test ROC-AUC: 0.8384
+LightGBM Test F1-Score: 0.1756 (at 0.0601 threshold)
+
+LightGBM Test Precision@K:
+  @  10: 90.0000% (Lift: 177.42x)
+  @  50: 92.0000% (Lift: 181.36x)
+  @ 100: 72.0000% (Lift: 141.93x)
+  @ 500: 30.2000% (Lift: 59.53x)
