@@ -12,6 +12,7 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 from sklearn.metrics import average_precision_score, roc_auc_score, f1_score
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.ensemble import IsolationForest
 from sklearn.experimental import enable_halving_search_cv
 from sklearn.model_selection import HalvingRandomSearchCV
@@ -91,14 +92,15 @@ def main():
     pos_weight = num_neg / num_pos if num_pos > 0 else 1.0
     print(f"\nClass Imbalance Ratio (Neg/Pos) in Train: {pos_weight:.2f}")
 
-param_distributions = {
-        'n_estimators': randint(10, 1001),           # num_round: (10, 1000)
-        'max_depth': randint(1, 16),                 # max_depth: (1, 15)
+# Parameter ranges strictly defined by the paper's Table 10 for XGBoost
+    param_distributions = {
+        'n_estimators': randint(10, 1001),             # num_round: (10, 1000)
+        'max_depth': randint(1, 16),                   # max_depth: (1, 15)
         'learning_rate': loguniform(10**-2.5, 10**-1), # learning_rate: 10^(-2.5, -1)
-        'reg_lambda': loguniform(10**-2.2, 10**2),   # lambda: 10^(-2.2, 2)
-        'scale_pos_weight': uniform(1, 9),           # scale_pos_weight: (1, 10) -> loc=1, scale=9
-        'colsample_bytree': uniform(0.5, 0.5),       # colsample_bytree: (0.5, 1.0) -> loc=0.5, scale=0.5
-        'subsample': uniform(0.5, 0.5)               # subsample: (0.5, 1.0) -> loc=0.5, scale=0.5
+        'reg_lambda': loguniform(10**-2.2, 10**2),     # lambda: 10^(-2.2, 2)
+        'scale_pos_weight': uniform(1, 9),             # scale_pos_weight: (1, 10) -> loc=1, scale=9
+        'colsample_bytree': uniform(0.5, 0.5),         # colsample_bytree: (0.5, 1.0) -> loc=0.5, scale=0.5
+        'subsample': uniform(0.5, 0.5)                 # subsample: (0.5, 1.0) -> loc=0.5, scale=0.5
     }
 
     base_model = xgb.XGBClassifier(
@@ -108,17 +110,26 @@ param_distributions = {
         tree_method='hist'
     )
 
-    # The paper uses successive halving with \eta=2 (factor) for large multi-bank datasets
+    # Enforce temporal integrity during internal CV
+    tscv = TimeSeriesSplit(n_splits=3)
+
+    # 1. Map to paper's Table 9 parameters (Assuming Single-Bank Large Dataset)
+    # r0 = 0.1 (Evaluates initial configs on 10% of the training set)
+    # \eta = 2 (Halves configurations, doubles resources each round)
+    r0_fraction = 0.1
+    paper_min_resources = max(int(r0_fraction * len(X_train)), 1000) # Fallback to 1000 to prevent 0-variance crashes on tiny subsets
+
     search = HalvingRandomSearchCV(
         estimator=base_model,
         param_distributions=param_distributions,
-        factor=2, 
+        factor=2,                                # \eta = 2 from Table 9
         resource='n_samples',
+        min_resources=paper_min_resources,       # r0 = 0.1 from Table 9
         max_resources='auto',
-        scoring='average_precision', # Optimizing for AUPRC
+        scoring='average_precision', 
         random_state=42,
         n_jobs=-1,
-        cv=3 # Define appropriate folds to respect temporal structure if necessary
+        cv=tscv 
     )
 
     search.fit(X_train, y_train)
