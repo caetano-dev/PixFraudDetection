@@ -11,7 +11,9 @@ WITH RawTx AS (
         t.to_account,
         t.is_laundering,
         CAST(t.timestamp AS TIMESTAMP) AS ts,
-        t.amount_sent_c * fx.rate AS amount_sent_usd
+        t.amount_sent_c * fx.rate AS amount_sent_usd, -- anomaly detection of graphs, weirdnodes
+        t.payment_currency,
+        t.payment_format
     FROM read_parquet('data/HI_Small/1_filtered_transactions.parquet') t
     LEFT JOIN read_parquet('data/fx_rates.parquet') fx
       ON t.payment_currency = fx.currency
@@ -27,7 +29,9 @@ SELECT
     src.entity_id AS source_entity,
     tgt.entity_id AS target_entity,
     t.amount_sent_usd AS adj_sent,
-    CAST(t.is_laundering AS INTEGER) AS is_laundering
+    CAST(t.is_laundering AS INTEGER) AS is_laundering,
+    t.payment_currency,
+    t.payment_format
 FROM RawTx t
 JOIN AccMap src ON t.from_account = src.acc_num
 JOIN AccMap tgt ON t.to_account = tgt.acc_num;
@@ -40,37 +44,56 @@ SELECT unnest(generate_series(
     INTERVAL 1 DAY
 ))::DATE AS window_date;
 
--- 3. LOOKBACK EDGES (Cumulative Expanding Window: All History up to T-1) -> For NetworkX Topology
--- Time-decayed cumulative graph to prevent temporal blindness while maintaining zero future leakage
+-- 3. LOOKBACK EDGES (Cumulative Expanding Window)
 COPY (
     SELECT
         strftime(c.window_date, '%Y-%m-%d') AS window_date,
         r.source_entity AS source,
         r.target_entity AS target,
-        -- Exponential time decay: older transactions weighted less (lambda = 0.05 per day)
-        -- decay_factor = exp(-0.05 * days_ago)
         SUM(r.adj_sent * EXP(-0.05 * (c.window_date - r.tx_date))) AS volume,
         COUNT(*) AS count,
         COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) AS amount_std,
         COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM r.ts)), 0.0) AS time_variance,
-        -- Weight uses decayed volume for edge strength
-        SUM(r.adj_sent * EXP(-0.05 * (c.window_date - r.tx_date))) * 
-        LOG2(1 + COUNT(*)) * 
-        (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) / ((SUM(r.adj_sent) / COUNT(*)) + 1e-9)))) AS weight
+        SUM(r.adj_sent * EXP(-0.05 * (c.window_date - r.tx_date))) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) / ((SUM(r.adj_sent) / COUNT(*)) + 1e-9)))) AS weight
     FROM Calendar c
     JOIN ResolvedTx r 
-      ON r.tx_date < c.window_date -- CUMULATIVE: All history strictly before target day (no lower bound = expanding window)
+      ON r.tx_date < c.window_date 
     GROUP BY c.window_date, r.source_entity, r.target_entity
 ) TO 'data/HI_Small/lookback_edges.parquet' (FORMAT PARQUET);
 
--- 4. TARGET NODES (Strictly T) -> For Labels and Prediction Targets
+-- 4. TARGET NODES (Strictly T) -> Labels and Behavioral Targets
 COPY (
     WITH NodeSent AS (
-        SELECT tx_date AS window_date, source_entity AS entity_id, SUM(adj_sent) AS vol_sent, COUNT(*) AS tx_count_sent, COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM ts)), 0.0) AS time_variance
+        SELECT 
+            tx_date AS window_date, 
+            source_entity AS entity_id, 
+            SUM(adj_sent) AS vol_sent, 
+            COUNT(*) AS tx_count_sent, 
+            COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM ts)), 0.0) AS time_variance,
+            COUNT(DISTINCT payment_currency) AS distinct_currencies_sent,
+            SUM(CASE WHEN payment_format = 'Wire' THEN 1 ELSE 0 END) AS wire_count_sent,
+            SUM(CASE WHEN payment_format = 'Cash' THEN 1 ELSE 0 END) AS cash_count_sent,
+            SUM(CASE WHEN payment_format = 'Bitcoin' THEN 1 ELSE 0 END) AS bitcoin_count_sent,
+            SUM(CASE WHEN payment_format = 'Cheque' THEN 1 ELSE 0 END) AS cheque_count_sent,
+            SUM(CASE WHEN payment_format = 'Credit Card' THEN 1 ELSE 0 END) AS credit_card_count_sent,
+            SUM(CASE WHEN payment_format = 'ACH' THEN 1 ELSE 0 END) AS ach_count_sent,
+            SUM(CASE WHEN payment_format = 'Reinvestment' THEN 1 ELSE 0 END) AS reinvestment_count_sent
         FROM ResolvedTx GROUP BY tx_date, source_entity
     ),
     NodeRecv AS (
-        SELECT tx_date AS window_date, target_entity AS entity_id, SUM(adj_sent) AS vol_recv, COUNT(*) AS tx_count_recv
+        SELECT 
+            tx_date AS window_date, 
+            target_entity AS entity_id, 
+            SUM(adj_sent) AS vol_recv, 
+            COUNT(*) AS tx_count_recv,
+            COUNT(DISTINCT payment_currency) AS distinct_currencies_recv,
+            SUM(CASE WHEN payment_format = 'Wire' THEN 1 ELSE 0 END) AS wire_count_recv,
+            SUM(CASE WHEN payment_format = 'Cash' THEN 1 ELSE 0 END) AS cash_count_recv,
+            SUM(CASE WHEN payment_format = 'Bitcoin' THEN 1 ELSE 0 END) AS bitcoin_count_recv,
+            SUM(CASE WHEN payment_format = 'Cheque' THEN 1 ELSE 0 END) AS cheque_count_recv,
+            SUM(CASE WHEN payment_format = 'Credit Card' THEN 1 ELSE 0 END) AS credit_card_count_recv,
+            SUM(CASE WHEN payment_format = 'ACH' THEN 1 ELSE 0 END) AS ach_count_recv,
+            SUM(CASE WHEN payment_format = 'Reinvestment' THEN 1 ELSE 0 END) AS reinvestment_count_recv
         FROM ResolvedTx GROUP BY tx_date, target_entity
     ),
     EntityFraud AS (
@@ -88,6 +111,23 @@ COPY (
         COALESCE(r.vol_recv, 0.0) AS vol_recv,
         COALESCE(s.tx_count_sent, 0) + COALESCE(r.tx_count_recv, 0) AS tx_count,
         COALESCE(s.time_variance, 0.0) AS time_variance,
+        COALESCE(s.distinct_currencies_sent, 0) AS distinct_currencies_sent,
+        COALESCE(r.distinct_currencies_recv, 0) AS distinct_currencies_recv,
+        COALESCE(s.wire_count_sent, 0) AS wire_count_sent,
+        COALESCE(r.wire_count_recv, 0) AS wire_count_recv,
+        COALESCE(s.cash_count_sent, 0) AS cash_count_sent,
+        COALESCE(r.cash_count_recv, 0) AS cash_count_recv,
+        COALESCE(s.bitcoin_count_sent, 0) AS bitcoin_count_sent,
+        COALESCE(r.bitcoin_count_recv, 0) AS bitcoin_count_recv,
+        COALESCE(s.cheque_count_sent, 0) AS cheque_count_sent,
+        COALESCE(r.cheque_count_recv, 0) AS cheque_count_recv,
+        COALESCE(s.credit_card_count_sent, 0) AS credit_card_count_sent,
+        COALESCE(r.credit_card_count_recv, 0) AS credit_card_count_recv,
+        COALESCE(s.ach_count_sent, 0) AS ach_count_sent,
+        COALESCE(r.ach_count_recv, 0) AS ach_count_recv,
+        COALESCE(s.reinvestment_count_sent, 0) AS reinvestment_count_sent,
+        COALESCE(r.reinvestment_count_recv, 0) AS reinvestment_count_recv,
+
         COALESCE(ef.is_fraud, 0) AS is_fraud
     FROM NodeSent s
     FULL OUTER JOIN NodeRecv r ON s.window_date = r.window_date AND s.entity_id = r.entity_id

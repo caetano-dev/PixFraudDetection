@@ -106,7 +106,18 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
         create_using=nx.DiGraph,
     )
 
-    node_stat_columns = ["vol_sent", "vol_recv", "tx_count", "time_variance"]
+    node_stat_columns = [
+        "vol_sent", "vol_recv", "tx_count", "time_variance",
+        "distinct_currencies_sent", "distinct_currencies_recv",
+        "wire_count_sent", "wire_count_recv", 
+        "cash_count_sent", "cash_count_recv",
+        "bitcoin_count_sent", "bitcoin_count_recv",
+        "cheque_count_sent", "cheque_count_recv",
+        "credit_card_count_sent", "credit_card_count_recv",
+        "ach_count_sent", "ach_count_recv",
+        "reinvestment_count_sent", "reinvestment_count_recv"
+    ]
+
     if "is_fraud" in day_nodes.columns:
         node_stat_columns.append("is_fraud")
     node_stats = day_nodes.set_index("entity_id")[node_stat_columns].to_dict(orient="index")
@@ -147,6 +158,22 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
             "time_variance": ns.get("time_variance", 0.0),
             "is_fraud": int(ns.get("is_fraud", 0) or 0),
             "flow_ratio": vol_s / (vol_r if vol_r > 0 else vol_s),
+            "distinct_currencies_sent": ns.get("distinct_currencies_sent", 0),
+            "distinct_currencies_recv": ns.get("distinct_currencies_recv", 0),
+            "wire_count_sent": ns.get("wire_count_sent", 0),
+            "wire_count_recv": ns.get("wire_count_recv", 0),
+            "cash_count_sent": ns.get("cash_count_sent", 0),
+            "cash_count_recv": ns.get("cash_count_recv", 0),
+            "bitcoin_count_sent": ns.get("bitcoin_count_sent", 0),
+            "bitcoin_count_recv": ns.get("bitcoin_count_recv", 0),
+            "cheque_count_sent": ns.get("cheque_count_sent", 0),
+            "cheque_count_recv": ns.get("cheque_count_recv", 0),
+            "credit_card_count_sent": ns.get("credit_card_count_sent", 0),
+            "credit_card_count_recv": ns.get("credit_card_count_recv", 0),
+            "ach_count_sent": ns.get("ach_count_sent", 0),
+            "ach_count_recv": ns.get("ach_count_recv", 0),
+            "reinvestment_count_sent": ns.get("reinvestment_count_sent", 0),
+            "reinvestment_count_recv": ns.get("reinvestment_count_recv", 0),
             "betweenness": daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0),
             "k_core": daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0),
             "fan_out_count": daily_metrics.get("motifs", {}).get(node, {}).get("fan_out_count", 0),
@@ -771,6 +798,16 @@ def main() -> None:
         "scatter_gather_count",
         "gather_scatter_count",
         "cycle_count",
+        "cycle_count",
+        "distinct_currencies_sent",
+        "distinct_currencies_recv",
+        "wire_count_sent", 
+        "wire_count_recv", "cash_count_sent", "cash_count_recv", "bitcoin_count_sent", 
+        "bitcoin_count_recv",
+        "cheque_count_sent", "cheque_count_recv",
+        "credit_card_count_sent", "credit_card_count_recv",
+        "ach_count_sent", "ach_count_recv",
+        "reinvestment_count_sent", "reinvestment_count_recv"
     ]
     if RUN_LEIDEN:
         summary_cols += ["leiden_macro_size", "leiden_micro_size", "leiden_macro_modularity", "leiden_micro_modularity"]
