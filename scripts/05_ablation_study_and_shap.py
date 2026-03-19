@@ -203,22 +203,17 @@ def forward_chaining_validation(
                 print(f"  Window {test_window_id}: Skipped (no fraud in training history)")
             continue
         
-        # Compute class weights
-        num_neg = np.sum(y_train == 0)
-        num_pos = np.sum(y_train == 1)
-        scale_pos_weight = num_neg / num_pos if num_pos > 0 else 1.0
-        
         # Train model
         model = xgb.XGBClassifier(
-            n_estimators=n_estimators,
-            max_depth=max_depth,
-            learning_rate=learning_rate,
-            scale_pos_weight=scale_pos_weight,
-            objective='binary:logistic',
-            eval_metric='aucpr',
-            random_state=42,
-            tree_method='hist',
-            verbosity=0
+          n_estimators=209,
+          max_depth=8,
+          learning_rate=0.0654005293991036,
+          objective='binary:logistic', eval_metric='aucpr', tree_method='hist',
+          random_state=42, n_jobs=-1, verbosity=0,
+          min_child_weight=3,
+          subsample=0.8976631049318831,
+          colsample_bytree=0.6864151054104919,
+          gamma=3.1410358866866583,
         )
         
         model.fit(X_train, y_train)
