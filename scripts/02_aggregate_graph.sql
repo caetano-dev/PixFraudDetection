@@ -53,18 +53,17 @@ WindowParams AS (
 SELECT 
     ROW_NUMBER() OVER (ORDER BY window_start) - 1 AS window_id,
     window_start,
-    window_start + INTERVAL window_size_days DAY AS window_end
+    window_start + (window_size_days * INTERVAL 1 DAY) AS window_end
 FROM (
     SELECT 
         unnest(generate_series(
-            (SELECT first_date FROM DataBounds),
-            (SELECT last_date FROM DataBounds),
-            INTERVAL (SELECT window_stride_days FROM WindowParams) DAY
+            (SELECT first_date FROM DataBounds)::TIMESTAMP,
+            (SELECT last_date FROM DataBounds)::TIMESTAMP,
+            (SELECT window_stride_days FROM WindowParams) * INTERVAL 1 DAY
         ))::DATE AS window_start,
         (SELECT window_size_days FROM WindowParams) AS window_size_days
-    FROM WindowParams
 ) sub
-WHERE window_start + INTERVAL window_size_days DAY <= (SELECT last_date + INTERVAL 1 DAY FROM DataBounds);
+WHERE window_start + (window_size_days * INTERVAL 1 DAY) <= (SELECT last_date + INTERVAL 1 DAY FROM DataBounds);
 
 -- 3. SLIDING WINDOW EDGES (Strict Non-Cumulative)
 -- Each edge is aggregated ONLY from transactions within [window_start, window_end)
@@ -131,7 +130,7 @@ COPY (
         GROUP BY w.window_id, w.window_start, w.window_end, r.target_entity
     ),
     EntityFraud AS (
-        SELECT w.window_id, entity_id, MAX(is_fraud) AS is_fraud
+        SELECT window_id, entity_id, MAX(is_fraud) AS is_fraud 
         FROM (
             SELECT w.window_id, r.source_entity AS entity_id, r.is_laundering AS is_fraud 
             FROM WindowCalendar w
@@ -140,7 +139,8 @@ COPY (
             SELECT w.window_id, r.target_entity AS entity_id, r.is_laundering AS is_fraud 
             FROM WindowCalendar w
             JOIN ResolvedTx r ON r.tx_date >= w.window_start AND r.tx_date < w.window_end
-        ) WHERE entity_id IS NOT NULL 
+        ) AS sub_union
+        WHERE entity_id IS NOT NULL 
         GROUP BY window_id, entity_id
     )
     SELECT
