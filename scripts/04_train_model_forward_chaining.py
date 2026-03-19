@@ -47,7 +47,7 @@ def forward_chaining_validation(
     min_train_windows: int = 2,
     model_type: str = "xgboost",
     n_estimators: int = 100,
-    max_depth: int = 6,
+    max_depth: int = 3,
     learning_rate: float = 0.1,
 ) -> Tuple[pd.DataFrame, Dict]:
     """
@@ -83,7 +83,7 @@ def forward_chaining_validation(
     # Define columns to drop (non-predictive metadata)
     cols_to_drop = [
         window_col, "window_start", "window_end", "entity_id", target_col,
-        "leiden_macro_id", "leiden_micro_id", "is_rank_anomaly"
+        "leiden_macro_id", "leiden_micro_id", "is_rank_anomaly", "credit_card_count_sent", "tx_count", "cash_count_sent", "cash_count_recv", "degree", "weirdnodes_magnitude", "wire_count_recv", "k_core", "weirdnodes_residual", "leiden_micro_size" 
     ]
     drop_cols = [col for col in cols_to_drop if col in df.columns]
     
@@ -310,7 +310,7 @@ def main():
         min_train_windows=2,
         model_type="xgboost",
         n_estimators=100,
-        max_depth=6,
+        max_depth=3,
         learning_rate=0.1,
     )
     
