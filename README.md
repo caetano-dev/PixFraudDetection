@@ -28,7 +28,14 @@ Put the source AMLworld csv and text files in their `data` directories. Rename t
 ```
 python3 scripts/00_generate_convertion_rates.py
 python3 scripts/01_filter_raw_data.py --dataset HI_Small # or HI_Large, LI_Small, LI_Large
-duckdb -c ".read scripts/02_aggregate_graph.sql"   
+python3 -m scripts.02_run_aggregation
 python3 -m scripts.03_extract_features
-python3 -m scripts.04_train_mode
+python3 -m scripts.04_train_model_forward_chaining
+```
+
+### Other scripts:
+
+```
+python3 -m scripts.05_diagnose_features
+python3 -m scripts.06_summary
 ```
