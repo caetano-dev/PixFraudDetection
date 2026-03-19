@@ -188,6 +188,32 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
             node: daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0)
             for node in G.nodes()
         }
+        
+        # Basic feature scores
+        vol_sent_scores = {
+            node: node_stats.get(node, {}).get("vol_sent", 0.0)
+            for node in G.nodes()
+        }
+        vol_recv_scores = {
+            node: node_stats.get(node, {}).get("vol_recv", 0.0)
+            for node in G.nodes()
+        }
+        in_degree_scores = {
+            node: G.in_degree(node) if G.has_node(node) else 0
+            for node in G.nodes()
+        }
+        out_degree_scores = {
+            node: G.out_degree(node) if G.has_node(node) else 0
+            for node in G.nodes()
+        }
+        tx_count_scores = {
+            node: node_stats.get(node, {}).get("tx_count", 0)
+            for node in G.nodes()
+        }
+        time_variance_scores = {
+            node: node_stats.get(node, {}).get("time_variance", 0.0)
+            for node in G.nodes()
+        }
 
         if pr_vol_deep_scores:
             evaluation_k_values = run_flags.get("evaluation_k_values", [])
@@ -205,6 +231,12 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
                     hits_auth=hits_auths,
                     betweenness=betweenness_scores,
                     k_core=k_core_scores,
+                    vol_sent=vol_sent_scores,
+                    vol_recv=vol_recv_scores,
+                    in_degree=in_degree_scores,
+                    out_degree=out_degree_scores,
+                    tx_count=tx_count_scores,
+                    time_variance=time_variance_scores,
                 )
                 for algo_name, algo_metrics in eval_metrics.items():
                     metric_record: dict = {
@@ -634,7 +666,8 @@ def main() -> None:
         print("Aggregate Evaluation Summary (Mean & Median Across All Days)")
         print("=" * 60)
 
-        for algo in ["pr_vol_deep", "pr_vol_shallow", "pr_count", "hits_hub", "hits_auth", "k_core", "betweenness"]:
+        for algo in ["pr_vol_deep", "pr_vol_shallow", "pr_count", "hits_hub", "hits_auth", "k_core", "betweenness", 
+                     "vol_sent", "vol_recv", "in_degree", "out_degree", "tx_count", "time_variance"]:
             algo_df = metrics_df[metrics_df["algorithm"] == algo]
             if algo_df.empty:
                 continue
