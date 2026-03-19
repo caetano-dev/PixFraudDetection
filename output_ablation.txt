@@ -1,0 +1,131 @@
+================================================================================
+ABLATION STUDY AND SHAP INTERPRETABILITY ANALYSIS
+================================================================================
+Loading feature matrix from data/HI_Small/sliding_window_features.parquet...
+
+Dataset shape: (1116737, 49)
+Fraud rate: 0.4949%
+Window column: date
+Total windows: 9
+================================================================================
+ABLATION STUDY: BEHAVIORAL-ONLY vs FULL MODEL
+================================================================================
+
+--------------------------------------------------------------------------------
+BASELINE: BEHAVIORAL FEATURES ONLY
+--------------------------------------------------------------------------------
+Features: 21
+  Transaction stats: vol_sent, vol_recv, tx_count, time_variance, flow_ratio
+  Currency diversity: distinct_currencies_sent/recv
+  Payment formats: wire, cash, bitcoin, cheque, credit_card, ach, reinvestment (sent/recv)
+
+Total windows available: 9
+Window range: 2022-09-02 to 2022-09-10
+Features used: 21
+
+Starting forward-chaining validation (min_train_windows=2)...
+
+  Window 2022-09-04: AUPRC=0.2413, ROC-AUC=0.9273, F1=0.2825, Fraud=0.5812%, Train_size=261,396
+  Window 2022-09-05: AUPRC=0.1849, ROC-AUC=0.8978, F1=0.2331, Fraud=0.4475%, Train_size=365,148
+  Window 2022-09-06: AUPRC=0.2407, ROC-AUC=0.9183, F1=0.2695, Fraud=0.5238%, Train_size=513,741
+  Window 2022-09-07: AUPRC=0.2355, ROC-AUC=0.9153, F1=0.2838, Fraud=0.4856%, Train_size=662,265
+  Window 2022-09-08: AUPRC=0.2653, ROC-AUC=0.9306, F1=0.3013, Fraud=0.5411%, Train_size=810,750
+  Window 2022-09-09: AUPRC=0.1714, ROC-AUC=0.8940, F1=0.2305, Fraud=0.4658%, Train_size=959,323
+  Window 2022-09-10: Skipped (no variance in labels)
+
+--------------------------------------------------------------------------------
+PROPOSED MODEL: FULL FEATURES (BEHAVIORAL + TOPOLOGICAL)
+--------------------------------------------------------------------------------
+Features: 44
+  Behavioral: 21
+  Topological: 19
+  WeirdNodes: 4
+
+Total windows available: 9
+Window range: 2022-09-02 to 2022-09-10
+Features used: 44
+
+Starting forward-chaining validation (min_train_windows=2)...
+
+  Window 2022-09-04: AUPRC=0.2528, ROC-AUC=0.9364, F1=0.2777, Fraud=0.5812%, Train_size=261,396
+  Window 2022-09-05: AUPRC=0.1896, ROC-AUC=0.9158, F1=0.2245, Fraud=0.4475%, Train_size=365,148
+  Window 2022-09-06: AUPRC=0.2295, ROC-AUC=0.9330, F1=0.2561, Fraud=0.5238%, Train_size=513,741
+  Window 2022-09-07: AUPRC=0.2173, ROC-AUC=0.9323, F1=0.2579, Fraud=0.4856%, Train_size=662,265
+  Window 2022-09-08: AUPRC=0.2462, ROC-AUC=0.9411, F1=0.2896, Fraud=0.5411%, Train_size=810,750
+  Window 2022-09-09: AUPRC=0.1610, ROC-AUC=0.9106, F1=0.2295, Fraud=0.4658%, Train_size=959,323
+  Window 2022-09-10: Skipped (no variance in labels)
+
+================================================================================
+PERFORMANCE LIFT FROM TOPOLOGICAL FEATURES
+================================================================================
+
+--------------------------------------------------------------------------------
+PER-WINDOW METRICS COMPARISON
+--------------------------------------------------------------------------------
+Window           AUPRC (Beh)  AUPRC (Full)   Lift %   F1 (Beh)   F1 (Full)   Lift %  P@100 (Beh)  P@100 (Full)   Lift %
+--------------------------------------------------------------------------------
+2022-09-04            0.2413        0.2528     4.8%     0.2825      0.2777    -1.7%       0.7500        0.6900    -8.0%
+2022-09-05            0.1849        0.1896     2.6%     0.2331      0.2245    -3.7%       0.6400        0.6600     3.1%
+2022-09-06            0.2407        0.2295    -4.6%     0.2695      0.2561    -5.0%       0.8200        0.7500    -8.5%
+2022-09-07            0.2355        0.2173    -7.7%     0.2838      0.2579    -9.1%       0.8000        0.7000   -12.5%
+2022-09-08            0.2653        0.2462    -7.2%     0.3013      0.2896    -3.9%       0.8400        0.7400   -11.9%
+2022-09-09            0.1714        0.1610    -6.1%     0.2305      0.2295    -0.4%       0.6400        0.5900    -7.8%
+
+--------------------------------------------------------------------------------
+AGGREGATE METRICS COMPARISON
+--------------------------------------------------------------------------------
+
+Overall AUPRC:
+  Behavioral-only: 0.2158
+  Full model:      0.2067
+  Improvement:     -4.20%
+
+Overall F1-Score:
+  Behavioral-only: 0.2587
+  Full model:      0.2488
+  Improvement:     -3.82%
+
+Overall Precision@100:
+  Behavioral-only: 0.9300
+  Full model:      0.9200
+  Improvement:     -1.08%
+
+Mean Window AUPRC:
+  Behavioral-only: 0.2232 ± 0.0366
+  Full model:      0.2161 ± 0.0351
+
+Statistical Significance (paired t-test on AUPRC):
+  t-statistic: 1.3879
+  p-value:     2.2384e-01
+  ✗ Difference not statistically significant at α=0.05
+
+✓ Ablation comparison saved to: data/HI_Small/results/ablation_comparison.csv
+✓ Behavioral-only results saved to: data/HI_Small/results/behavioral_only_results.csv
+✓ Full model results saved to: data/HI_Small/results/full_model_results.csv
+
+================================================================================
+GENERATING ABLATION STUDY VISUALIZATIONS
+================================================================================
+✓ Ablation study plot saved to: /home/drull/Documents/PixFraudDetection/notebooks/ablation_study_results.png
+✓ Performance lift plot saved to: /home/drull/Documents/PixFraudDetection/notebooks/performance_lift.png
+
+WARNING: No final model available for SHAP analysis
+
+================================================================================
+ABLATION STUDY AND SHAP ANALYSIS COMPLETE
+================================================================================
+
+Outputs:
+  - Ablation comparison:      data/HI_Small/results/ablation_comparison.csv
+  - SHAP feature importance:  N/A
+  - Ablation plot:            /home/drull/Documents/PixFraudDetection/notebooks/ablation_study_results.png
+  - Performance lift plot:    /home/drull/Documents/PixFraudDetection/notebooks/performance_lift.png
+  - SHAP bar plot:            N/A
+  - SHAP beeswarm plot:       N/A
+
+================================================================================
+KEY FINDINGS
+================================================================================
+1. Overall AUPRC improvement: -4.20%
+2. Test windows evaluated: 6
+3. Mean window AUPRC lift: -3.04% ± 5.35%
