@@ -58,28 +58,28 @@ from src.features.motifs import SubgraphMotifExtractor
 from src.features.stability import RankStabilityTracker
 
 
-def process_window( # weirdnodes, ensemble, bank transactions papers
-    date_str: str,
+def process_window(
+    window_id: int,
     edges_path: Path,
     nodes_path: Path,
     run_flags: dict,
 ) -> dict:
     query_edges = (
         f"SELECT * FROM read_parquet('{str(edges_path)}') "
-        f"WHERE window_date = '{date_str}'"
+        f"WHERE window_id = {window_id}"
     )
     day_edges = duckdb.query(query_edges).df()
 
     query_nodes = (
         f"SELECT * FROM read_parquet('{str(nodes_path)}') "
-        f"WHERE window_date = '{date_str}'"
+        f"WHERE window_id = {window_id}"
     )
     day_nodes = duckdb.query(query_nodes).df()
 
     if day_edges.empty or day_nodes.empty:
         del day_edges, day_nodes
         gc.collect()
-        return {"date": date_str, "features": [], "metrics": [], "daily_metrics": {}}
+        return {"window_id": window_id, "window_start": None, "features": [], "metrics": [], "daily_metrics": {}}
 
     extractors: dict[str, FeatureExtractor] = {
         "pr_vol_deep": PageRankVolumeExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
@@ -95,7 +95,9 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
         extractors["leiden_macro"] = LeidenCommunityExtractor(resolution=LEIDEN_RESOLUTION_MACRO)
         extractors["leiden_micro"] = LeidenCommunityExtractor(resolution=LEIDEN_RESOLUTION_MICRO)
 
-    current_date = pd.to_datetime(date_str)
+    # Extract window_start from the first edge (all edges in window have same window_start)
+    window_start = day_edges["window_start"].iloc[0] if not day_edges.empty else None
+    window_end = day_edges["window_end"].iloc[0] if not day_edges.empty else None
 
     G = nx.from_pandas_edgelist(
         day_edges,
@@ -135,7 +137,9 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
         vol_r = ns.get("vol_recv", 0.0)
 
         record: dict = {
-            "date": current_date.date(),
+            "window_id": window_id,
+            "window_start": window_start,
+            "window_end": window_end,
             "entity_id": node,
             "pr_vol_deep": daily_metrics.get("pr_vol_deep", {}).get(node, {}).get("pagerank", 0.0),
             "pr_vol_shallow": daily_metrics.get("pr_vol_shallow", {}).get(node, {}).get("pagerank", 0.0),
@@ -348,7 +352,9 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
                 )
                 for algo_name, algo_metrics in eval_metrics.items():
                     metric_record: dict = {
-                        "date": current_date.date(),
+                        "window_id": window_id,
+                        "window_start": window_start,
+                        "window_end": window_end,
                         "algorithm": algo_name,
                         "total_nodes": algo_metrics["total_nodes"],
                         "total_fraud": algo_metrics["total_fraud"],
@@ -365,7 +371,9 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
 
     # ---- All centrality metrics for WeirdNodes ensemble stability step -----
     result = {
-        "date": date_str,
+        "window_id": window_id,
+        "window_start": window_start,
+        "window_end": window_end,
         "features": features,
         "metrics": eval_metric_records,
         "daily_metrics": daily_metrics,
@@ -399,60 +407,36 @@ def main() -> None:
     con = duckdb.connect()
 
     print("Extracting unique temporal windows...")
-    unique_dates_df = con.execute(
+    unique_windows_df = con.execute(
         f"""
-        SELECT DISTINCT CAST(window_date AS DATE) AS window_date
+        SELECT DISTINCT window_id, window_start, window_end
         FROM read_parquet('{edges_path}')
-        ORDER BY window_date
+        ORDER BY window_id
         """
     ).df()
-    unique_dates = unique_dates_df["window_date"].astype(str).tolist()
-    del unique_dates_df
+    unique_window_ids = unique_windows_df["window_id"].tolist()
+    del unique_windows_df
     gc.collect()
 
-    print(f"Found {len(unique_dates)} windows to process.")
-    if not unique_dates:
+    print(f"Found {len(unique_window_ids)} windows to process.")
+    if not unique_window_ids:
         print("No windows found. Nothing to process.")
         shutil.rmtree(feature_chunks_dir, ignore_errors=False)
         con.close()
         return
 
-    date_bad_actors: dict[str, set] = {}
+    window_bad_actors: dict[int, set] = {}
     if RUN_EVALUATION:
         print("Pre-computing per-window fraud labels with DuckDB...")
-        for date_str in unique_dates:
+        for window_id in unique_window_ids:
             bad_actor_df = con.execute(
                 f"""
-                WITH laundering_entities AS (
-                    SELECT
-                        COALESCE(
-                            TRY_CAST(tx.timestamp AS TIMESTAMP),
-                            TO_TIMESTAMP(TRY_CAST(tx.timestamp AS DOUBLE) / 1000000000.0)
-                        ) AS tx_timestamp,
-                        CAST(a_from."Entity ID" AS VARCHAR) AS source_entity,
-                        CAST(a_to."Entity ID" AS VARCHAR) AS target_entity
-                    FROM read_parquet('{transactions_path}') tx
-                    INNER JOIN read_parquet('{accounts_path}') a_from
-                        ON CAST(tx.from_account AS VARCHAR) = CAST(a_from."Account Number" AS VARCHAR)
-                    INNER JOIN read_parquet('{accounts_path}') a_to
-                        ON CAST(tx.to_account AS VARCHAR) = CAST(a_to."Account Number" AS VARCHAR)
-                    WHERE tx.is_laundering = 1
-                )
                 SELECT DISTINCT entity_id
-                FROM (
-                    SELECT source_entity AS entity_id
-                    FROM laundering_entities
-                    WHERE tx_timestamp <= CAST(? AS TIMESTAMP)
-                    UNION ALL
-                    SELECT target_entity AS entity_id
-                    FROM laundering_entities
-                    WHERE tx_timestamp <= CAST(? AS TIMESTAMP)
-                )
-                WHERE entity_id IS NOT NULL
+                FROM read_parquet('{nodes_path}')
+                WHERE window_id = {window_id} AND is_fraud = 1
                 """,
-                [date_str, date_str],
             ).df()
-            date_bad_actors[date_str] = set(bad_actor_df["entity_id"].tolist())
+            window_bad_actors[window_id] = set(bad_actor_df["entity_id"].tolist())
             del bad_actor_df
             gc.collect()
 
@@ -468,32 +452,32 @@ def main() -> None:
 
     all_daily_metrics: list[dict] = []
     written_chunk_files = 0
-    daily_metrics_store: dict[str, dict] = {}  # Store daily_metrics by date for stability tracking
+    daily_metrics_store: dict[int, dict] = {}  # Store daily_metrics by window_id for stability tracking
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures: dict = {}
-        for date_str in unique_dates:
+        for window_id in unique_window_ids:
             run_flags = {
                 **run_flags_base,
-                "bad_actors": date_bad_actors.get(date_str, set()),
+                "bad_actors": window_bad_actors.get(window_id, set()),
             }
             future = executor.submit(
                 process_window,
-                date_str,
+                window_id,
                 edges_path,
                 nodes_path,
                 run_flags,
             )
-            futures[future] = date_str
+            futures[future] = window_id
 
-        with tqdm(total=len(unique_dates), desc="Processing days", unit="day") as pbar:
+        with tqdm(total=len(unique_window_ids), desc="Processing windows", unit="window") as pbar:
             for future in as_completed(futures):
                 try:
                     result = future.result()  # propagates worker exceptions
 
                     if result["features"]:
                         feature_df = pd.DataFrame(result["features"])
-                        chunk_path = feature_chunks_dir / f"features_{result['date']}.parquet"
+                        chunk_path = feature_chunks_dir / f"features_{result['window_id']}.parquet"
                         feature_df.to_parquet(chunk_path, index=False)
                         written_chunk_files += 1
                         del feature_df
@@ -503,12 +487,12 @@ def main() -> None:
                     
                     # Store daily_metrics for rank stability (if enabled)
                     if RUN_RANK_STABILITY and result["daily_metrics"]:
-                        daily_metrics_store[result["date"]] = result["daily_metrics"]
+                        daily_metrics_store[result["window_id"]] = result["daily_metrics"]
 
                     del result
                     gc.collect()
                 except Exception as exc:
-                    print(f"Day generated an exception: {exc}")
+                    print(f"Window generated an exception: {exc}")
                 pbar.update(1)
 
     if written_chunk_files == 0:
@@ -529,8 +513,8 @@ def main() -> None:
         stability_rows: list[dict] = []
 
         # Process windows sequentially in chronological order
-        for date_str in unique_dates:
-            current_metrics = daily_metrics_store.get(date_str, {})
+        for window_id in sorted(unique_window_ids):
+            current_metrics = daily_metrics_store.get(window_id, {})
             if not current_metrics:
                 continue
 
@@ -546,26 +530,29 @@ def main() -> None:
             validation_summary = stability_result.get("validation_summary", {})
             valid_metrics = stability_result.get("valid_metrics", [])
             if validation_summary:
-                print(f"\n[{date_str}] Validation Summary:")
+                print(f"\n[Window {window_id}] Validation Summary:")
                 for metric, stats in validation_summary.items():
                     status = "✓ VALID" if stats["valid"] else "✗ INVALID"
                     print(f"  {metric:<20} {status:<10} (ρ={stats['spearman']:.3f}, τ={stats['kendall']:.3f})")
                 print(f"  Valid metrics for ensemble: {', '.join(valid_metrics) if valid_metrics else 'None'}")
 
             # Create stability rows for all nodes in this window
-            # Get all unique nodes from the feature chunks for this date
-            date_nodes_df = con.execute(
+            # Get all unique nodes from the feature chunks for this window
+            window_nodes_df = con.execute(
                 f"""
-                SELECT DISTINCT entity_id
-                FROM read_parquet('{feature_chunks_dir / f"features_{date_str}.parquet"}')
+                SELECT DISTINCT entity_id, window_start
+                FROM read_parquet('{feature_chunks_dir / f"features_{window_id}.parquet"}')
                 """
             ).df()
             
             # Create rows for the feature table with continuous WeirdNodes signals
-            for entity_id in date_nodes_df["entity_id"]:
+            for _, row in window_nodes_df.iterrows():
+                entity_id = row["entity_id"]
+                window_start = row["window_start"]
                 stability_rows.append(
                     {
-                        "window_date": pd.to_datetime(date_str).date(),
+                        "window_id": window_id,
+                        "window_start": window_start,
                         "entity_id": entity_id,
                         # The continuous WeirdNodes signal (magnitude of rank instability)
                         "weirdnodes_magnitude": weirdness_scores.get(entity_id, 0.0),
@@ -577,7 +564,7 @@ def main() -> None:
                     }
                 )
             
-            del date_nodes_df
+            del window_nodes_df
 
         if stability_rows:
             stability_temp_dir = Path(tempfile.mkdtemp(prefix="rank_stability_"))
@@ -603,7 +590,7 @@ def main() -> None:
     if stability_tmp_file is not None and stability_tmp_file.exists():
         stability_join = (
             f"LEFT JOIN read_parquet('{stability_tmp_file}') s\n"
-            f"            ON CAST(f.date AS DATE) = CAST(s.window_date AS DATE)\n"
+            f"            ON f.window_id = s.window_id\n"
             f"            AND CAST(f.entity_id AS VARCHAR) = CAST(s.entity_id AS VARCHAR)"
         )
         stability_select = (

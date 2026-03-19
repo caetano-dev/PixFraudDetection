@@ -36,76 +36,117 @@ FROM RawTx t
 JOIN AccMap src ON t.from_account = src.acc_num
 JOIN AccMap tgt ON t.to_account = tgt.acc_num;
 
--- 2. Calendar of target dates
-CREATE TEMP TABLE Calendar AS
-SELECT unnest(generate_series(
-    (SELECT MIN(tx_date) + INTERVAL 1 DAY FROM ResolvedTx),
-    (SELECT MAX(tx_date) FROM ResolvedTx),
-    INTERVAL 1 DAY
-))::DATE AS window_date;
+-- 2. Sliding Window Calendar (Discrete Non-Cumulative Windows)
+-- Each window has: window_id, window_start (inclusive), window_end (exclusive)
+-- Transactions are filtered: tx_date >= window_start AND tx_date < window_end
+CREATE TEMP TABLE WindowCalendar AS
+WITH DataBounds AS (
+    SELECT 
+        MIN(tx_date) AS first_date,
+        MAX(tx_date) AS last_date
+    FROM ResolvedTx
+),
+WindowParams AS (
+    -- Replace with config values: WINDOW_SIZE and WINDOW_STRIDE from config.py
+    SELECT 1 AS window_size_days, 1 AS window_stride_days
+)
+SELECT 
+    ROW_NUMBER() OVER (ORDER BY window_start) - 1 AS window_id,
+    window_start,
+    window_start + INTERVAL window_size_days DAY AS window_end
+FROM (
+    SELECT 
+        unnest(generate_series(
+            (SELECT first_date FROM DataBounds),
+            (SELECT last_date FROM DataBounds),
+            INTERVAL (SELECT window_stride_days FROM WindowParams) DAY
+        ))::DATE AS window_start,
+        (SELECT window_size_days FROM WindowParams) AS window_size_days
+    FROM WindowParams
+) sub
+WHERE window_start + INTERVAL window_size_days DAY <= (SELECT last_date + INTERVAL 1 DAY FROM DataBounds);
 
--- 3. LOOKBACK EDGES (Cumulative Expanding Window)
+-- 3. SLIDING WINDOW EDGES (Strict Non-Cumulative)
+-- Each edge is aggregated ONLY from transactions within [window_start, window_end)
 COPY (
     SELECT
-        strftime(c.window_date, '%Y-%m-%d') AS window_date,
+        w.window_id,
+        strftime(w.window_start, '%Y-%m-%d') AS window_start,
+        strftime(w.window_end, '%Y-%m-%d') AS window_end,
         r.source_entity AS source,
         r.target_entity AS target,
-        SUM(r.adj_sent * EXP(-0.05 * (c.window_date - r.tx_date))) AS volume,
+        SUM(r.adj_sent) AS volume,
         COUNT(*) AS count,
         COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) AS amount_std,
         COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM r.ts)), 0.0) AS time_variance,
-        SUM(r.adj_sent * EXP(-0.05 * (c.window_date - r.tx_date))) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) / ((SUM(r.adj_sent) / COUNT(*)) + 1e-9)))) AS weight
-    FROM Calendar c
+        SUM(r.adj_sent) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) / ((SUM(r.adj_sent) / COUNT(*)) + 1e-9)))) AS weight
+    FROM WindowCalendar w
     JOIN ResolvedTx r 
-      ON r.tx_date < c.window_date 
-    GROUP BY c.window_date, r.source_entity, r.target_entity
+      ON r.tx_date >= w.window_start 
+     AND r.tx_date < w.window_end
+    GROUP BY w.window_id, w.window_start, w.window_end, r.source_entity, r.target_entity
 ) TO 'data/HI_Small/lookback_edges.parquet' (FORMAT PARQUET);
 
--- 4. TARGET NODES (Strictly T) -> Labels and Behavioral Targets
+-- 4. TARGET NODES (Aggregated per Window) -> Labels and Behavioral Features
 COPY (
     WITH NodeSent AS (
         SELECT 
-            tx_date AS window_date, 
-            source_entity AS entity_id, 
-            SUM(adj_sent) AS vol_sent, 
+            w.window_id,
+            w.window_start,
+            w.window_end,
+            r.source_entity AS entity_id, 
+            SUM(r.adj_sent) AS vol_sent, 
             COUNT(*) AS tx_count_sent, 
-            COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM ts)), 0.0) AS time_variance,
-            COUNT(DISTINCT payment_currency) AS distinct_currencies_sent,
-            SUM(CASE WHEN payment_format = 'Wire' THEN 1 ELSE 0 END) AS wire_count_sent,
-            SUM(CASE WHEN payment_format = 'Cash' THEN 1 ELSE 0 END) AS cash_count_sent,
-            SUM(CASE WHEN payment_format = 'Bitcoin' THEN 1 ELSE 0 END) AS bitcoin_count_sent,
-            SUM(CASE WHEN payment_format = 'Cheque' THEN 1 ELSE 0 END) AS cheque_count_sent,
-            SUM(CASE WHEN payment_format = 'Credit Card' THEN 1 ELSE 0 END) AS credit_card_count_sent,
-            SUM(CASE WHEN payment_format = 'ACH' THEN 1 ELSE 0 END) AS ach_count_sent,
-            SUM(CASE WHEN payment_format = 'Reinvestment' THEN 1 ELSE 0 END) AS reinvestment_count_sent
-        FROM ResolvedTx GROUP BY tx_date, source_entity
+            COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM r.ts)), 0.0) AS time_variance,
+            COUNT(DISTINCT r.payment_currency) AS distinct_currencies_sent,
+            SUM(CASE WHEN r.payment_format = 'Wire' THEN 1 ELSE 0 END) AS wire_count_sent,
+            SUM(CASE WHEN r.payment_format = 'Cash' THEN 1 ELSE 0 END) AS cash_count_sent,
+            SUM(CASE WHEN r.payment_format = 'Bitcoin' THEN 1 ELSE 0 END) AS bitcoin_count_sent,
+            SUM(CASE WHEN r.payment_format = 'Cheque' THEN 1 ELSE 0 END) AS cheque_count_sent,
+            SUM(CASE WHEN r.payment_format = 'Credit Card' THEN 1 ELSE 0 END) AS credit_card_count_sent,
+            SUM(CASE WHEN r.payment_format = 'ACH' THEN 1 ELSE 0 END) AS ach_count_sent,
+            SUM(CASE WHEN r.payment_format = 'Reinvestment' THEN 1 ELSE 0 END) AS reinvestment_count_sent
+        FROM WindowCalendar w
+        JOIN ResolvedTx r ON r.tx_date >= w.window_start AND r.tx_date < w.window_end
+        GROUP BY w.window_id, w.window_start, w.window_end, r.source_entity
     ),
     NodeRecv AS (
         SELECT 
-            tx_date AS window_date, 
-            target_entity AS entity_id, 
-            SUM(adj_sent) AS vol_recv, 
+            w.window_id,
+            w.window_start,
+            w.window_end,
+            r.target_entity AS entity_id, 
+            SUM(r.adj_sent) AS vol_recv, 
             COUNT(*) AS tx_count_recv,
-            COUNT(DISTINCT payment_currency) AS distinct_currencies_recv,
-            SUM(CASE WHEN payment_format = 'Wire' THEN 1 ELSE 0 END) AS wire_count_recv,
-            SUM(CASE WHEN payment_format = 'Cash' THEN 1 ELSE 0 END) AS cash_count_recv,
-            SUM(CASE WHEN payment_format = 'Bitcoin' THEN 1 ELSE 0 END) AS bitcoin_count_recv,
-            SUM(CASE WHEN payment_format = 'Cheque' THEN 1 ELSE 0 END) AS cheque_count_recv,
-            SUM(CASE WHEN payment_format = 'Credit Card' THEN 1 ELSE 0 END) AS credit_card_count_recv,
-            SUM(CASE WHEN payment_format = 'ACH' THEN 1 ELSE 0 END) AS ach_count_recv,
-            SUM(CASE WHEN payment_format = 'Reinvestment' THEN 1 ELSE 0 END) AS reinvestment_count_recv
-        FROM ResolvedTx GROUP BY tx_date, target_entity
+            COUNT(DISTINCT r.payment_currency) AS distinct_currencies_recv,
+            SUM(CASE WHEN r.payment_format = 'Wire' THEN 1 ELSE 0 END) AS wire_count_recv,
+            SUM(CASE WHEN r.payment_format = 'Cash' THEN 1 ELSE 0 END) AS cash_count_recv,
+            SUM(CASE WHEN r.payment_format = 'Bitcoin' THEN 1 ELSE 0 END) AS bitcoin_count_recv,
+            SUM(CASE WHEN r.payment_format = 'Cheque' THEN 1 ELSE 0 END) AS cheque_count_recv,
+            SUM(CASE WHEN r.payment_format = 'Credit Card' THEN 1 ELSE 0 END) AS credit_card_count_recv,
+            SUM(CASE WHEN r.payment_format = 'ACH' THEN 1 ELSE 0 END) AS ach_count_recv,
+            SUM(CASE WHEN r.payment_format = 'Reinvestment' THEN 1 ELSE 0 END) AS reinvestment_count_recv
+        FROM WindowCalendar w
+        JOIN ResolvedTx r ON r.tx_date >= w.window_start AND r.tx_date < w.window_end
+        GROUP BY w.window_id, w.window_start, w.window_end, r.target_entity
     ),
     EntityFraud AS (
-        SELECT tx_date AS window_date, entity_id, MAX(is_fraud) AS is_fraud
+        SELECT w.window_id, entity_id, MAX(is_fraud) AS is_fraud
         FROM (
-            SELECT tx_date, source_entity AS entity_id, is_laundering AS is_fraud FROM ResolvedTx
+            SELECT w.window_id, r.source_entity AS entity_id, r.is_laundering AS is_fraud 
+            FROM WindowCalendar w
+            JOIN ResolvedTx r ON r.tx_date >= w.window_start AND r.tx_date < w.window_end
             UNION ALL
-            SELECT tx_date, target_entity AS entity_id, is_laundering AS is_fraud FROM ResolvedTx
-        ) WHERE entity_id IS NOT NULL GROUP BY tx_date, entity_id
+            SELECT w.window_id, r.target_entity AS entity_id, r.is_laundering AS is_fraud 
+            FROM WindowCalendar w
+            JOIN ResolvedTx r ON r.tx_date >= w.window_start AND r.tx_date < w.window_end
+        ) WHERE entity_id IS NOT NULL 
+        GROUP BY window_id, entity_id
     )
     SELECT
-        strftime(COALESCE(s.window_date, r.window_date), '%Y-%m-%d') AS window_date,
+        COALESCE(s.window_id, r.window_id) AS window_id,
+        strftime(COALESCE(s.window_start, r.window_start), '%Y-%m-%d') AS window_start,
+        strftime(COALESCE(s.window_end, r.window_end), '%Y-%m-%d') AS window_end,
         COALESCE(s.entity_id, r.entity_id) AS entity_id,
         COALESCE(s.vol_sent, 0.0) AS vol_sent,
         COALESCE(r.vol_recv, 0.0) AS vol_recv,
@@ -130,6 +171,6 @@ COPY (
 
         COALESCE(ef.is_fraud, 0) AS is_fraud
     FROM NodeSent s
-    FULL OUTER JOIN NodeRecv r ON s.window_date = r.window_date AND s.entity_id = r.entity_id
-    LEFT JOIN EntityFraud ef ON COALESCE(s.window_date, r.window_date) = ef.window_date AND COALESCE(s.entity_id, r.entity_id) = ef.entity_id
+    FULL OUTER JOIN NodeRecv r ON s.window_id = r.window_id AND s.entity_id = r.entity_id
+    LEFT JOIN EntityFraud ef ON COALESCE(s.window_id, r.window_id) = ef.window_id AND COALESCE(s.entity_id, r.entity_id) = ef.entity_id
 ) TO 'data/HI_Small/target_nodes.parquet' (FORMAT PARQUET);
