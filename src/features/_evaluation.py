@@ -188,32 +188,30 @@ def compute_daily_evaluation_metrics(
     **score_dicts: dict[object, float | int],
 ) -> dict:
     """
-    Compute evaluation metrics for all three algorithms for a single day.
+    Compute evaluation metrics for multiple algorithms for a single day.
 
-    Wraps :func:`evaluate_ranking_effectiveness` for each of PageRank,
-    HITS-Hub, and HITS-Authority, building a shared ``labels`` dict from
-    the union of all nodes present in any score dictionary.
+    Wraps :func:`evaluate_ranking_effectiveness` for each provided algorithm,
+    building a shared ``labels`` dict from the union of all nodes present in
+    any score dictionary.
 
     Parameters
     ----------
-    pagerank_scores : dict
-        ``{node_id: pagerank_score}`` for the current window.
-    hits_hubs : dict
-        ``{node_id: hub_score}`` for the current window.
-    hits_auths : dict
-        ``{node_id: authority_score}`` for the current window.
     bad_actors : set
         Set of entity IDs identified as bad actors **up to** the current date
         (time-aware labels — no future leakage). Pre-computed during the feature extraction initialization.
     k_values : list[int], optional
         K values forwarded to :func:`evaluate_ranking_effectiveness`.
+    **score_dicts : dict[object, float | int]
+        Variable-length keyword arguments where each key is an algorithm name
+        (e.g., "pagerank", "hits_hub", "vol_sent") and each value is a
+        ``{node_id: score}`` dictionary for that algorithm.
 
     Returns
     -------
     dict
-        ``{"pagerank": {...}, "hits_hub": {...}, "hits_auth": {...}}``
-        where each value is the full metrics dict returned by
-        :func:`evaluate_ranking_effectiveness`.  An algorithm key is omitted
+        Dictionary mapping algorithm names to their evaluation metrics.
+        Each value is the full metrics dict returned by
+        :func:`evaluate_ranking_effectiveness`. An algorithm key is omitted
         when its score dictionary is empty.
     """
     if not score_dicts:

@@ -240,6 +240,72 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
             node: node_stats.get(node, {}).get("time_variance", 0.0)
             for node in G.nodes()
         }
+        
+        # Baseline heuristic feature scores
+        wire_count_sent_scores = {
+            node: node_stats.get(node, {}).get("wire_count_sent", 0.0)
+            for node in G.nodes()
+        }
+        wire_count_recv_scores = {
+            node: node_stats.get(node, {}).get("wire_count_recv", 0.0)
+            for node in G.nodes()
+        }
+        cash_count_sent_scores = {
+            node: node_stats.get(node, {}).get("cash_count_sent", 0.0)
+            for node in G.nodes()
+        }
+        cash_count_recv_scores = {
+            node: node_stats.get(node, {}).get("cash_count_recv", 0.0)
+            for node in G.nodes()
+        }
+        bitcoin_count_sent_scores = {
+            node: node_stats.get(node, {}).get("bitcoin_count_sent", 0.0)
+            for node in G.nodes()
+        }
+        bitcoin_count_recv_scores = {
+            node: node_stats.get(node, {}).get("bitcoin_count_recv", 0.0)
+            for node in G.nodes()
+        }
+        cheque_count_sent_scores = {
+            node: node_stats.get(node, {}).get("cheque_count_sent", 0.0)
+            for node in G.nodes()
+        }
+        cheque_count_recv_scores = {
+            node: node_stats.get(node, {}).get("cheque_count_recv", 0.0)
+            for node in G.nodes()
+        }
+        credit_card_count_sent_scores = {
+            node: node_stats.get(node, {}).get("credit_card_count_sent", 0.0)
+            for node in G.nodes()
+        }
+        credit_card_count_recv_scores = {
+            node: node_stats.get(node, {}).get("credit_card_count_recv", 0.0)
+            for node in G.nodes()
+        }
+        ach_count_sent_scores = {
+            node: node_stats.get(node, {}).get("ach_count_sent", 0.0)
+            for node in G.nodes()
+        }
+        ach_count_recv_scores = {
+            node: node_stats.get(node, {}).get("ach_count_recv", 0.0)
+            for node in G.nodes()
+        }
+        reinvestment_count_sent_scores = {
+            node: node_stats.get(node, {}).get("reinvestment_count_sent", 0.0)
+            for node in G.nodes()
+        }
+        reinvestment_count_recv_scores = {
+            node: node_stats.get(node, {}).get("reinvestment_count_recv", 0.0)
+            for node in G.nodes()
+        }
+        distinct_currencies_sent_scores = {
+            node: node_stats.get(node, {}).get("distinct_currencies_sent", 0.0)
+            for node in G.nodes()
+        }
+        distinct_currencies_recv_scores = {
+            node: node_stats.get(node, {}).get("distinct_currencies_recv", 0.0)
+            for node in G.nodes()
+        }
 
         if pr_vol_deep_scores:
             evaluation_k_values = run_flags.get("evaluation_k_values", [])
@@ -263,6 +329,22 @@ def process_window( # weirdnodes, ensemble, bank transactions papers
                     out_degree=out_degree_scores,
                     tx_count=tx_count_scores,
                     time_variance=time_variance_scores,
+                    wire_count_sent=wire_count_sent_scores,
+                    wire_count_recv=wire_count_recv_scores,
+                    cash_count_sent=cash_count_sent_scores,
+                    cash_count_recv=cash_count_recv_scores,
+                    bitcoin_count_sent=bitcoin_count_sent_scores,
+                    bitcoin_count_recv=bitcoin_count_recv_scores,
+                    cheque_count_sent=cheque_count_sent_scores,
+                    cheque_count_recv=cheque_count_recv_scores,
+                    credit_card_count_sent=credit_card_count_sent_scores,
+                    credit_card_count_recv=credit_card_count_recv_scores,
+                    ach_count_sent=ach_count_sent_scores,
+                    ach_count_recv=ach_count_recv_scores,
+                    reinvestment_count_sent=reinvestment_count_sent_scores,
+                    reinvestment_count_recv=reinvestment_count_recv_scores,
+                    distinct_currencies_sent=distinct_currencies_sent_scores,
+                    distinct_currencies_recv=distinct_currencies_recv_scores,
                 )
                 for algo_name, algo_metrics in eval_metrics.items():
                     metric_record: dict = {
