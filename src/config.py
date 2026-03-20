@@ -18,9 +18,8 @@ DATASET_SIZE: str = "SMALL"
 _DATASET_CONFIG = {
     "SMALL": {
         "data_path": Path("data/HI_Small"),
-        "window_days": 3,
-        "window_size": 1,                # Sliding window size in days
-        "window_stride": 1,              # Sliding window stride in days (non-overlapping)
+        "window_size": 3,                # Sliding window size in days
+        "window_stride": 3,              # Sliding window stride in days (non-overlapping)
         "pr_alpha_deep": 0.85,           # 6.6 hops expected walk
         "pr_alpha_shallow": 0.75,        # 4 hops expected walk
         "pr_max_iter": 100,
@@ -31,7 +30,6 @@ _DATASET_CONFIG = {
     },
     "MEDIUM": {
         "data_path": Path("data/LI_Medium"),
-        "window_days": 5,
         "window_size": 5,                # Sliding window size in days
         "window_stride": 5,              # Sliding window stride in days (non-overlapping)
         "pr_alpha_deep": 0.95,           # 20 hops expected walk (required for 14-hop cycles)
@@ -44,7 +42,6 @@ _DATASET_CONFIG = {
     },
     "LARGE": {
         "data_path": Path("data/LI_Large"),
-        "window_days": 7,
         "window_size": 7,                # Sliding window size in days
         "window_stride": 7,              # Sliding window stride in days (non-overlapping)
         "pr_alpha_deep": 0.95,           # 20 hops expected walk (required for 14-hop cycles)
@@ -68,9 +65,6 @@ DATA_PATH: Path = _DATASET_CONFIG[DATASET_SIZE]["data_path"]
 # ============================================================================
 # SLIDING WINDOW SETTINGS
 # ============================================================================
-# Number of days covered by each temporal window snapshot.
-WINDOW_DAYS: int = _DATASET_CONFIG[DATASET_SIZE]["window_days"]
-
 # Sliding window size: number of days in each discrete, non-cumulative window.
 # Each window analyzes only transactions within [window_start, window_end).
 WINDOW_SIZE: int = _DATASET_CONFIG[DATASET_SIZE]["window_size"]

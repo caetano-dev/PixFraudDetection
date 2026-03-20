@@ -118,7 +118,6 @@ def forward_chaining_validation(
         optimal_threshold = thresholds[best_threshold_idx] if best_threshold_idx < len(thresholds) else 0.5
         
         f1 = f1_score(y_test, (y_probs >= optimal_threshold).astype(int))
-        fraud_rate = np.mean(y_test)
         
         result = {
             "test_window_id": test_window_id, "n_train_samples": len(X_train),
