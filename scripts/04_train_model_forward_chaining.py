@@ -16,7 +16,7 @@ import shap
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from sklearn.metrics import average_precision_score, roc_auc_score, f1_score, precision_recall_curve
+from sklearn.metrics import average_precision_score, roc_auc_score, f1_score, precision_recall_curve, precision_score, recall_score
 from pathlib import Path
 import sys
 from typing import Dict, List, Tuple
@@ -143,6 +143,8 @@ def forward_chaining_validation(
         auprc = average_precision_score(y_test, y_probs)
         roc_auc = roc_auc_score(y_test, y_probs)
         f1 = f1_score(y_test, y_pred)
+        precision = precision_score(y_test, y_pred, zero_division=0)
+        recall = recall_score(y_test, y_pred, zero_division=0)
         
         result = {
             "test_window_id": test_window_id,
@@ -151,6 +153,10 @@ def forward_chaining_validation(
             "auprc": auprc,
             "roc_auc": roc_auc,
             "f1_score": f1,
+            "roc_auc": roc_auc,
+            "f1_score": f1,
+            "precision": precision,
+            "recall": recall,
             "optimal_threshold": optimal_threshold,
         }
         for k, prec in compute_precision_at_k(y_test, y_probs, [10, 50, 100, 500]).items():
@@ -180,6 +186,9 @@ def forward_chaining_validation(
         "overall_fraud_rate": np.mean(all_y_true),
         "overall_auprc": average_precision_score(all_y_true, all_y_probs),
         "overall_roc_auc": roc_auc_score(all_y_true, all_y_probs),
+        "overall_roc_auc": roc_auc_score(all_y_true, all_y_probs),
+        "overall_precision": precision_score(all_y_true, (all_y_probs >= np.mean(results_df["optimal_threshold"])).astype(int), zero_division=0),
+        "overall_recall": recall_score(all_y_true, (all_y_probs >= np.mean(results_df["optimal_threshold"])).astype(int), zero_division=0),
         "mean_window_auprc": results_df["auprc"].mean(),
         "std_window_auprc": results_df["auprc"].std()
     }
