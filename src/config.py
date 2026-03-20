@@ -19,7 +19,7 @@ _DATASET_CONFIG = {
     "SMALL": {
         "data_path": Path("data/HI_Small"),
         "window_size": 3,                # Sliding window size in days
-        "window_stride": 3,              # Sliding window stride in days (non-overlapping)
+        "window_stride": 1,              # Sliding window stride in days (non-overlapping)
         "pr_alpha_deep": 0.85,           # 6.6 hops expected walk
         "pr_alpha_shallow": 0.75,        # 4 hops expected walk
         "pr_max_iter": 100,
@@ -31,7 +31,7 @@ _DATASET_CONFIG = {
     "MEDIUM": {
         "data_path": Path("data/LI_Medium"),
         "window_size": 5,                # Sliding window size in days
-        "window_stride": 5,              # Sliding window stride in days (non-overlapping)
+        "window_stride": 1,              # Sliding window stride in days (non-overlapping)
         "pr_alpha_deep": 0.95,           # 20 hops expected walk (required for 14-hop cycles)
         "pr_alpha_shallow": 0.75,        # 4 hops expected walk
         "pr_max_iter": 1000,             # Required for alpha=0.95 convergence
@@ -43,7 +43,7 @@ _DATASET_CONFIG = {
     "LARGE": {
         "data_path": Path("data/LI_Large"),
         "window_size": 7,                # Sliding window size in days
-        "window_stride": 7,              # Sliding window stride in days (non-overlapping)
+        "window_stride": 1,              # Sliding window stride in days (non-overlapping)
         "pr_alpha_deep": 0.95,           # 20 hops expected walk (required for 14-hop cycles)
         "pr_alpha_shallow": 0.75,        # 4 hops expected walk
         "pr_max_iter": 1000,             # Required for alpha=0.95 convergence
