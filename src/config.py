@@ -12,7 +12,7 @@ from pathlib import Path
 # DATASET SELECTION
 # ============================================================================
 # Set to "SMALL" or "LARGE" to switch the active dataset.
-DATASET_SIZE: str = "SMALL"
+DATASET_SIZE: str = "MEDIUM"
 
 # Dataset-specific settings
 _DATASET_CONFIG = {
@@ -30,7 +30,7 @@ _DATASET_CONFIG = {
     },
     "MEDIUM": {
         "data_path": Path("data/LI_Medium"),
-        "window_size": 5,                # Sliding window size in days
+        "window_size": 7,                # Sliding window size in days
         "window_stride": 1,              # Sliding window stride in days (non-overlapping)
         "pr_alpha_deep": 0.95,           # 20 hops expected walk (required for 14-hop cycles)
         "pr_alpha_shallow": 0.75,        # 4 hops expected walk
@@ -115,7 +115,7 @@ LEIDEN_RESOLUTION_MICRO: float = _DATASET_CONFIG[DATASET_SIZE]["leiden_resolutio
 # centrality metrics are a validated signal for suspicious financial activity.
 
 # Toggle the rank stability pass.
-RUN_RANK_STABILITY: bool = True
+RUN_RANK_STABILITY: bool = False
 
 # Number of top nodes used when computing the Jaccard stability score and
 # identifying new entrants / dropouts between windows.
