@@ -160,6 +160,8 @@ COPY (
         COALESCE(s.reinvestment_count_sent, 0) AS reinvestment_count_sent,
         COALESCE(r.reinvestment_count_recv, 0) AS reinvestment_count_recv,
 
+        CASE WHEN DAYOFWEEK(COALESCE(s.window_start, r.window_start)) IN (0, 6) THEN 1 ELSE 0 END AS is_weekend,
+
         COALESCE(ef.is_fraud, 0) AS is_fraud
     FROM NodeSent s
     FULL OUTER JOIN NodeRecv r ON s.window_id = r.window_id AND s.entity_id = r.entity_id
