@@ -675,25 +675,6 @@ Aggregate Evaluation Summary (Mean & Median Across All Days)
     @  100: 13.5000% (lift: 11.93x)
     @  500: 6.0000% (lift: 5.20x)
 
-============================================================
-Feature Statistics Summary
-============================================================
-        pr_vol_deep  ...  leiden_micro_modularity
-count  1.245666e+06  ...             1.245666e+06
-mean   6.422267e-06  ...             5.161873e-01
-std    1.499976e-05  ...             7.584011e-02
-min    9.749147e-07  ...             3.999680e-01
-25%    3.270354e-06  ...             4.392801e-01
-50%    4.510966e-06  ...             4.839995e-01
-75%    7.027342e-06  ...             5.896583e-01
-max    3.622332e-03  ...             5.925240e-01
-
-[8 rows x 38 columns]
-
-============================================================
-Summary Complete!
-============================================================
-
 ================================================================================
 ABLATION STUDY: EMPIRICAL VALIDATION OF TOPOLOGICAL FEATURES
 ================================================================================
@@ -701,122 +682,22 @@ ABLATION STUDY: EMPIRICAL VALIDATION OF TOPOLOGICAL FEATURES
 --------------------------------------------------------------------------------
 PHASE 1: BEHAVIORAL BASELINE (21 features)
 --------------------------------------------------------------------------------
-Window 2: AUPRC=0.2402, F1=0.2655, P@100=0.9600, Threshold=0.3454
-Window 3: AUPRC=0.2894, F1=0.3130, P@100=0.9500, Threshold=0.4288
-Window 4: AUPRC=0.3164, F1=0.3318, P@100=0.9700, Threshold=0.3783
-Window 5: AUPRC=0.4573, F1=0.4520, P@100=0.9800, Threshold=0.4742
-Window 6: AUPRC=0.2942, F1=0.3158, P@100=0.9500, Threshold=0.4599
-Window 7: AUPRC=0.2316, F1=0.2657, P@100=0.9500, Threshold=0.4382
+Window 2: AUPRC=0.2428, F1=0.2677, P@100=0.9100, Threshold=0.3777
+Window 3: AUPRC=0.2867, F1=0.3038, P@100=0.9600, Threshold=0.3917
+Window 4: AUPRC=0.3291, F1=0.3505, P@100=0.9700, Threshold=0.3587
+Window 5: AUPRC=0.4055, F1=0.4069, P@100=0.9900, Threshold=0.4200
+Window 6: AUPRC=0.2831, F1=0.2994, P@100=0.9600, Threshold=0.4599
+Window 7: AUPRC=0.2447, F1=0.2775, P@100=0.9700, Threshold=0.4528
 
 --------------------------------------------------------------------------------
 PHASE 2: FULL MODEL (40 features)
 --------------------------------------------------------------------------------
-Window 2: AUPRC=0.2396, F1=0.2733, P@100=0.9100, Threshold=0.3734
-Window 3: AUPRC=0.2712, F1=0.2797, P@100=0.9400, Threshold=0.3366
-Window 4: AUPRC=0.3012, F1=0.2867, P@100=0.9700, Threshold=0.4568
-Window 5: AUPRC=0.3417, F1=0.2963, P@100=0.9900, Threshold=0.5198
-Window 6: AUPRC=0.2599, F1=0.2595, P@100=0.9300, Threshold=0.5335
-Window 7: AUPRC=0.2913, F1=0.3139, P@100=0.9500, Threshold=0.4737
-
-================================================================================
-PERFORMANCE LIFT FROM TOPOLOGICAL FEATURES
-================================================================================
-
---------------------------------------------------------------------------------
-PER-WINDOW METRICS COMPARISON
---------------------------------------------------------------------------------
-Window           AUPRC (Beh)  AUPRC (Full)   Lift %   F1 (Beh)   F1 (Full)   Lift %
---------------------------------------------------------------------------------
-2.0                   0.2402        0.2396    -0.2%     0.2655      0.2733     2.9%
-3.0                   0.2894        0.2712    -6.3%     0.3130      0.2797   -10.6%
-4.0                   0.3164        0.3012    -4.8%     0.3318      0.2867   -13.6%
-5.0                   0.4573        0.3417   -25.3%     0.4520      0.2963   -34.4%
-6.0                   0.2942        0.2599   -11.7%     0.3158      0.2595   -17.8%
-7.0                   0.2316        0.2913    25.8%     0.2657      0.3139    18.2%
-
---------------------------------------------------------------------------------
-AGGREGATE METRICS COMPARISON
---------------------------------------------------------------------------------
-
-Overall AUPRC:
-  Behavioral-only: 0.3057
-  Full model:      0.2746
-  Improvement:     -10.17%
-
-Mean Window AUPRC:
-  Behavioral-only: 0.3048 ± 0.0816
-  Full model:      0.2841 ± 0.0358
-
-Statistical Significance (paired t-test on AUPRC):
-  t-statistic: 0.8936
-  p-value:     4.1248e-01
-  ✗ Difference not statistically significant at α=0.05
-
-================================================================================
-GENERATING ABLATION STUDY VISUALIZATIONS
-================================================================================
-✓ Ablation study plot saved to: data/HI_Small/results/ablation_study_results.png
-
---------------------------------------------------------------------------------
-PHASE 3: GLOBAL INTERPRETABILITY (SHAP)
---------------------------------------------------------------------------------
-
-================================================================================
-GLOBAL SHAP FEATURE IMPORTANCE (ACROSS ALL WINDOWS)
-================================================================================
-                 feature  mean_abs_shap
-          ach_count_sent       0.920032
-          ach_count_recv       0.544126
-               hits_auth       0.401413
-               in_degree       0.335776
-       cheque_count_sent       0.249543
-                vol_sent       0.230243
-                vol_recv       0.141795
-                hits_hub       0.136689
-                  degree       0.134899
-       cheque_count_recv       0.119318
-                tx_count       0.117570
-                pr_count       0.117167
-distinct_currencies_sent       0.102889
-              out_degree       0.102021
- leiden_macro_modularity       0.099445
-  credit_card_count_sent       0.093203
-             betweenness       0.090135
-              flow_ratio       0.082053
-                  k_core       0.074677
-       leiden_macro_size       0.071974
-
-✓ Global SHAP plot saved to: data/HI_Small/results/global_shap_beeswarm.png
-
-================================================================================
-PIPELINE EXECUTION COMPLETE.
-================================================================================
-
-COM DIFERENTES TIPOS DE PAGAMENTOS
-
-================================================================================
-ABLATION STUDY: EMPIRICAL VALIDATION OF TOPOLOGICAL FEATURES
-================================================================================
-
---------------------------------------------------------------------------------
-PHASE 1: BEHAVIORAL BASELINE (21 features)
---------------------------------------------------------------------------------
-Window 2: AUPRC=0.2339, F1=0.2633, P@100=0.9100, Threshold=0.3564
-Window 3: AUPRC=0.2846, F1=0.3020, P@100=0.9400, Threshold=0.4034
-Window 4: AUPRC=0.3224, F1=0.3401, P@100=0.9800, Threshold=0.3797
-Window 5: AUPRC=0.3850, F1=0.3863, P@100=0.9800, Threshold=0.3956
-Window 6: AUPRC=0.2959, F1=0.3188, P@100=0.9600, Threshold=0.4774
-Window 7: AUPRC=0.2484, F1=0.2787, P@100=0.9600, Threshold=0.4030
-
---------------------------------------------------------------------------------
-PHASE 2: FULL MODEL (40 features)
---------------------------------------------------------------------------------
-Window 2: AUPRC=0.2322, F1=0.2624, P@100=0.8500, Threshold=0.3892
-Window 3: AUPRC=0.2912, F1=0.2755, P@100=0.9300, Threshold=0.4724
-Window 4: AUPRC=0.3102, F1=0.3014, P@100=0.9500, Threshold=0.4424
-Window 5: AUPRC=0.3782, F1=0.3342, P@100=0.9600, Threshold=0.5111
-Window 6: AUPRC=0.2614, F1=0.2693, P@100=0.8700, Threshold=0.4982
-Window 7: AUPRC=0.2901, F1=0.3100, P@100=0.9400, Threshold=0.4376
+Window 2: AUPRC=0.2231, F1=0.2567, P@100=0.8400, Threshold=0.4026
+Window 3: AUPRC=0.3122, F1=0.3151, P@100=0.9300, Threshold=0.4441
+Window 4: AUPRC=0.3677, F1=0.3692, P@100=0.9900, Threshold=0.4385
+Window 5: AUPRC=0.4260, F1=0.4084, P@100=1.0000, Threshold=0.5018
+Window 6: AUPRC=0.2680, F1=0.2625, P@100=0.9300, Threshold=0.5960
+Window 7: AUPRC=0.3120, F1=0.3343, P@100=0.9400, Threshold=0.4528
 
 ================================================================================
 PERFORMANCE LIFT FROM TOPOLOGICAL FEATURES
@@ -827,25 +708,25 @@ PER-WINDOW METRICS COMPARISON (Behavioral vs Full)
 --------------------------------------------------------------------------------
 Win  | AUPRC         | ROC AUC       | F1-Score      | Precision     | Recall       
 --------------------------------------------------------------------------------
-2.0  | 0.234/0.232 | 0.898/0.909 | 0.263/0.262 | 0.313/0.364 | 0.227/0.205
-3.0  | 0.285/0.291 | 0.905/0.928 | 0.302/0.276 | 0.400/0.596 | 0.242/0.179
-4.0  | 0.322/0.310 | 0.920/0.932 | 0.340/0.301 | 0.379/0.595 | 0.309/0.202
-5.0  | 0.385/0.378 | 0.938/0.953 | 0.386/0.334 | 0.439/0.664 | 0.345/0.223
-6.0  | 0.296/0.261 | 0.910/0.916 | 0.319/0.269 | 0.321/0.523 | 0.317/0.181
-7.0  | 0.248/0.290 | 0.889/0.929 | 0.279/0.310 | 0.321/0.317 | 0.246/0.303
+2.0  | 0.243/0.223 | 0.902/0.911 | 0.268/0.257 | 0.349/0.309 | 0.217/0.220
+3.0  | 0.287/0.312 | 0.906/0.939 | 0.304/0.315 | 0.395/0.454 | 0.247/0.241
+4.0  | 0.329/0.368 | 0.921/0.947 | 0.350/0.369 | 0.363/0.460 | 0.338/0.308
+5.0  | 0.406/0.426 | 0.944/0.960 | 0.407/0.408 | 0.449/0.509 | 0.372/0.341
+6.0  | 0.283/0.268 | 0.907/0.918 | 0.299/0.262 | 0.285/0.588 | 0.316/0.169
+7.0  | 0.245/0.312 | 0.886/0.937 | 0.278/0.334 | 0.384/0.358 | 0.217/0.314
 
 --------------------------------------------------------------------------------
 AGGREGATE METRICS COMPARISON
 --------------------------------------------------------------------------------
-AUPRC       : Behavioral = 0.2902 | Full = 0.2861 | Lift = -1.39%
-ROC AUC     : Behavioral = 0.9114 | Full = 0.9242 | Lift = +1.40%
-F1-Score    : Behavioral = 0.3143 | Full = 0.2966 | Lift = -5.63%
-Precision   : Behavioral = 0.3505 | Full = 0.4903 | Lift = +39.90%
-Recall      : Behavioral = 0.2849 | Full = 0.2126 | Lift = -25.37%
+AUPRC       : Behavioral = 0.2935 | Full = 0.3164 | Lift = +7.80%
+ROC AUC     : Behavioral = 0.9128 | Full = 0.9331 | Lift = +2.23%
+F1-Score    : Behavioral = 0.3185 | Full = 0.3307 | Lift = +3.83%
+Precision   : Behavioral = 0.3559 | Full = 0.4546 | Lift = +27.73%
+Recall      : Behavioral = 0.2883 | Full = 0.2599 | Lift = -9.84%
 
 Statistical Significance (paired t-test on AUPRC):
-  t-statistic: 0.1100
-  p-value:     9.1668e-01
+  t-statistic: -1.4545
+  p-value:     2.0556e-01
   ✗ Difference not statistically significant at α=0.05
 
 ================================================================================
@@ -861,26 +742,26 @@ PHASE 3: GLOBAL INTERPRETABILITY (SHAP)
 GLOBAL SHAP FEATURE IMPORTANCE (ACROSS ALL WINDOWS)
 ================================================================================
                  feature  mean_abs_shap
-          ach_count_sent       0.943504
-          ach_count_recv       0.549332
-               hits_auth       0.410683
-               in_degree       0.363176
-       cheque_count_sent       0.261983
-                vol_sent       0.254596
-                vol_recv       0.159086
-                  degree       0.156175
-                hits_hub       0.140880
-       cheque_count_recv       0.140419
-                tx_count       0.135088
-                pr_count       0.129205
-  credit_card_count_sent       0.100016
-distinct_currencies_sent       0.096909
- leiden_macro_modularity       0.096641
-              out_degree       0.095129
-             betweenness       0.093496
-                  k_core       0.089171
-              flow_ratio       0.087675
-       leiden_micro_size       0.078206
+          ach_count_sent       0.982518
+          ach_count_recv       0.627730
+               hits_auth       0.509125
+               in_degree       0.285773
+       cheque_count_sent       0.243183
+                hits_hub       0.230470
+                vol_sent       0.211376
+                vol_recv       0.180048
+                  degree       0.129952
+ leiden_macro_modularity       0.123135
+                tx_count       0.117614
+       cheque_count_recv       0.117362
+          pr_vol_shallow       0.101719
+  credit_card_count_sent       0.096590
+             pr_vol_deep       0.090146
+              out_degree       0.088300
+distinct_currencies_sent       0.085739
+             betweenness       0.077683
+       leiden_micro_size       0.072512
+                pr_count       0.071946
 
 ✓ Global SHAP plot saved to: data/HI_Small/results/global_shap_beeswarm.png
 ✓ Raw SHAP matrix serialized to: data/HI_Small/results/raw_shap_values.npy
@@ -888,7 +769,3 @@ distinct_currencies_sent       0.096909
 ================================================================================
 PIPELINE EXECUTION COMPLETE.
 ================================================================================
-
-SEM DIFERENTES TIPOS DE PAGAMENTOS
-
-worse

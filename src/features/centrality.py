@@ -57,7 +57,7 @@ class PageRankVolumeExtractor(FeatureExtractor):
             return {}
 
         try:
-            scores: dict = nx.pagerank(G, weight="weight", alpha=self._alpha, max_iter=self._max_iter)
+            scores: dict = nx.pagerank(G, weight="volume", alpha=self._alpha, max_iter=self._max_iter)
         except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
             return {}
 

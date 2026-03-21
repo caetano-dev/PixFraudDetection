@@ -17,7 +17,6 @@ Execution model: Map (Parallel Extraction) -> Reduce (Sequential Rank Stability)
 from __future__ import annotations
 
 import gc
-import multiprocessing
 import shutil
 import sys
 import tempfile
@@ -42,7 +41,6 @@ from src.config import (
     OUTPUT_METRICS_FILE,
     RUN_EVALUATION,
     RUN_LEIDEN,
-    RUN_RANK_STABILITY,
 )
 from src.features.base import FeatureExtractor
 from src.features.centrality import (
@@ -127,7 +125,6 @@ def process_window(
     bad_actors_up_to_date: set = run_flags.get("bad_actors", set()) # AMLworld, graph based anomaly survey
 
     features: list[dict] = []
-    # Iterate over target nodes transacting today, not the historical graph nodes
     for node in day_nodes["entity_id"].unique():
         ns = node_stats.get(node, {})
         vol_s = ns.get("vol_sent", 0.0)
@@ -388,7 +385,6 @@ def main() -> None:
     print(f"Dataset: {DATASET_SIZE}")
     print(f"Evaluation:     {'Enabled' if RUN_EVALUATION else 'Disabled'}")
     print(f"Leiden:         {'Enabled' if RUN_LEIDEN else 'Disabled'}")
-    print(f"Rank Stability: {'Enabled' if RUN_RANK_STABILITY else 'Disabled'}")
     print("=" * 60)
 
     edges_path = DATA_PATH / "lookback_edges.parquet"
@@ -440,7 +436,6 @@ def main() -> None:
 
     max_workers = 4
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
-    print(f"WeirdNodes and motifs")
 
     all_daily_metrics: list[dict] = []
     written_chunk_files = 0

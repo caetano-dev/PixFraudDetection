@@ -36,7 +36,6 @@ FROM RawTx t
 JOIN AccMap src ON t.from_account = src.acc_num
 JOIN AccMap tgt ON t.to_account = tgt.acc_num;
 
--- 2. Sliding Window Calendar (Discrete Non-Cumulative Windows)
 CREATE TEMP TABLE WindowCalendar AS
 WITH DataBounds AS (
     SELECT 
@@ -62,8 +61,6 @@ FROM (
 ) sub
 WHERE window_start + (window_size_days * INTERVAL 1 DAY) <= (SELECT last_date + INTERVAL 1 DAY FROM DataBounds);
 
--- 3. SLIDING WINDOW EDGES (Strict Non-Cumulative)
--- Each edge is aggregated ONLY from transactions within [window_start, window_end)
 COPY (
     SELECT
         w.window_id,
@@ -81,7 +78,6 @@ COPY (
     GROUP BY w.window_id, w.window_start, w.window_end, r.source_entity, r.target_entity
 ) TO 'data/HI_Small/lookback_edges.parquet' (FORMAT PARQUET);
 
--- 4. TARGET NODES (Aggregated per Window) -> Labels and Behavioral Features
 COPY (
     WITH NodeSent AS (
         SELECT 
