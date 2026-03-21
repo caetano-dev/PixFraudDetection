@@ -1,28 +1,3 @@
-"""
-Internal evaluation helpers for the PixFraudDetection pipeline.
-
-This module migrates ``rank_nodes_by_score``, ``evaluate_ranking_effectiveness``,
-and ``compute_daily_evaluation_metrics`` from the legacy ``utils.py``.
-
-These functions are considered **internal** to the features package (hence the
-leading underscore in the module name).  They are consumed exclusively by the
-orchestrator in ``scripts/02_extract_features.py`` and are not part of the
-public ``src.features`` API.
-
-Mathematical invariants preserved from the original implementation
-------------------------------------------------------------------
-* Precision@K  = (fraud nodes in top-K) / K
-* Recall@K     = (fraud nodes in top-K) / (total fraud nodes)
-* Lift@K       = Precision@K / baseline_fraud_rate
-* ROC-AUC      — computed via ``sklearn.metrics.roc_auc_score``
-* Average Precision (PR-AUC) — computed via
-  ``sklearn.metrics.average_precision_score``
-
-All formulas, edge-case guards (zero fraud, zero normal, insufficient nodes),
-and the three-algorithm structure (pagerank / hits_hub / hits_auth) are
-preserved verbatim from ``utils.py``.  No mathematical logic has been altered.
-"""
-
 from __future__ import annotations
 
 from typing import Optional
@@ -30,77 +5,14 @@ from typing import Optional
 import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-# ---------------------------------------------------------------------------
-# Internal ranking helper
-# ---------------------------------------------------------------------------
-
-
 def _rank_nodes_by_score(scores: dict, descending: bool = True) -> list[tuple]:
-    """
-    Sort a ``{node: score}`` mapping into a ranked list of ``(node, score)``
-    tuples.
-
-    Mirrors ``utils.rank_nodes_by_score`` exactly.
-
-    Parameters
-    ----------
-    scores : dict
-        Mapping of node ID to numeric score.
-    descending : bool
-        When ``True`` (default) the highest-scoring node is ranked first.
-
-    Returns
-    -------
-    list[tuple]
-        List of ``(node_id, score)`` tuples sorted by score.
-    """
     return sorted(scores.items(), key=lambda x: x[1], reverse=descending)
-
-
-# ---------------------------------------------------------------------------
-# Core evaluation function
-# ---------------------------------------------------------------------------
-
 
 def evaluate_ranking_effectiveness(
     ranked_nodes: list[tuple],
     labels: dict,
     k_values: Optional[list[int]] = None,
 ) -> dict:
-    """
-    Evaluate how well a ranking (e.g. PageRank) surfaces fraudulent nodes.
-
-    Computes Precision@K, Recall@K, Fraud-found@K, Lift@K, ROC-AUC, and
-    Average Precision (PR-AUC) for the supplied ranked node list.
-
-    Parameters
-    ----------
-    ranked_nodes : list[tuple]
-        ``[(node_id, score), ...]`` sorted highest-score-first, as produced
-        by :func:`_rank_nodes_by_score`.
-    labels : dict
-        ``{node_id: 1}`` for fraudulent nodes, ``{node_id: 0}`` for benign
-        nodes.  Nodes absent from *labels* are treated as benign (score 0).
-    k_values : list[int], optional
-        K values for which to compute @K metrics.
-        Defaults to ``[10, 50, 100, 500, 1000]``.
-
-    Returns
-    -------
-    dict
-        Dictionary with the following keys:
-
-        * ``total_nodes``      — total number of nodes in the ranked list
-        * ``total_fraud``      — number of fraud nodes in the ranked list
-        * ``total_normal``     — number of non-fraud nodes
-        * ``fraud_rate``       — baseline fraud rate (total_fraud / total_nodes)
-        * ``precision_at_k``   — ``{k: float}`` Precision@K for each k
-        * ``recall_at_k``      — ``{k: float}`` Recall@K for each k
-        * ``fraud_found_at_k`` — ``{k: int}`` raw fraud count in top-K
-        * ``lift_at_k``        — ``{k: float}`` Lift@K over baseline
-        * ``roc_auc``          — ROC-AUC score (``float`` or ``None``)
-        * ``average_precision``— Average Precision / PR-AUC (``float`` or ``None``)
-    """
     if k_values is None:
         k_values = [10, 50, 100, 500, 1000]
 
@@ -115,14 +27,10 @@ def evaluate_ranking_effectiveness(
     metrics["total_normal"] = total_normal
     metrics["fraud_rate"] = total_fraud / total_nodes if total_nodes > 0 else 0
 
-    # Build ordered arrays aligned to the ranking
     nodes_ordered = [node for node, _ in ranked_nodes]
     scores_ordered = np.array([score for _, score in ranked_nodes])
     labels_ordered = np.array([labels.get(node, 0) for node in nodes_ordered])
 
-    # ---------------------------------------------------------------------- #
-    # Precision@K, Recall@K, Fraud-found@K                                   #
-    # ---------------------------------------------------------------------- #
     metrics["precision_at_k"] = {}
     metrics["recall_at_k"] = {}
     metrics["fraud_found_at_k"] = {}
@@ -139,9 +47,7 @@ def evaluate_ranking_effectiveness(
             metrics["recall_at_k"][k] = recall_at_k
             metrics["fraud_found_at_k"][k] = fraud_in_top_k
 
-    # ---------------------------------------------------------------------- #
     # ROC-AUC                                                                 #
-    # ---------------------------------------------------------------------- #
     if total_fraud > 0 and total_normal > 0:
         try:
             metrics["roc_auc"] = roc_auc_score(labels_ordered, scores_ordered)
@@ -150,9 +56,7 @@ def evaluate_ranking_effectiveness(
     else:
         metrics["roc_auc"] = None
 
-    # ---------------------------------------------------------------------- #
     # Average Precision (PR-AUC)                                              #
-    # ---------------------------------------------------------------------- #
     if total_fraud > 0:
         try:
             metrics["average_precision"] = average_precision_score(
@@ -163,9 +67,7 @@ def evaluate_ranking_effectiveness(
     else:
         metrics["average_precision"] = None
 
-    # ---------------------------------------------------------------------- #
     # Lift@K                                                                  #
-    # ---------------------------------------------------------------------- #
     metrics["lift_at_k"] = {}
     baseline_rate = metrics["fraud_rate"]
 
@@ -177,47 +79,16 @@ def evaluate_ranking_effectiveness(
     return metrics
 
 
-# ---------------------------------------------------------------------------
-# Per-day multi-algorithm wrapper
-# ---------------------------------------------------------------------------
-
 
 def compute_daily_evaluation_metrics(
     bad_actors: set,
     k_values: list[int] | None = None,
     **score_dicts: dict[object, float | int],
 ) -> dict:
-    """
-    Compute evaluation metrics for multiple algorithms for a single day.
 
-    Wraps :func:`evaluate_ranking_effectiveness` for each provided algorithm,
-    building a shared ``labels`` dict from the union of all nodes present in
-    any score dictionary.
-
-    Parameters
-    ----------
-    bad_actors : set
-        Set of entity IDs identified as bad actors **up to** the current date
-        (time-aware labels — no future leakage). Pre-computed during the feature extraction initialization.
-    k_values : list[int], optional
-        K values forwarded to :func:`evaluate_ranking_effectiveness`.
-    **score_dicts : dict[object, float | int]
-        Variable-length keyword arguments where each key is an algorithm name
-        (e.g., "pagerank", "hits_hub", "vol_sent") and each value is a
-        ``{node_id: score}`` dictionary for that algorithm.
-
-    Returns
-    -------
-    dict
-        Dictionary mapping algorithm names to their evaluation metrics.
-        Each value is the full metrics dict returned by
-        :func:`evaluate_ranking_effectiveness`. An algorithm key is omitted
-        when its score dictionary is empty.
-    """
     if not score_dicts:
         return {}
 
-    # Build a shared label dict from all nodes visible across all provided algorithms
     all_nodes = set()
     for d in score_dicts.values():
         all_nodes.update(d.keys())

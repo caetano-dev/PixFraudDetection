@@ -6,7 +6,6 @@ def main():
     sql_path = Path("./scripts/02_aggregate_graph.sql")
     query = sql_path.read_text()
     
-    # Inject dynamic paths and window parameters
     query = query.replace("'data/HI_Small/", f"'{DATA_PATH}/")
     query = query.replace("SELECT 1 AS window_size_days, 1 AS window_stride_days", 
                           f"SELECT {WINDOW_SIZE} AS window_size_days, {WINDOW_STRIDE} AS window_stride_days")

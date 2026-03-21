@@ -1,7 +1,6 @@
 import yfinance as yf
 import pandas as pd
 
-# The start date is Aug 1, 2022. End date is exclusive in yfinance, so we use Nov 6.
 START_DATE = '2022-08-01'
 YF_END_DATE = '2022-11-06'
 END_DATE_ACTUAL = '2022-11-05'

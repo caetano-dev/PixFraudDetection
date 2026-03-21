@@ -1,5 +1,4 @@
-
-============================================================
+==========================================================================================
 PixFraudDetection Pipeline Summary
 Dataset: SMALL
 ============================================================
@@ -10,49 +9,49 @@ Aggregate Evaluation Summary (Mean & Median Across All Days)
 
 [PR_VOL_DEEP]
 ----------------------------------------
-  Mean ROC-AUC:            0.6062
-  Median ROC-AUC:          0.6123
-  Mean Average Precision:  0.0565
-  Median Average Precision:0.0581
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 98.7500% (lift: 90.36x)
-    @   50: 55.2500% (lift: 50.68x)
-    @  100: 41.3750% (lift: 37.84x)
-    @  500: 18.7000% (lift: 17.07x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 55.0000% (lift: 50.19x)
-    @  100: 40.5000% (lift: 38.11x)
-    @  500: 18.7000% (lift: 17.09x)
-
-[PR_VOL_SHALLOW]
-----------------------------------------
-  Mean ROC-AUC:            0.6063
-  Median ROC-AUC:          0.6116
-  Mean Average Precision:  0.0606
-  Median Average Precision:0.0609
+  Mean ROC-AUC:            0.6269
+  Median ROC-AUC:          0.6342
+  Mean Average Precision:  0.0735
+  Median Average Precision:0.0722
 
   Mean Precision@K:
     @    1: 100.0000% (lift: 91.70x)
     @    2: 100.0000% (lift: 91.70x)
     @   10: 100.0000% (lift: 91.70x)
-    @   50: 58.2500% (lift: 53.72x)
-    @  100: 44.2500% (lift: 40.69x)
-    @  500: 19.8500% (lift: 18.19x)
+    @   50: 60.5000% (lift: 55.92x)
+    @  100: 44.2500% (lift: 40.84x)
+    @  500: 24.4000% (lift: 22.38x)
 
   Median Precision@K:
     @    1: 100.0000% (lift: 88.66x)
     @    2: 100.0000% (lift: 88.66x)
     @   10: 100.0000% (lift: 88.66x)
-    @   50: 58.0000% (lift: 50.09x)
-    @  100: 44.5000% (lift: 39.80x)
-    @  500: 19.7000% (lift: 17.56x)
+    @   50: 58.0000% (lift: 55.21x)
+    @  100: 43.0000% (lift: 38.29x)
+    @  500: 23.7000% (lift: 22.00x)
+
+[PR_VOL_SHALLOW]
+----------------------------------------
+  Mean ROC-AUC:            0.6262
+  Median ROC-AUC:          0.6308
+  Mean Average Precision:  0.0766
+  Median Average Precision:0.0742
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 63.0000% (lift: 58.44x)
+    @  100: 46.3750% (lift: 42.81x)
+    @  500: 25.0250% (lift: 22.93x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 62.0000% (lift: 55.21x)
+    @  100: 46.0000% (lift: 43.17x)
+    @  500: 24.4000% (lift: 22.57x)
 
 [PR_COUNT]
 ----------------------------------------
@@ -79,49 +78,49 @@ Aggregate Evaluation Summary (Mean & Median Across All Days)
 
 [HITS_HUB]
 ----------------------------------------
-  Mean ROC-AUC:            0.6765
-  Median ROC-AUC:          0.6791
-  Mean Average Precision:  0.0298
-  Median Average Precision:0.0292
-
-  Mean Precision@K:
-    @    1: 62.5000% (lift: 61.33x)
-    @    2: 62.5000% (lift: 61.33x)
-    @   10: 53.7500% (lift: 51.41x)
-    @   50: 23.5000% (lift: 22.36x)
-    @  100: 16.6250% (lift: 15.73x)
-    @  500: 7.6750% (lift: 7.19x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 87.10x)
-    @    2: 100.0000% (lift: 87.10x)
-    @   10: 70.0000% (lift: 65.05x)
-    @   50: 26.0000% (lift: 23.96x)
-    @  100: 16.0000% (lift: 15.41x)
-    @  500: 8.2000% (lift: 7.85x)
-
-[HITS_AUTH]
-----------------------------------------
-  Mean ROC-AUC:            0.5898
-  Median ROC-AUC:          0.5866
-  Mean Average Precision:  0.0187
-  Median Average Precision:0.0182
+  Mean ROC-AUC:            0.7313
+  Median ROC-AUC:          0.7354
+  Mean Average Precision:  0.0534
+  Median Average Precision:0.0550
 
   Mean Precision@K:
     @    1: 100.0000% (lift: 91.70x)
-    @    2: 81.2500% (lift: 76.51x)
-    @   10: 47.5000% (lift: 45.27x)
-    @   50: 11.2500% (lift: 10.54x)
-    @  100: 6.2500% (lift: 5.82x)
-    @  500: 2.8000% (lift: 2.58x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 73.7500% (lift: 67.66x)
+    @  100: 43.0000% (lift: 39.61x)
+    @  500: 12.3250% (lift: 11.22x)
 
   Median Precision@K:
     @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 87.10x)
-    @   10: 60.0000% (lift: 56.34x)
-    @   50: 12.0000% (lift: 11.47x)
-    @  100: 6.5000% (lift: 6.19x)
-    @  500: 2.9000% (lift: 2.59x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 73.0000% (lift: 65.05x)
+    @  100: 42.5000% (lift: 37.89x)
+    @  500: 12.3000% (lift: 10.59x)
+
+[HITS_AUTH]
+----------------------------------------
+  Mean ROC-AUC:            0.6208
+  Median ROC-AUC:          0.6213
+  Mean Average Precision:  0.0174
+  Median Average Precision:0.0170
+
+  Mean Precision@K:
+    @    1: 12.5000% (lift: 13.42x)
+    @    2: 6.2500% (lift: 6.71x)
+    @   10: 5.0000% (lift: 4.93x)
+    @   50: 5.0000% (lift: 4.63x)
+    @  100: 4.1250% (lift: 3.77x)
+    @  500: 3.6500% (lift: 3.32x)
+
+  Median Precision@K:
+    @    1: 0.0000% (lift: 0.00x)
+    @    2: 0.0000% (lift: 0.00x)
+    @   10: 0.0000% (lift: 0.00x)
+    @   50: 5.0000% (lift: 4.42x)
+    @  100: 4.0000% (lift: 3.90x)
+    @  500: 3.7000% (lift: 3.15x)
 
 [BETWEENNESS]
 ----------------------------------------
@@ -675,6 +674,78 @@ Aggregate Evaluation Summary (Mean & Median Across All Days)
     @  100: 13.5000% (lift: 11.93x)
     @  500: 6.0000% (lift: 5.20x)
 
+============================================================
+Leiden Community Detection Analysis (Money Laundering)
+============================================================
+
+Analysis based on latest window: 2022-09-11
+Total nodes with community assignment: 157,067
+Total communities detected: 411
+Total fraudulent entities: 1,422
+Overall fraud rate: 0.9053%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 40 / 411
+Pure fraud communities (100% fraud): 0
+Avg fraud rate in communities with fraud: 0.9778%
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift    
+------------------------------------------------------------
+1          1        1          0        0.0000%   0.00x
+2-4        335      739        0        0.0000%   0.00x
+5-9        8        55         0        0.0000%   0.00x
+10-49      28       515        2        0.3883%   0.43x
+50-99      2        120        2        1.6667%   1.84x
+100-499    2        912        9        0.9868%   1.09x
+500+       35       154725     1409     0.9106%   1.01x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift    
+--------------------------------------------------
+63         12       1        8.3333%      9.20x
+37         63       2        3.1746%      3.51x
+39         41       1        2.4390%      2.69x
+13         5140     77       1.4981%      1.65x
+8          6520     86       1.3190%      1.46x
+0          33569    436      1.2988%      1.43x
+7          6779     83       1.2244%      1.35x
+32         539      6        1.1132%      1.23x
+35         498      5        1.0040%      1.11x
+9          6517     65       0.9974%      1.10x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+Communities capturing 0.28% of fraud: 3 communities
+Fraudulent nodes in high-risk communities: 4 / 1,422
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.7168
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 0.26% (communities per node)
+Community size distribution (mean/std): 382.2 / 2239.9
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 0.3%
+Precision in 2x-risk communities: 4.65% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+⚠ Leiden alone may not be sufficient for filtering
+  Consider combining with other detection methods
+
+
+==================================================
+==================================================
+==================================================
+
 ================================================================================
 ABLATION STUDY: EMPIRICAL VALIDATION OF TOPOLOGICAL FEATURES
 ================================================================================
@@ -682,22 +753,22 @@ ABLATION STUDY: EMPIRICAL VALIDATION OF TOPOLOGICAL FEATURES
 --------------------------------------------------------------------------------
 PHASE 1: BEHAVIORAL BASELINE (21 features)
 --------------------------------------------------------------------------------
-Window 2: AUPRC=0.2428, F1=0.2677, P@100=0.9100, Threshold=0.3777
-Window 3: AUPRC=0.2867, F1=0.3038, P@100=0.9600, Threshold=0.3917
-Window 4: AUPRC=0.3291, F1=0.3505, P@100=0.9700, Threshold=0.3587
-Window 5: AUPRC=0.4055, F1=0.4069, P@100=0.9900, Threshold=0.4200
-Window 6: AUPRC=0.2831, F1=0.2994, P@100=0.9600, Threshold=0.4599
-Window 7: AUPRC=0.2447, F1=0.2775, P@100=0.9700, Threshold=0.4528
+Window 2: AUPRC=0.2308, F1=0.2487, P@100=0.9100, Threshold=0.3286
+Window 3: AUPRC=0.2859, F1=0.3027, P@100=0.9500, Threshold=0.4229
+Window 4: AUPRC=0.3257, F1=0.3445, P@100=0.9500, Threshold=0.3678
+Window 5: AUPRC=0.4432, F1=0.4536, P@100=0.9400, Threshold=0.5053
+Window 6: AUPRC=0.2818, F1=0.3004, P@100=0.9500, Threshold=0.4472
+Window 7: AUPRC=0.2444, F1=0.2730, P@100=0.9500, Threshold=0.4947
 
 --------------------------------------------------------------------------------
 PHASE 2: FULL MODEL (40 features)
 --------------------------------------------------------------------------------
-Window 2: AUPRC=0.2231, F1=0.2567, P@100=0.8400, Threshold=0.4026
-Window 3: AUPRC=0.3122, F1=0.3151, P@100=0.9300, Threshold=0.4441
-Window 4: AUPRC=0.3677, F1=0.3692, P@100=0.9900, Threshold=0.4385
-Window 5: AUPRC=0.4260, F1=0.4084, P@100=1.0000, Threshold=0.5018
-Window 6: AUPRC=0.2680, F1=0.2625, P@100=0.9300, Threshold=0.5960
-Window 7: AUPRC=0.3120, F1=0.3343, P@100=0.9400, Threshold=0.4528
+Window 2: AUPRC=0.2235, F1=0.2482, P@100=0.8900, Threshold=0.3618
+Window 3: AUPRC=0.3547, F1=0.3499, P@100=0.9500, Threshold=0.4502
+Window 4: AUPRC=0.3793, F1=0.3582, P@100=0.9500, Threshold=0.5088
+Window 5: AUPRC=0.4861, F1=0.4689, P@100=0.9500, Threshold=0.5385
+Window 6: AUPRC=0.2675, F1=0.2559, P@100=0.9200, Threshold=0.5476
+Window 7: AUPRC=0.2992, F1=0.3283, P@100=0.9500, Threshold=0.4136
 
 ================================================================================
 PERFORMANCE LIFT FROM TOPOLOGICAL FEATURES
@@ -708,25 +779,25 @@ PER-WINDOW METRICS COMPARISON (Behavioral vs Full)
 --------------------------------------------------------------------------------
 Win  | AUPRC         | ROC AUC       | F1-Score      | Precision     | Recall       
 --------------------------------------------------------------------------------
-2.0  | 0.243/0.223 | 0.902/0.911 | 0.268/0.257 | 0.349/0.309 | 0.217/0.220
-3.0  | 0.287/0.312 | 0.906/0.939 | 0.304/0.315 | 0.395/0.454 | 0.247/0.241
-4.0  | 0.329/0.368 | 0.921/0.947 | 0.350/0.369 | 0.363/0.460 | 0.338/0.308
-5.0  | 0.406/0.426 | 0.944/0.960 | 0.407/0.408 | 0.449/0.509 | 0.372/0.341
-6.0  | 0.283/0.268 | 0.907/0.918 | 0.299/0.262 | 0.285/0.588 | 0.316/0.169
-7.0  | 0.245/0.312 | 0.886/0.937 | 0.278/0.334 | 0.384/0.358 | 0.217/0.314
+2.0  | 0.231/0.223 | 0.898/0.913 | 0.249/0.248 | 0.230/0.223 | 0.270/0.279
+3.0  | 0.286/0.355 | 0.905/0.945 | 0.303/0.350 | 0.400/0.511 | 0.244/0.266
+4.0  | 0.326/0.379 | 0.919/0.951 | 0.344/0.358 | 0.346/0.576 | 0.343/0.260
+5.0  | 0.443/0.486 | 0.952/0.968 | 0.454/0.469 | 0.514/0.570 | 0.406/0.398
+6.0  | 0.282/0.268 | 0.906/0.920 | 0.300/0.256 | 0.293/0.614 | 0.308/0.162
+7.0  | 0.244/0.299 | 0.887/0.928 | 0.273/0.328 | 0.378/0.343 | 0.214/0.315
 
 --------------------------------------------------------------------------------
 AGGREGATE METRICS COMPARISON
 --------------------------------------------------------------------------------
-AUPRC       : Behavioral = 0.2935 | Full = 0.3164 | Lift = +7.80%
-ROC AUC     : Behavioral = 0.9128 | Full = 0.9331 | Lift = +2.23%
-F1-Score    : Behavioral = 0.3185 | Full = 0.3307 | Lift = +3.83%
-Precision   : Behavioral = 0.3559 | Full = 0.4546 | Lift = +27.73%
-Recall      : Behavioral = 0.2883 | Full = 0.2599 | Lift = -9.84%
+AUPRC       : Behavioral = 0.3028 | Full = 0.3357 | Lift = +10.86%
+ROC AUC     : Behavioral = 0.9140 | Full = 0.9368 | Lift = +2.50%
+F1-Score    : Behavioral = 0.3268 | Full = 0.3473 | Lift = +6.30%
+Precision   : Behavioral = 0.3628 | Full = 0.4564 | Lift = +25.80%
+Recall      : Behavioral = 0.2972 | Full = 0.2804 | Lift = -5.68%
 
 Statistical Significance (paired t-test on AUPRC):
-  t-statistic: -1.4545
-  p-value:     2.0556e-01
+  t-statistic: -2.3135
+  p-value:     6.8605e-02
   ✗ Difference not statistically significant at α=0.05
 
 ================================================================================
@@ -742,26 +813,26 @@ PHASE 3: GLOBAL INTERPRETABILITY (SHAP)
 GLOBAL SHAP FEATURE IMPORTANCE (ACROSS ALL WINDOWS)
 ================================================================================
                  feature  mean_abs_shap
-          ach_count_sent       0.982518
-          ach_count_recv       0.627730
-               hits_auth       0.509125
-               in_degree       0.285773
-       cheque_count_sent       0.243183
-                hits_hub       0.230470
-                vol_sent       0.211376
-                vol_recv       0.180048
-                  degree       0.129952
- leiden_macro_modularity       0.123135
-                tx_count       0.117614
-       cheque_count_recv       0.117362
-          pr_vol_shallow       0.101719
-  credit_card_count_sent       0.096590
-             pr_vol_deep       0.090146
-              out_degree       0.088300
-distinct_currencies_sent       0.085739
-             betweenness       0.077683
-       leiden_micro_size       0.072512
-                pr_count       0.071946
+          ach_count_sent       0.962348
+          ach_count_recv       0.617037
+               hits_auth       0.523996
+               in_degree       0.321028
+       cheque_count_sent       0.248014
+                hits_hub       0.243671
+                vol_sent       0.240179
+                vol_recv       0.186407
+       cheque_count_recv       0.123725
+                  degree       0.121103
+                tx_count       0.116280
+ leiden_macro_modularity       0.103028
+          pr_vol_shallow       0.102721
+  credit_card_count_sent       0.102568
+distinct_currencies_sent       0.096785
+              out_degree       0.092204
+                pr_count       0.088095
+             pr_vol_deep       0.086235
+       leiden_micro_size       0.080275
+             betweenness       0.079725
 
 ✓ Global SHAP plot saved to: data/HI_Small/results/global_shap_beeswarm.png
 ✓ Raw SHAP matrix serialized to: data/HI_Small/results/raw_shap_values.npy

@@ -1,7 +1,3 @@
-"""
-Subgraph motif counting feature extractor based on AMLworld paper (Section 3.2).
-"""
-
 from __future__ import annotations
 
 import networkx as nx
@@ -45,7 +41,7 @@ class SubgraphMotifExtractor(FeatureExtractor):
             for node in G.nodes()
         }
         
-        # 1. Fan-out / Fan-in (Strictly bounded)
+        # 1. Fan-out / Fan-in
         for node in G.nodes():
             out_deg = G.out_degree(node)
             in_deg = G.in_degree(node)
@@ -55,17 +51,15 @@ class SubgraphMotifExtractor(FeatureExtractor):
             if self.fan_threshold <= in_deg <= self.max_degree:
                 features[node]["fan_in_count"] = 1
         
-        # 2. Scatter-Gather / Gather-Scatter (Pruned to max 16x16 operations)
+        # 2. Scatter-Gather / Gather-Scatter
         for u in G.nodes():
             u_successors = set(G.successors(u))
             
-            # Prune: U must fit the specific low-degree laundering profile
             if not (2 <= len(u_successors) <= self.max_degree):
                 continue
             
             second_hop_nodes = set()
             for mid in u_successors:
-                # Prune: Intermediate routing accounts also obey degree limits
                 if G.out_degree(mid) <= self.max_degree:
                     second_hop_nodes.update(G.successors(mid))
             
@@ -75,7 +69,6 @@ class SubgraphMotifExtractor(FeatureExtractor):
                 
                 v_predecessors = set(G.predecessors(v))
                 
-                # Prune: Target V must fit the low-degree profile
                 if not (2 <= len(v_predecessors) <= self.max_degree):
                     continue
                     
@@ -85,8 +78,6 @@ class SubgraphMotifExtractor(FeatureExtractor):
                     features[u]["scatter_gather_count"] += 1
                     features[v]["gather_scatter_count"] += 1
         
-        # 3. Bounded Simple Cycles (Operating on a decimated subgraph)
-        # Pruning dead-ends and mega-hubs reduces the graph size by 90%+ 
         valid_cycle_nodes = [
             n for n in G.nodes() 
             if G.in_degree(n) > 0 
@@ -97,7 +88,6 @@ class SubgraphMotifExtractor(FeatureExtractor):
         if valid_cycle_nodes:
             cycle_subgraph = G.subgraph(valid_cycle_nodes)
             try:
-                # Evaluate the generator lazily and break at max_cycles
                 cycle_generator = nx.simple_cycles(cycle_subgraph, length_bound=self.cycle_bound)
                 cycles_found = 0
                 
