@@ -1,3 +1,699 @@
+
+============================================================
+PixFraudDetection Pipeline Summary
+Dataset: SMALL
+============================================================
+
+============================================================
+Aggregate Evaluation Summary (Mean & Median Across All Days)
+============================================================
+
+[PR_VOL_DEEP]
+----------------------------------------
+  Mean ROC-AUC:            0.6062
+  Median ROC-AUC:          0.6123
+  Mean Average Precision:  0.0565
+  Median Average Precision:0.0581
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 98.7500% (lift: 90.36x)
+    @   50: 55.2500% (lift: 50.68x)
+    @  100: 41.3750% (lift: 37.84x)
+    @  500: 18.7000% (lift: 17.07x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 55.0000% (lift: 50.19x)
+    @  100: 40.5000% (lift: 38.11x)
+    @  500: 18.7000% (lift: 17.09x)
+
+[PR_VOL_SHALLOW]
+----------------------------------------
+  Mean ROC-AUC:            0.6063
+  Median ROC-AUC:          0.6116
+  Mean Average Precision:  0.0606
+  Median Average Precision:0.0609
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 58.2500% (lift: 53.72x)
+    @  100: 44.2500% (lift: 40.69x)
+    @  500: 19.8500% (lift: 18.19x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 58.0000% (lift: 50.09x)
+    @  100: 44.5000% (lift: 39.80x)
+    @  500: 19.7000% (lift: 17.56x)
+
+[PR_COUNT]
+----------------------------------------
+  Mean ROC-AUC:            0.6014
+  Median ROC-AUC:          0.6031
+  Mean Average Precision:  0.0748
+  Median Average Precision:0.0712
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 76.0000% (lift: 70.02x)
+    @  100: 53.3750% (lift: 49.39x)
+    @  500: 25.1750% (lift: 23.12x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 76.0000% (lift: 66.45x)
+    @  100: 54.5000% (lift: 45.28x)
+    @  500: 24.3000% (lift: 22.88x)
+
+[HITS_HUB]
+----------------------------------------
+  Mean ROC-AUC:            0.6765
+  Median ROC-AUC:          0.6791
+  Mean Average Precision:  0.0298
+  Median Average Precision:0.0292
+
+  Mean Precision@K:
+    @    1: 62.5000% (lift: 61.33x)
+    @    2: 62.5000% (lift: 61.33x)
+    @   10: 53.7500% (lift: 51.41x)
+    @   50: 23.5000% (lift: 22.36x)
+    @  100: 16.6250% (lift: 15.73x)
+    @  500: 7.6750% (lift: 7.19x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 87.10x)
+    @    2: 100.0000% (lift: 87.10x)
+    @   10: 70.0000% (lift: 65.05x)
+    @   50: 26.0000% (lift: 23.96x)
+    @  100: 16.0000% (lift: 15.41x)
+    @  500: 8.2000% (lift: 7.85x)
+
+[HITS_AUTH]
+----------------------------------------
+  Mean ROC-AUC:            0.5898
+  Median ROC-AUC:          0.5866
+  Mean Average Precision:  0.0187
+  Median Average Precision:0.0182
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 81.2500% (lift: 76.51x)
+    @   10: 47.5000% (lift: 45.27x)
+    @   50: 11.2500% (lift: 10.54x)
+    @  100: 6.2500% (lift: 5.82x)
+    @  500: 2.8000% (lift: 2.58x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 87.10x)
+    @   10: 60.0000% (lift: 56.34x)
+    @   50: 12.0000% (lift: 11.47x)
+    @  100: 6.5000% (lift: 6.19x)
+    @  500: 2.9000% (lift: 2.59x)
+
+[BETWEENNESS]
+----------------------------------------
+  Mean ROC-AUC:            0.6681
+  Median ROC-AUC:          0.6650
+  Mean Average Precision:  0.0669
+  Median Average Precision:0.0660
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 93.7500% (lift: 85.93x)
+    @   10: 93.7500% (lift: 86.13x)
+    @   50: 40.2500% (lift: 36.66x)
+    @  100: 32.2500% (lift: 29.42x)
+    @  500: 25.4500% (lift: 22.92x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 83.30x)
+    @   10: 90.0000% (lift: 82.47x)
+    @   50: 42.0000% (lift: 35.60x)
+    @  100: 32.0000% (lift: 28.03x)
+    @  500: 25.9000% (lift: 22.97x)
+
+[K_CORE]
+----------------------------------------
+  Mean ROC-AUC:            0.7126
+  Median ROC-AUC:          0.7182
+  Mean Average Precision:  0.0532
+  Median Average Precision:0.0549
+
+  Mean Precision@K:
+    @    1: 87.5000% (lift: 81.10x)
+    @    2: 75.0000% (lift: 68.22x)
+    @   10: 62.5000% (lift: 56.21x)
+    @   50: 41.0000% (lift: 36.52x)
+    @  100: 35.5000% (lift: 31.84x)
+    @  500: 24.3250% (lift: 21.86x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 87.10x)
+    @    2: 75.0000% (lift: 66.24x)
+    @   10: 55.0000% (lift: 54.65x)
+    @   50: 43.0000% (lift: 36.96x)
+    @  100: 38.0000% (lift: 31.31x)
+    @  500: 22.9000% (lift: 21.83x)
+
+[VOL_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.6825
+  Median ROC-AUC:          0.6950
+  Mean Average Precision:  0.0304
+  Median Average Precision:0.0319
+
+  Mean Precision@K:
+    @    1: 25.0000% (lift: 24.97x)
+    @    2: 50.0000% (lift: 45.47x)
+    @   10: 38.7500% (lift: 35.47x)
+    @   50: 29.0000% (lift: 26.78x)
+    @  100: 23.6250% (lift: 21.63x)
+    @  500: 10.6250% (lift: 9.67x)
+
+  Median Precision@K:
+    @    1: 0.0000% (lift: 0.00x)
+    @    2: 50.0000% (lift: 41.65x)
+    @   10: 40.0000% (lift: 33.15x)
+    @   50: 29.0000% (lift: 25.67x)
+    @  100: 23.5000% (lift: 22.21x)
+    @  500: 10.7000% (lift: 9.70x)
+
+[VOL_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.6097
+  Median ROC-AUC:          0.6136
+  Mean Average Precision:  0.0253
+  Median Average Precision:0.0259
+
+  Mean Precision@K:
+    @    1: 50.0000% (lift: 43.79x)
+    @    2: 50.0000% (lift: 42.86x)
+    @   10: 43.7500% (lift: 39.16x)
+    @   50: 27.7500% (lift: 25.24x)
+    @  100: 20.6250% (lift: 18.66x)
+    @  500: 9.1000% (lift: 8.25x)
+
+  Median Precision@K:
+    @    1: 50.0000% (lift: 38.63x)
+    @    2: 50.0000% (lift: 49.95x)
+    @   10: 45.0000% (lift: 41.44x)
+    @   50: 29.0000% (lift: 24.20x)
+    @  100: 21.5000% (lift: 18.19x)
+    @  500: 8.8000% (lift: 8.37x)
+
+[IN_DEGREE]
+----------------------------------------
+  Mean ROC-AUC:            0.6933
+  Median ROC-AUC:          0.6939
+  Mean Average Precision:  0.0942
+  Median Average Precision:0.0921
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 75.2500% (lift: 69.46x)
+    @  100: 56.7500% (lift: 52.37x)
+    @  500: 28.3750% (lift: 25.88x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 75.0000% (lift: 68.22x)
+    @  100: 56.0000% (lift: 51.47x)
+    @  500: 28.0000% (lift: 25.53x)
+
+[OUT_DEGREE]
+----------------------------------------
+  Mean ROC-AUC:            0.7225
+  Median ROC-AUC:          0.7269
+  Mean Average Precision:  0.0888
+  Median Average Precision:0.0887
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 86.2500% (lift: 78.82x)
+    @  100: 69.3750% (lift: 63.27x)
+    @  500: 27.9500% (lift: 25.41x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 86.0000% (lift: 77.10x)
+    @  100: 69.5000% (lift: 61.52x)
+    @  500: 27.2000% (lift: 24.75x)
+
+[TX_COUNT]
+----------------------------------------
+  Mean ROC-AUC:            0.6412
+  Median ROC-AUC:          0.6379
+  Mean Average Precision:  0.0938
+  Median Average Precision:0.0912
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 91.0000% (lift: 83.30x)
+    @  100: 74.7500% (lift: 68.29x)
+    @  500: 29.4500% (lift: 26.79x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 91.0000% (lift: 80.02x)
+    @  100: 73.5000% (lift: 65.11x)
+    @  500: 28.7000% (lift: 26.04x)
+
+[TIME_VARIANCE]
+----------------------------------------
+  Mean ROC-AUC:            0.5883
+  Median ROC-AUC:          0.5856
+  Mean Average Precision:  0.0140
+  Median Average Precision:0.0143
+
+  Mean Precision@K:
+    @    1: 0.0000% (lift: 0.00x)
+    @    2: 6.2500% (lift: 6.71x)
+    @   10: 2.5000% (lift: 2.68x)
+    @   50: 4.0000% (lift: 3.80x)
+    @  100: 4.3750% (lift: 4.01x)
+    @  500: 2.8750% (lift: 2.73x)
+
+  Median Precision@K:
+    @    1: 0.0000% (lift: 0.00x)
+    @    2: 0.0000% (lift: 0.00x)
+    @   10: 0.0000% (lift: 0.00x)
+    @   50: 4.0000% (lift: 3.55x)
+    @  100: 4.5000% (lift: 4.28x)
+    @  500: 2.3000% (lift: 1.89x)
+
+[WIRE_COUNT_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.5480
+  Median ROC-AUC:          0.5477
+  Mean Average Precision:  0.0416
+  Median Average Precision:0.0413
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 70.5000% (lift: 64.33x)
+    @  100: 50.3750% (lift: 45.95x)
+    @  500: 16.5250% (lift: 15.04x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 69.0000% (lift: 62.49x)
+    @  100: 52.0000% (lift: 44.04x)
+    @  500: 16.6000% (lift: 15.13x)
+
+[WIRE_COUNT_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.5347
+  Median ROC-AUC:          0.5323
+  Mean Average Precision:  0.0429
+  Median Average Precision:0.0423
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 82.2500% (lift: 75.15x)
+    @  100: 53.6250% (lift: 49.10x)
+    @  500: 17.4250% (lift: 15.79x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 83.0000% (lift: 71.10x)
+    @  100: 54.5000% (lift: 47.18x)
+    @  500: 16.7000% (lift: 15.98x)
+
+[CASH_COUNT_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.5608
+  Median ROC-AUC:          0.5607
+  Mean Average Precision:  0.0563
+  Median Average Precision:0.0550
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 89.0000% (lift: 81.31x)
+    @  100: 62.8750% (lift: 57.16x)
+    @  500: 19.9500% (lift: 18.20x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 90.0000% (lift: 77.95x)
+    @  100: 61.5000% (lift: 57.19x)
+    @  500: 19.5000% (lift: 17.66x)
+
+[CASH_COUNT_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.5537
+  Median ROC-AUC:          0.5481
+  Mean Average Precision:  0.0617
+  Median Average Precision:0.0602
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 85.5000% (lift: 78.65x)
+    @  100: 65.7500% (lift: 60.17x)
+    @  500: 23.7750% (lift: 21.66x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 86.0000% (lift: 74.47x)
+    @  100: 65.5000% (lift: 56.75x)
+    @  500: 23.4000% (lift: 21.14x)
+
+[BITCOIN_COUNT_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.5054
+  Median ROC-AUC:          0.5050
+  Mean Average Precision:  0.0157
+  Median Average Precision:0.0153
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 63.7500% (lift: 58.39x)
+    @   50: 20.7500% (lift: 18.70x)
+    @  100: 13.2500% (lift: 12.04x)
+    @  500: 8.7250% (lift: 7.92x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 60.0000% (lift: 56.34x)
+    @   50: 20.0000% (lift: 19.37x)
+    @  100: 13.5000% (lift: 11.79x)
+    @  500: 8.8000% (lift: 8.10x)
+
+[BITCOIN_COUNT_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.5018
+  Median ROC-AUC:          0.5018
+  Mean Average Precision:  0.0146
+  Median Average Precision:0.0147
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 63.7500% (lift: 58.39x)
+    @   50: 23.0000% (lift: 20.66x)
+    @  100: 14.8750% (lift: 13.48x)
+    @  500: 8.1250% (lift: 7.32x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 60.0000% (lift: 56.34x)
+    @   50: 24.0000% (lift: 20.69x)
+    @  100: 14.5000% (lift: 12.95x)
+    @  500: 7.3000% (lift: 7.67x)
+
+[CHEQUE_COUNT_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.5862
+  Median ROC-AUC:          0.5851
+  Mean Average Precision:  0.0720
+  Median Average Precision:0.0698
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 86.2500% (lift: 78.87x)
+    @  100: 67.7500% (lift: 61.68x)
+    @  500: 25.6250% (lift: 23.26x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 86.0000% (lift: 77.10x)
+    @  100: 68.0000% (lift: 60.34x)
+    @  500: 24.5000% (lift: 23.37x)
+
+[CHEQUE_COUNT_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.5582
+  Median ROC-AUC:          0.5532
+  Mean Average Precision:  0.0735
+  Median Average Precision:0.0728
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 86.2500% (lift: 78.92x)
+    @  100: 64.8750% (lift: 59.01x)
+    @  500: 27.0500% (lift: 24.59x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 86.0000% (lift: 77.35x)
+    @  100: 65.5000% (lift: 58.31x)
+    @  500: 26.0000% (lift: 24.65x)
+
+[CREDIT_CARD_COUNT_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.5897
+  Median ROC-AUC:          0.5880
+  Mean Average Precision:  0.0729
+  Median Average Precision:0.0711
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 84.2500% (lift: 77.11x)
+    @  100: 68.6250% (lift: 62.48x)
+    @  500: 26.1750% (lift: 23.76x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 84.0000% (lift: 75.32x)
+    @  100: 68.0000% (lift: 60.35x)
+    @  500: 25.4000% (lift: 23.87x)
+
+[CREDIT_CARD_COUNT_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.5619
+  Median ROC-AUC:          0.5604
+  Mean Average Precision:  0.0712
+  Median Average Precision:0.0703
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 86.0000% (lift: 78.78x)
+    @  100: 66.1250% (lift: 60.15x)
+    @  500: 26.3750% (lift: 23.95x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 86.0000% (lift: 77.46x)
+    @  100: 66.5000% (lift: 58.83x)
+    @  500: 25.4000% (lift: 23.72x)
+
+[ACH_COUNT_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.7422
+  Median ROC-AUC:          0.7424
+  Mean Average Precision:  0.0785
+  Median Average Precision:0.0764
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 83.0000% (lift: 75.80x)
+    @  100: 64.6250% (lift: 58.70x)
+    @  500: 24.7750% (lift: 22.60x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 83.0000% (lift: 76.54x)
+    @  100: 63.0000% (lift: 57.27x)
+    @  500: 24.5000% (lift: 21.49x)
+
+[ACH_COUNT_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.7127
+  Median ROC-AUC:          0.7139
+  Mean Average Precision:  0.0795
+  Median Average Precision:0.0775
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 100.0000% (lift: 91.70x)
+    @   50: 78.0000% (lift: 71.37x)
+    @  100: 51.6250% (lift: 47.63x)
+    @  500: 25.6000% (lift: 23.36x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 79.0000% (lift: 69.14x)
+    @  100: 51.5000% (lift: 44.51x)
+    @  500: 25.6000% (lift: 22.81x)
+
+[REINVESTMENT_COUNT_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.5192
+  Median ROC-AUC:          0.5000
+  Mean Average Precision:  0.0197
+  Median Average Precision:0.0120
+
+  Mean Precision@K:
+    @    1: 25.0000% (lift: 23.07x)
+    @    2: 31.2500% (lift: 29.98x)
+    @   10: 35.0000% (lift: 32.93x)
+    @   50: 23.0000% (lift: 22.17x)
+    @  100: 16.5000% (lift: 16.09x)
+    @  500: 9.4750% (lift: 8.93x)
+
+  Median Precision@K:
+    @    1: 0.0000% (lift: 0.00x)
+    @    2: 0.0000% (lift: 0.00x)
+    @   10: 20.0000% (lift: 16.26x)
+    @   50: 17.0000% (lift: 13.98x)
+    @  100: 10.5000% (lift: 8.34x)
+    @  500: 7.5000% (lift: 6.83x)
+
+[REINVESTMENT_COUNT_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.5192
+  Median ROC-AUC:          0.5000
+  Mean Average Precision:  0.0197
+  Median Average Precision:0.0120
+
+  Mean Precision@K:
+    @    1: 25.0000% (lift: 23.07x)
+    @    2: 31.2500% (lift: 29.98x)
+    @   10: 35.0000% (lift: 32.93x)
+    @   50: 23.0000% (lift: 22.17x)
+    @  100: 16.5000% (lift: 16.09x)
+    @  500: 9.4750% (lift: 8.93x)
+
+  Median Precision@K:
+    @    1: 0.0000% (lift: 0.00x)
+    @    2: 0.0000% (lift: 0.00x)
+    @   10: 20.0000% (lift: 16.26x)
+    @   50: 17.0000% (lift: 13.98x)
+    @  100: 10.5000% (lift: 8.34x)
+    @  500: 7.5000% (lift: 6.83x)
+
+[DISTINCT_CURRENCIES_SENT]
+----------------------------------------
+  Mean ROC-AUC:            0.7102
+  Median ROC-AUC:          0.7207
+  Mean Average Precision:  0.0577
+  Median Average Precision:0.0577
+
+  Mean Precision@K:
+    @    1: 100.0000% (lift: 91.70x)
+    @    2: 100.0000% (lift: 91.70x)
+    @   10: 98.7500% (lift: 90.32x)
+    @   50: 77.5000% (lift: 70.33x)
+    @  100: 59.3750% (lift: 53.89x)
+    @  500: 23.3500% (lift: 20.95x)
+
+  Median Precision@K:
+    @    1: 100.0000% (lift: 88.66x)
+    @    2: 100.0000% (lift: 88.66x)
+    @   10: 100.0000% (lift: 88.66x)
+    @   50: 75.0000% (lift: 70.21x)
+    @  100: 56.0000% (lift: 53.39x)
+    @  500: 23.8000% (lift: 21.41x)
+
+[DISTINCT_CURRENCIES_RECV]
+----------------------------------------
+  Mean ROC-AUC:            0.5355
+  Median ROC-AUC:          0.5357
+  Mean Average Precision:  0.0160
+  Median Average Precision:0.0160
+
+  Mean Precision@K:
+    @    1: 50.0000% (lift: 49.77x)
+    @    2: 50.0000% (lift: 49.77x)
+    @   10: 46.2500% (lift: 43.66x)
+    @   50: 19.0000% (lift: 17.91x)
+    @  100: 12.7500% (lift: 11.89x)
+    @  500: 5.9000% (lift: 5.42x)
+
+  Median Precision@K:
+    @    1: 50.0000% (lift: 40.87x)
+    @    2: 50.0000% (lift: 40.87x)
+    @   10: 50.0000% (lift: 46.15x)
+    @   50: 19.0000% (lift: 17.03x)
+    @  100: 13.5000% (lift: 11.93x)
+    @  500: 6.0000% (lift: 5.20x)
+
+============================================================
+Feature Statistics Summary
+============================================================
+        pr_vol_deep  ...  leiden_micro_modularity
+count  1.245666e+06  ...             1.245666e+06
+mean   6.422267e-06  ...             5.161873e-01
+std    1.499976e-05  ...             7.584011e-02
+min    9.749147e-07  ...             3.999680e-01
+25%    3.270354e-06  ...             4.392801e-01
+50%    4.510966e-06  ...             4.839995e-01
+75%    7.027342e-06  ...             5.896583e-01
+max    3.622332e-03  ...             5.925240e-01
+
+[8 rows x 38 columns]
+
+============================================================
+Summary Complete!
+============================================================
+
 ================================================================================
 ABLATION STUDY: EMPIRICAL VALIDATION OF TOPOLOGICAL FEATURES
 ================================================================================
@@ -95,3 +791,104 @@ distinct_currencies_sent       0.102889
 ================================================================================
 PIPELINE EXECUTION COMPLETE.
 ================================================================================
+
+COM DIFERENTES TIPOS DE PAGAMENTOS
+
+================================================================================
+ABLATION STUDY: EMPIRICAL VALIDATION OF TOPOLOGICAL FEATURES
+================================================================================
+
+--------------------------------------------------------------------------------
+PHASE 1: BEHAVIORAL BASELINE (21 features)
+--------------------------------------------------------------------------------
+Window 2: AUPRC=0.2339, F1=0.2633, P@100=0.9100, Threshold=0.3564
+Window 3: AUPRC=0.2846, F1=0.3020, P@100=0.9400, Threshold=0.4034
+Window 4: AUPRC=0.3224, F1=0.3401, P@100=0.9800, Threshold=0.3797
+Window 5: AUPRC=0.3850, F1=0.3863, P@100=0.9800, Threshold=0.3956
+Window 6: AUPRC=0.2959, F1=0.3188, P@100=0.9600, Threshold=0.4774
+Window 7: AUPRC=0.2484, F1=0.2787, P@100=0.9600, Threshold=0.4030
+
+--------------------------------------------------------------------------------
+PHASE 2: FULL MODEL (40 features)
+--------------------------------------------------------------------------------
+Window 2: AUPRC=0.2322, F1=0.2624, P@100=0.8500, Threshold=0.3892
+Window 3: AUPRC=0.2912, F1=0.2755, P@100=0.9300, Threshold=0.4724
+Window 4: AUPRC=0.3102, F1=0.3014, P@100=0.9500, Threshold=0.4424
+Window 5: AUPRC=0.3782, F1=0.3342, P@100=0.9600, Threshold=0.5111
+Window 6: AUPRC=0.2614, F1=0.2693, P@100=0.8700, Threshold=0.4982
+Window 7: AUPRC=0.2901, F1=0.3100, P@100=0.9400, Threshold=0.4376
+
+================================================================================
+PERFORMANCE LIFT FROM TOPOLOGICAL FEATURES
+================================================================================
+
+--------------------------------------------------------------------------------
+PER-WINDOW METRICS COMPARISON (Behavioral vs Full)
+--------------------------------------------------------------------------------
+Win  | AUPRC         | ROC AUC       | F1-Score      | Precision     | Recall       
+--------------------------------------------------------------------------------
+2.0  | 0.234/0.232 | 0.898/0.909 | 0.263/0.262 | 0.313/0.364 | 0.227/0.205
+3.0  | 0.285/0.291 | 0.905/0.928 | 0.302/0.276 | 0.400/0.596 | 0.242/0.179
+4.0  | 0.322/0.310 | 0.920/0.932 | 0.340/0.301 | 0.379/0.595 | 0.309/0.202
+5.0  | 0.385/0.378 | 0.938/0.953 | 0.386/0.334 | 0.439/0.664 | 0.345/0.223
+6.0  | 0.296/0.261 | 0.910/0.916 | 0.319/0.269 | 0.321/0.523 | 0.317/0.181
+7.0  | 0.248/0.290 | 0.889/0.929 | 0.279/0.310 | 0.321/0.317 | 0.246/0.303
+
+--------------------------------------------------------------------------------
+AGGREGATE METRICS COMPARISON
+--------------------------------------------------------------------------------
+AUPRC       : Behavioral = 0.2902 | Full = 0.2861 | Lift = -1.39%
+ROC AUC     : Behavioral = 0.9114 | Full = 0.9242 | Lift = +1.40%
+F1-Score    : Behavioral = 0.3143 | Full = 0.2966 | Lift = -5.63%
+Precision   : Behavioral = 0.3505 | Full = 0.4903 | Lift = +39.90%
+Recall      : Behavioral = 0.2849 | Full = 0.2126 | Lift = -25.37%
+
+Statistical Significance (paired t-test on AUPRC):
+  t-statistic: 0.1100
+  p-value:     9.1668e-01
+  ✗ Difference not statistically significant at α=0.05
+
+================================================================================
+GENERATING ABLATION STUDY VISUALIZATIONS
+================================================================================
+✓ Ablation study plot saved to: data/HI_Small/results/ablation_study_results.png
+
+--------------------------------------------------------------------------------
+PHASE 3: GLOBAL INTERPRETABILITY (SHAP)
+--------------------------------------------------------------------------------
+
+================================================================================
+GLOBAL SHAP FEATURE IMPORTANCE (ACROSS ALL WINDOWS)
+================================================================================
+                 feature  mean_abs_shap
+          ach_count_sent       0.943504
+          ach_count_recv       0.549332
+               hits_auth       0.410683
+               in_degree       0.363176
+       cheque_count_sent       0.261983
+                vol_sent       0.254596
+                vol_recv       0.159086
+                  degree       0.156175
+                hits_hub       0.140880
+       cheque_count_recv       0.140419
+                tx_count       0.135088
+                pr_count       0.129205
+  credit_card_count_sent       0.100016
+distinct_currencies_sent       0.096909
+ leiden_macro_modularity       0.096641
+              out_degree       0.095129
+             betweenness       0.093496
+                  k_core       0.089171
+              flow_ratio       0.087675
+       leiden_micro_size       0.078206
+
+✓ Global SHAP plot saved to: data/HI_Small/results/global_shap_beeswarm.png
+✓ Raw SHAP matrix serialized to: data/HI_Small/results/raw_shap_values.npy
+
+================================================================================
+PIPELINE EXECUTION COMPLETE.
+================================================================================
+
+SEM DIFERENTES TIPOS DE PAGAMENTOS
+
+worse

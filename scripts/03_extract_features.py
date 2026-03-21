@@ -40,8 +40,6 @@ from src.config import (
     EVALUATION_K_VALUES,
     OUTPUT_FEATURES_FILE,
     OUTPUT_METRICS_FILE,
-    RANK_ANOMALY_PERCENTILE,
-    RANK_STABILITY_TOP_K,
     RUN_EVALUATION,
     RUN_LEIDEN,
     RUN_RANK_STABILITY,
@@ -55,7 +53,6 @@ from src.features.centrality import (
 )
 from src.features.community import KCoreExtractor, LeidenCommunityExtractor
 from src.features.motifs import SubgraphMotifExtractor
-from src.features.stability import RankStabilityTracker
 
 
 def process_window(
@@ -103,7 +100,7 @@ def process_window(
         day_edges,
         source="source",
         target="target",
-        edge_attr=["weight", "volume", "count", "amount_std"],
+        edge_attr=["volume", "count"],
         create_using=nx.DiGraph,
     )
 
@@ -396,13 +393,8 @@ def main() -> None:
 
     edges_path = DATA_PATH / "lookback_edges.parquet"
     nodes_path = DATA_PATH / "target_nodes.parquet" 
-    transactions_path = DATA_PATH / "1_filtered_transactions.parquet"
-    accounts_path = DATA_PATH / "2_filtered_accounts.parquet"
     features_out = DATA_PATH / OUTPUT_FEATURES_FILE
     feature_chunks_dir = Path(tempfile.mkdtemp(prefix="feature_chunks_"))
-
-    def _quote_ident(identifier: str) -> str:
-        return '"' + identifier.replace('"', '""') + '"'
 
     con = duckdb.connect()
 
@@ -452,7 +444,6 @@ def main() -> None:
 
     all_daily_metrics: list[dict] = []
     written_chunk_files = 0
-    daily_metrics_store: dict[int, dict] = {}  # Store daily_metrics by window_id for stability tracking
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures: dict = {}
@@ -485,10 +476,6 @@ def main() -> None:
                     if RUN_EVALUATION and result["metrics"]:
                         all_daily_metrics.extend(result["metrics"])
                     
-                    # Store daily_metrics for rank stability (if enabled)
-                    if RUN_RANK_STABILITY and result["daily_metrics"]:
-                        daily_metrics_store[result["window_id"]] = result["daily_metrics"]
-
                     del result
                     gc.collect()
                 except Exception as exc:
@@ -501,83 +488,6 @@ def main() -> None:
         con.close()
         return
 
-    stability_tmp_file: Path | None = None
-
-    if RUN_RANK_STABILITY:
-        print("\nApplying WeirdNodes ensemble rank stability post-processing...")
-        
-        stability_tracker = RankStabilityTracker(
-            top_k=RANK_STABILITY_TOP_K,
-            threshold_percentile=RANK_ANOMALY_PERCENTILE,
-        )
-        stability_rows: list[dict] = []
-
-        # Process windows sequentially in chronological order
-        for window_id in sorted(unique_window_ids):
-            current_metrics = daily_metrics_store.get(window_id, {})
-            if not current_metrics:
-                continue
-
-            stability_result = stability_tracker.compute(current_metrics)
-            if stability_result is None:
-                continue
-
-            # Capture the continuous scores
-            weirdness_scores: dict = stability_result["weirdness_scores"]
-            ensemble_residuals: dict = stability_result["ensemble_residuals"]
-            
-            # Log validation summary for this window
-            validation_summary = stability_result.get("validation_summary", {})
-            valid_metrics = stability_result.get("valid_metrics", [])
-            if validation_summary:
-                print(f"\n[Window {window_id}] Validation Summary:")
-                for metric, stats in validation_summary.items():
-                    status = "✓ VALID" if stats["valid"] else "✗ INVALID"
-                    print(f"  {metric:<20} {status:<10} (ρ={stats['spearman']:.3f}, τ={stats['kendall']:.3f})")
-                print(f"  Valid metrics for ensemble: {', '.join(valid_metrics) if valid_metrics else 'None'}")
-
-            # Create stability rows for all nodes in this window
-            # Get all unique nodes from the feature chunks for this window
-            window_nodes_df = con.execute(
-                f"""
-                SELECT DISTINCT entity_id, window_start
-                FROM read_parquet('{feature_chunks_dir / f"features_{window_id}.parquet"}')
-                """
-            ).df()
-            
-            # Create rows for the feature table with continuous WeirdNodes signals
-            for _, row in window_nodes_df.iterrows():
-                entity_id = row["entity_id"]
-                window_start = row["window_start"]
-                stability_rows.append(
-                    {
-                        "window_id": window_id,
-                        "window_start": window_start,
-                        "entity_id": entity_id,
-                        # The continuous WeirdNodes signal (magnitude of rank instability)
-                        "weirdnodes_magnitude": weirdness_scores.get(entity_id, 0.0),
-                        # Signed residual for interpretation
-                        "weirdnodes_residual": ensemble_residuals.get(entity_id, 0.0),
-                        # Directional flags (useful for identifying Black Holes vs Ghosts)
-                        "is_riser": 1 if ensemble_residuals.get(entity_id, 0.0) > 0 else 0,
-                        "is_faller": 1 if ensemble_residuals.get(entity_id, 0.0) < 0 else 0,
-                    }
-                )
-            
-            del window_nodes_df
-
-        if stability_rows:
-            stability_temp_dir = Path(tempfile.mkdtemp(prefix="rank_stability_"))
-            stability_tmp_file = stability_temp_dir / "rank_stability.parquet"
-            stability_df = pd.DataFrame(stability_rows)
-            stability_df.to_parquet(stability_tmp_file, index=False)
-            del stability_df
-            print(f"\nRank stability features generated: {len(stability_rows):,} records")
-
-        # Clean up daily_metrics_store to free memory
-        del daily_metrics_store
-        gc.collect()
-
     print("\nUsing pre-aggregated is_fraud labels from aggregated_nodes.parquet...")
 
     stability_join = ""
@@ -587,18 +497,6 @@ def main() -> None:
         "                0::INTEGER AS is_riser,\n"
         "                0::INTEGER AS is_faller"
     )
-    if stability_tmp_file is not None and stability_tmp_file.exists():
-        stability_join = (
-            f"LEFT JOIN read_parquet('{stability_tmp_file}') s\n"
-            f"            ON f.window_id = s.window_id\n"
-            f"            AND CAST(f.entity_id AS VARCHAR) = CAST(s.entity_id AS VARCHAR)"
-        )
-        stability_select = (
-            "COALESCE(s.weirdnodes_magnitude, 0.0) AS weirdnodes_magnitude,\n"
-            "                COALESCE(s.weirdnodes_residual, 0.0) AS weirdnodes_residual,\n"
-            "                COALESCE(s.is_riser, 0) AS is_riser,\n"
-            "                COALESCE(s.is_faller, 0) AS is_faller"
-        )
 
     print(f"Saving features to {features_out} via DuckDB out-of-core join...")
     con.execute(
@@ -615,8 +513,6 @@ def main() -> None:
 
     print("Cleaning temporary artifacts...")
     shutil.rmtree(feature_chunks_dir, ignore_errors=False)
-    if stability_tmp_file is not None and stability_tmp_file.exists():
-        shutil.rmtree(stability_tmp_file.parent, ignore_errors=False)
 
     if RUN_EVALUATION and all_daily_metrics:
         metrics_df = pd.DataFrame(all_daily_metrics)

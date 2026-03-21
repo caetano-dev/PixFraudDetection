@@ -82,7 +82,7 @@ def _run_leiden_on_graph(
     ig_graph = ig.Graph.from_networkx(G_undirected)
 
     # Use edge weights when available.
-    weight_attr = "weight" if "weight" in ig_graph.edge_attributes() else None
+    weight_attr = "count" if "count" in ig_graph.edge_attributes() else None
 
     partition = leidenalg.find_partition(
         ig_graph,

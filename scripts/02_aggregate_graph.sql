@@ -37,8 +37,6 @@ JOIN AccMap src ON t.from_account = src.acc_num
 JOIN AccMap tgt ON t.to_account = tgt.acc_num;
 
 -- 2. Sliding Window Calendar (Discrete Non-Cumulative Windows)
--- Each window has: window_id, window_start (inclusive), window_end (exclusive)
--- Transactions are filtered: tx_date >= window_start AND tx_date < window_end
 CREATE TEMP TABLE WindowCalendar AS
 WITH DataBounds AS (
     SELECT 
@@ -47,8 +45,7 @@ WITH DataBounds AS (
     FROM ResolvedTx
 ),
 WindowParams AS (
-    -- Replace with config values: WINDOW_SIZE and WINDOW_STRIDE from config.py
-    SELECT 1 AS window_size_days, 1 AS window_stride_days
+    SELECT 3 AS window_size_days, 1 AS window_stride_days
 )
 SELECT 
     ROW_NUMBER() OVER (ORDER BY window_start) - 1 AS window_id,
@@ -76,9 +73,7 @@ COPY (
         r.target_entity AS target,
         SUM(r.adj_sent) AS volume,
         COUNT(*) AS count,
-        COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) AS amount_std,
         COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM r.ts)), 0.0) AS time_variance,
-        SUM(r.adj_sent) * LOG2(1 + COUNT(*)) * (1 + 1.0 / (1.0 + (COALESCE(STDDEV_SAMP(r.adj_sent), 0.0) / ((SUM(r.adj_sent) / COUNT(*)) + 1e-9)))) AS weight
     FROM WindowCalendar w
     JOIN ResolvedTx r 
       ON r.tx_date >= w.window_start 
