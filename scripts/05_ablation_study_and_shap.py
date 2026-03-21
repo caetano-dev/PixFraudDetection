@@ -6,6 +6,7 @@ Methodological Fixes Applied:
 2. Evaluates the Behavioral-only baseline and Full model with independent inner-loop tuning.
 3. Computes rigorous AUPRC lift without hyperparameter confounding.
 4. Leverages accumulated global SHAP values for valid temporal interpretability.
+5. Serializes raw arrays and plots full evaluation metrics.
 """
 
 import pandas as pd
@@ -80,59 +81,62 @@ def compute_performance_lift(
     comparison = behavioral_results.merge(
         full_results,
         on='test_window_id',
-        suffixes=('_behavioral', '_full')
+        suffixes=('_beh', '_full')
     )
     
     comparison['auprc_lift_%'] = (
-        (comparison['auprc_full'] - comparison['auprc_behavioral']) / 
-        comparison['auprc_behavioral'] * 100
+        (comparison['auprc_full'] - comparison['auprc_beh']) / 
+        (comparison['auprc_beh'] + 1e-9) * 100
     ).fillna(0)
     
-    comparison['f1_lift_%'] = (
-        (comparison['f1_score_full'] - comparison['f1_score_behavioral']) / 
-        (comparison['f1_score_behavioral'] + 1e-9) * 100
-    ).fillna(0)
-
     print("\n" + "-" * 80)
-    print("PER-WINDOW METRICS COMPARISON")
+    print("PER-WINDOW METRICS COMPARISON (Behavioral vs Full)")
     print("-" * 80)
-    print(f"{'Window':<15} {'AUPRC (Beh)':>12} {'AUPRC (Full)':>13} {'Lift %':>8} "
-          f"{'F1 (Beh)':>10} {'F1 (Full)':>11} {'Lift %':>8}")
+    print(f"{'Win':<4} | {'AUPRC':<13} | {'ROC AUC':<13} | {'F1-Score':<13} | {'Precision':<13} | {'Recall':<13}")
     print("-" * 80)
     
     for _, row in comparison.iterrows():
-        print(f"{str(row['test_window_id']):<15} "
-              f"{row['auprc_behavioral']:12.4f} {row['auprc_full']:13.4f} {row['auprc_lift_%']:7.1f}% "
-              f"{row['f1_score_behavioral']:10.4f} {row['f1_score_full']:11.4f} {row['f1_lift_%']:7.1f}%")
+        win = str(row['test_window_id'])
+        print(f"{win:<4} | "
+              f"{row['auprc_beh']:.3f}/{row['auprc_full']:.3f} | "
+              f"{row['roc_auc_beh']:.3f}/{row['roc_auc_full']:.3f} | "
+              f"{row['f1_score_beh']:.3f}/{row['f1_score_full']:.3f} | "
+              f"{row['precision_beh']:.3f}/{row['precision_full']:.3f} | "
+              f"{row['recall_beh']:.3f}/{row['recall_full']:.3f}")
     
     print("\n" + "-" * 80)
     print("AGGREGATE METRICS COMPARISON")
     print("-" * 80)
     
-    overall_auprc_lift = (
-        (full_summary['overall_auprc'] - behavioral_summary['overall_auprc']) / 
-        behavioral_summary['overall_auprc'] * 100
-    )
+    # Calculate overall F1 for summaries (Harmonic mean of overall Precision and Recall)
+    def calc_f1(p, r):
+        return 2 * (p * r) / (p + r) if (p + r) > 0 else 0.0
+
+    beh_f1 = calc_f1(behavioral_summary['overall_precision'], behavioral_summary['overall_recall'])
+    full_f1 = calc_f1(full_summary['overall_precision'], full_summary['overall_recall'])
+
+    metrics_comparison = [
+        ("AUPRC", behavioral_summary['overall_auprc'], full_summary['overall_auprc']),
+        ("ROC AUC", behavioral_summary['overall_roc_auc'], full_summary['overall_roc_auc']),
+        ("F1-Score", beh_f1, full_f1),
+        ("Precision", behavioral_summary['overall_precision'], full_summary['overall_precision']),
+        ("Recall", behavioral_summary['overall_recall'], full_summary['overall_recall'])
+    ]
+
+    for name, beh_val, full_val in metrics_comparison:
+        lift = ((full_val - beh_val) / (beh_val + 1e-9)) * 100
+        print(f"{name:<12}: Behavioral = {beh_val:.4f} | Full = {full_val:.4f} | Lift = {lift:+.2f}%")
     
-    print(f"\nOverall AUPRC:")
-    print(f"  Behavioral-only: {behavioral_summary['overall_auprc']:.4f}")
-    print(f"  Full model:      {full_summary['overall_auprc']:.4f}")
-    print(f"  Improvement:     {overall_auprc_lift:+.2f}%")
-    
-    print(f"\nMean Window AUPRC:")
-    print(f"  Behavioral-only: {behavioral_summary['mean_window_auprc']:.4f} ± {behavioral_summary['std_window_auprc']:.4f}")
-    print(f"  Full model:      {full_summary['mean_window_auprc']:.4f} ± {full_summary['std_window_auprc']:.4f}")
-    
-    # Statistical significance (paired t-test)
+    # Statistical significance (paired t-test on AUPRC)
     t_stat, p_value = stats.ttest_rel(
-        comparison['auprc_behavioral'].values,
+        comparison['auprc_beh'].values,
         comparison['auprc_full'].values
     )
     print(f"\nStatistical Significance (paired t-test on AUPRC):")
     print(f"  t-statistic: {t_stat:.4f}")
     print(f"  p-value:     {p_value:.4e}")
     if p_value < 0.05:
-        print(f"  ✓ Topological features provide STATISTICALLY SIGNIFICANT improvement (p < 0.05)")
+        print(f"  ✓ Topological features provide STATISTICALLY SIGNIFICANT difference (p < 0.05)")
     else:
         print(f"  ✗ Difference not statistically significant at α=0.05")
     
@@ -156,7 +160,7 @@ def plot_ablation_comparison(comparison_df: pd.DataFrame, output_dir: Path):
     x_pos = np.arange(len(x))
     
     behavioral_bars = ax.bar(
-        x_pos - width/2, comparison_df['auprc_behavioral'].values,
+        x_pos - width/2, comparison_df['auprc_beh'].values,
         width, label='Behavioral-only (Baseline)', color='#e74c3c', alpha=0.8
     )
     full_bars = ax.bar(
@@ -164,10 +168,14 @@ def plot_ablation_comparison(comparison_df: pd.DataFrame, output_dir: Path):
         width, label='Full Model (Behavioral + Topological)', color='#27ae60', alpha=0.8
     )
     
+    # Auto-label the bar heights using the previously unused variables
+    ax.bar_label(behavioral_bars, fmt='%.3f', padding=3, fontsize=8)
+    ax.bar_label(full_bars, fmt='%.3f', padding=3, fontsize=8)
+    
     for i, row in comparison_df.iterrows():
         lift = row['auprc_lift_%']
-        y_pos = max(row['auprc_behavioral'], row['auprc_full']) + 0.01
-        ax.text(i, y_pos, f'+{lift:.1f}%', ha='center', va='bottom', fontsize=9, fontweight='bold')
+        y_pos = max(row['auprc_beh'], row['auprc_full']) + 0.05
+        ax.text(i, y_pos, f'{lift:+.1f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
     
     ax.set_xlabel('Test Window ID', fontsize=12, fontweight='bold')
     ax.set_ylabel('AUPRC', fontsize=12, fontweight='bold')
@@ -176,12 +184,15 @@ def plot_ablation_comparison(comparison_df: pd.DataFrame, output_dir: Path):
     ax.set_xticklabels(x)
     ax.legend(loc='lower right', fontsize=11)
     ax.grid(axis='y', alpha=0.3, linestyle='--')
-    ax.set_ylim(0, max(comparison_df['auprc_full'].max(), comparison_df['auprc_behavioral'].max()) * 1.15)
+    ax.set_ylim(0, max(comparison_df['auprc_full'].max(), comparison_df['auprc_beh'].max()) * 1.25)
     
+    fig.tight_layout()
     output_dir.mkdir(exist_ok=True, parents=True)
     ablation_plot_path = output_dir / "ablation_study_results.png"
-    plt.savefig(ablation_plot_path, dpi=300, bbox_inches='tight')
-    plt.close()
+    
+    # Using the bound fig variable to save
+    fig.savefig(ablation_plot_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
     
     print(f"✓ Ablation study plot saved to: {ablation_plot_path}")
 
@@ -243,6 +254,10 @@ def main():
     )
     
     feature_importance.to_csv(output_dir / "shap_feature_importance.csv", index=False)
+    
+    # Serialize the raw SHAP array using the previously unused variable
+    np.save(output_dir / "raw_shap_values.npy", shap_values)
+    print(f"✓ Raw SHAP matrix serialized to: {output_dir / 'raw_shap_values.npy'}")
     
     print("\n" + "=" * 80)
     print("PIPELINE EXECUTION COMPLETE.")

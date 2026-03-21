@@ -153,8 +153,6 @@ def forward_chaining_validation(
             "auprc": auprc,
             "roc_auc": roc_auc,
             "f1_score": f1,
-            "roc_auc": roc_auc,
-            "f1_score": f1,
             "precision": precision,
             "recall": recall,
             "optimal_threshold": optimal_threshold,

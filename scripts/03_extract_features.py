@@ -446,7 +446,7 @@ def main() -> None:
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    max_workers = 3
+    max_workers = 4
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
     print(f"WeirdNodes and motifs")
 
