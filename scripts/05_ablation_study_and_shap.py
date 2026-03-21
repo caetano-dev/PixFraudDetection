@@ -49,7 +49,7 @@ BEHAVIORAL_COLS = [
     'wire_count_sent', 'cash_count_sent', 'bitcoin_count_sent', 'cheque_count_sent', 
     'credit_card_count_sent', 'ach_count_sent', 'reinvestment_count_sent',
     'wire_count_recv', 'cash_count_recv', 'bitcoin_count_recv', 'cheque_count_recv', 
-    'credit_card_count_recv', 'ach_count_recv', 'reinvestment_count_recv'
+    'credit_card_count_recv', 'ach_count_recv', 'reinvestment_count_recv', 'is_weekend'
 ]
 
 TOPOLOGICAL_COLS = [
