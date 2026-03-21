@@ -89,8 +89,7 @@ def process_window(
         "cheque_count_sent", "cheque_count_recv",
         "credit_card_count_sent", "credit_card_count_recv",
         "ach_count_sent", "ach_count_recv",
-        "reinvestment_count_sent", "reinvestment_count_recv",
-        "is_weekend"
+        "reinvestment_count_sent", "reinvestment_count_recv"
     ]
 
     if "is_fraud" in day_nodes.columns:
@@ -132,7 +131,6 @@ def process_window(
             "vol_recv": vol_r,
             "tx_count": ns.get("tx_count", 0),
             "time_variance": ns.get("time_variance", 0.0),
-            "is_weekend": int(ns.get("is_weekend", 0)),
             "is_fraud": int(ns.get("is_fraud", 0) or 0),
             "flow_ratio": vol_s / (vol_r if vol_r > 0 else vol_s),
             "distinct_currencies_sent": ns.get("distinct_currencies_sent", 0),
