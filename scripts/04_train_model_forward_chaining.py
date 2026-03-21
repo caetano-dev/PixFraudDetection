@@ -64,6 +64,7 @@ def forward_chaining_validation(
     window_results = []
     all_y_true = []
     all_y_probs = []
+    all_y_pred = []
     
     global_shap_values = []
     global_x_test = []
@@ -117,21 +118,23 @@ def forward_chaining_validation(
         study = optuna.create_study(direction='maximize')
         study.optimize(objective, n_trials=n_trials)
         
-        # 3. Train final model on fully undersampled historical data
+        # 3. Out-of-Sample Threshold Calibration (using model trained ONLY on inner_train)
         best_params = study.best_params
         best_params.update({'objective': 'binary:logistic', 'eval_metric': 'aucpr', 'tree_method': 'hist', 'random_state': 42, 'n_jobs': -1})
         
+        calib_model = xgb.XGBClassifier(**best_params)
+        calib_model.fit(X_inner_train, y_inner_train)
+        val_probs = calib_model.predict_proba(X_inner_val)[:, 1]
+        precisions, recalls, thresholds = precision_recall_curve(y_inner_val, val_probs)
+        f1_scores = np.divide(2 * precisions * recalls, precisions + recalls, out=np.zeros_like(precisions), where=(precisions + recalls) != 0)
+        optimal_threshold = thresholds[np.argmax(f1_scores)] if len(thresholds) > 0 else 0.5
+
+        # 4. Train final model on ALL historical data (undersampled)
         final_train_df = undersample_data(train_df, target_col, ratio=20)
         X_train_final, y_train_final = final_train_df[feature_cols], final_train_df[target_col].values
         
         final_model = xgb.XGBClassifier(**best_params)
         final_model.fit(X_train_final, y_train_final)
-
-        # 4. Out-of-Sample Threshold Calibration
-        val_probs = final_model.predict_proba(X_inner_val)[:, 1]
-        precisions, recalls, thresholds = precision_recall_curve(y_inner_val, val_probs)
-        f1_scores = np.divide(2 * precisions * recalls, precisions + recalls, out=np.zeros_like(precisions), where=(precisions + recalls) != 0)
-        optimal_threshold = thresholds[np.argmax(f1_scores)] if len(thresholds) > 0 else 0.5
 
         # 5. Out-of-Sample Prediction
         y_probs = final_model.predict_proba(X_test)[:, 1]
@@ -139,6 +142,7 @@ def forward_chaining_validation(
         
         all_y_true.extend(y_test)
         all_y_probs.extend(y_probs)
+        all_y_pred.extend(y_pred)
         
         auprc = average_precision_score(y_test, y_probs)
         roc_auc = roc_auc_score(y_test, y_probs)
@@ -177,6 +181,7 @@ def forward_chaining_validation(
     
     all_y_true = np.array(all_y_true)
     all_y_probs = np.array(all_y_probs)
+    all_y_pred = np.array(all_y_pred)
     
     summary = {
         "n_test_windows": len(window_results),
@@ -184,9 +189,8 @@ def forward_chaining_validation(
         "overall_fraud_rate": np.mean(all_y_true),
         "overall_auprc": average_precision_score(all_y_true, all_y_probs),
         "overall_roc_auc": roc_auc_score(all_y_true, all_y_probs),
-        "overall_roc_auc": roc_auc_score(all_y_true, all_y_probs),
-        "overall_precision": precision_score(all_y_true, (all_y_probs >= np.mean(results_df["optimal_threshold"])).astype(int), zero_division=0),
-        "overall_recall": recall_score(all_y_true, (all_y_probs >= np.mean(results_df["optimal_threshold"])).astype(int), zero_division=0),
+        "overall_precision": precision_score(all_y_true, all_y_pred, zero_division=0),
+        "overall_recall": recall_score(all_y_true, all_y_pred, zero_division=0),
         "mean_window_auprc": results_df["auprc"].mean(),
         "std_window_auprc": results_df["auprc"].std()
     }
