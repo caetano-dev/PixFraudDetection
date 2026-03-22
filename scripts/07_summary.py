@@ -136,15 +136,27 @@ def print_leiden_community_analysis(con: duckdb.DuckDBPyConnection, features_pat
     if not required_leiden_cols.issubset(set(sample_df.columns)):
         return
 
+    # Pick an available temporal column for per-window Leiden analysis
+    temporal_col = None
+    for candidate in ("window_end", "window_id", "date"):
+        if candidate in sample_df.columns:
+            temporal_col = candidate
+            break
+
     print("\n" + "=" * 60)
     print("Leiden Community Detection Analysis (Money Laundering)")
     print("=" * 60)
 
-    # Read Leiden data - use window_end as the latest time reference
+    if temporal_col is None:
+        print("SKIPPED: No temporal column found for per-window analysis.")
+        print("Expected one of: window_end, window_id, date")
+        return
+
+    # Read Leiden data (using available temporal column)
     leiden_df = con.execute(
         f"""
         SELECT
-            window_end,
+            {temporal_col} AS window_key,
             entity_id,
             leiden_macro_id AS leiden_id,
             leiden_macro_size AS leiden_size,
@@ -159,203 +171,211 @@ def print_leiden_community_analysis(con: duckdb.DuckDBPyConnection, features_pat
         print("No valid Leiden communities found.")
         return
 
-    # Filter to the latest window
-    latest_window = leiden_df["window_end"].max()
-    final_df = leiden_df[leiden_df["window_end"] == latest_window].copy()
+    # Print Leiden summary for each window
+    windows = sorted(leiden_df["window_key"].dropna().unique().tolist())
+    for window_key in windows:
+        final_df = leiden_df[leiden_df["window_key"] == window_key].copy()
+        if final_df.empty:
+            continue
 
-    print(f"\nAnalysis based on latest window: {latest_window}")
-    print(f"Total nodes with community assignment: {len(final_df):,}")
+        print("\n" + "=" * 60)
+        print(f"Leiden Analysis for {temporal_col}: {window_key}")
+        print("=" * 60)
 
-    n_communities = final_df["leiden_id"].nunique()
-    print(f"Total communities detected: {n_communities:,}")
+        print(f"Total nodes with community assignment: {len(final_df):,}")
 
-    # Overall statistics
-    total_fraud = final_df["is_fraud"].sum()
-    overall_fraud_rate = final_df["is_fraud"].mean()
-    print(f"Total fraudulent entities: {int(total_fraud):,}")
-    print(f"Overall fraud rate: {overall_fraud_rate:.4%}")
+        n_communities = final_df["leiden_id"].nunique()
+        print(f"Total communities detected: {n_communities:,}")
 
-    # Compute community statistics
-    community_stats = (
-        final_df.groupby("leiden_id", observed=True)
-        .agg(
-            size=("entity_id", "count"),
-            fraud_count=("is_fraud", "sum"),
-            fraud_rate=("is_fraud", "mean"),
+        # Overall statistics
+        total_fraud = final_df["is_fraud"].sum()
+        overall_fraud_rate = final_df["is_fraud"].mean()
+        print(f"Total fraudulent entities: {int(total_fraud):,}")
+        print(f"Overall fraud rate: {overall_fraud_rate:.4%}")
+
+        # Compute community statistics
+        community_stats = (
+            final_df.groupby("leiden_id", observed=True)
+            .agg(
+                size=("entity_id", "count"),
+                fraud_count=("is_fraud", "sum"),
+                fraud_rate=("is_fraud", "mean"),
+            )
+            .reset_index()
         )
-        .reset_index()
-    )
 
-    # ============================================
-    # [Effectiveness Metric 1: Fraud Concentration]
-    # ============================================
-    print("\n[Leiden Effectiveness: Fraud Concentration]")
-    print("-" * 60)
-    
-    # Communities with fraud vs without fraud
-    communities_with_fraud = (community_stats["fraud_count"] > 0).sum()
-    fraud_only_communities = (community_stats["fraud_rate"] == 1.0).sum()
-    
-    print(f"Communities containing fraud: {communities_with_fraud:,} / {n_communities:,}")
-    print(f"Pure fraud communities (100% fraud): {fraud_only_communities:,}")
-    
-    # Average fraud rate in communities with fraud
-    communities_with_any_fraud = community_stats[community_stats["fraud_count"] > 0]
-    if not communities_with_any_fraud.empty:
-        avg_fraud_rate_with_fraud = communities_with_any_fraud["fraud_rate"].mean()
-        print(f"Avg fraud rate in communities with fraud: {avg_fraud_rate_with_fraud:.4%}")
-
-    # ============================================
-    # [Community Size Distribution & Fraud Rate]
-    # ============================================
-    print("\n[Community Size Distribution]")
-    print("-" * 60)
-    
-    # Manually categorize for better performance
-    size_categories = {
-        "1": (1, 2),
-        "2-4": (2, 5),
-        "5-9": (5, 10),
-        "10-49": (10, 50),
-        "50-99": (50, 100),
-        "100-499": (100, 500),
-        "500+": (500, float("inf"))
-    }
-    
-    print(f"{'Size':<10} {'# Comm':<8} {'# Nodes':<10} {'# Fraud':<8} {'Rate':<10} {'Lift':<8}")
-    print("-" * 60)
-    for label, (min_size, max_size) in size_categories.items():
-        mask = (community_stats["size"] >= min_size) & (community_stats["size"] < max_size)
-        if mask.any():
-            filtered = community_stats[mask]
-            n_comms = len(filtered)
-            n_nodes = filtered["size"].sum()
-            n_fraud = filtered["fraud_count"].sum()
-            fraud_rate = n_fraud / n_nodes if n_nodes > 0 else 0
-            lift = fraud_rate / overall_fraud_rate if overall_fraud_rate > 0 else 0
-            print(
-                f"{label:<10} {int(n_comms):<8} "
-                f"{int(n_nodes):<10} {int(n_fraud):<8} "
-                f"{fraud_rate:.4%}   {lift:.2f}x"
-            )
-
-    # ============================================
-    # [Top 10 High-Risk Communities]
-    # ============================================
-    print("\n[Top 10 Communities by Fraud Risk (min 3 members)]")
-    print("-" * 70)
-
-    significant_communities = community_stats[community_stats["size"] >= 3].copy()
-    if not significant_communities.empty:
-        top_fraud_communities = significant_communities.nlargest(10, "fraud_rate")
-        print(f"{'Comm ID':<10} {'Size':<8} {'Fraud':<8} {'Rate':<12} {'Lift':<8}")
-        print("-" * 50)
-        for _, row in top_fraud_communities.iterrows():
-            lift = row["fraud_rate"] / overall_fraud_rate if overall_fraud_rate > 0 else 0
-            print(
-                f"{int(row['leiden_id']):<10} {int(row['size']):<8} "
-                f"{int(row['fraud_count']):<8} {row['fraud_rate']:.4%}      {lift:.2f}x"
-            )
-
-    # ============================================
-    # [Pure Fraud Rings - Highest Confidence]
-    # ============================================
-    pure_fraud_communities = community_stats[
-        (community_stats["fraud_rate"] == 1.0) & (community_stats["size"] >= 2)
-    ]
-
-    if not pure_fraud_communities.empty:
-        print("\n[Potential Fraud Rings: 100% Fraudulent Communities (size >= 2)]")
+        # ============================================
+        # [Effectiveness Metric 1: Fraud Concentration]
+        # ============================================
+        print("\n[Leiden Effectiveness: Fraud Concentration]")
         print("-" * 60)
-        print(
-            f"Found {len(pure_fraud_communities)} suspicious communities that are 100% fraudulent"
+
+        # Communities with fraud vs without fraud
+        communities_with_fraud = (community_stats["fraud_count"] > 0).sum()
+        fraud_only_communities = (community_stats["fraud_rate"] == 1.0).sum()
+
+        print(f"Communities containing fraud: {communities_with_fraud:,} / {n_communities:,}")
+        print(f"Pure fraud communities (100% fraud): {fraud_only_communities:,}")
+
+        # Average fraud rate in communities with fraud
+        communities_with_any_fraud = community_stats[community_stats["fraud_count"] > 0]
+        if not communities_with_any_fraud.empty:
+            avg_fraud_rate_with_fraud = communities_with_any_fraud["fraud_rate"].mean()
+            print(f"Avg fraud rate in communities with fraud: {avg_fraud_rate_with_fraud:.4%}")
+
+        # ============================================
+        # [Community Size Distribution & Fraud Rate]
+        # ============================================
+        print("\n[Community Size Distribution]")
+        print("-" * 60)
+
+        # Manually categorize for better performance
+        size_categories = {
+            "1": (1, 2),
+            "2-4": (2, 5),
+            "5-9": (5, 10),
+            "10-49": (10, 50),
+            "50-99": (50, 100),
+            "100-499": (100, 500),
+            "500+": (500, float("inf"))
+        }
+
+        print(f"{'Size':<10} {'# Comm':<8} {'# Nodes':<10} {'# Fraud':<8} {'Rate':<10} {'Lift':<8}")
+        print("-" * 60)
+        for label, (min_size, max_size) in size_categories.items():
+            mask = (community_stats["size"] >= min_size) & (community_stats["size"] < max_size)
+            if mask.any():
+                filtered = community_stats[mask]
+                n_comms = len(filtered)
+                n_nodes = filtered["size"].sum()
+                n_fraud = filtered["fraud_count"].sum()
+                fraud_rate = n_fraud / n_nodes if n_nodes > 0 else 0
+                lift = fraud_rate / overall_fraud_rate if overall_fraud_rate > 0 else 0
+                print(
+                    f"{label:<10} {int(n_comms):<8} "
+                    f"{int(n_nodes):<10} {int(n_fraud):<8} "
+                    f"{fraud_rate:.4%}   {lift:.2f}x"
+                )
+
+        # ============================================
+        # [Top 10 High-Risk Communities]
+        # ============================================
+        print("\n[Top 10 Communities by Fraud Risk (min 3 members)]")
+        print("-" * 70)
+
+        significant_communities = community_stats[community_stats["size"] >= 3].copy()
+        if not significant_communities.empty:
+            top_fraud_communities = significant_communities.nlargest(10, "fraud_rate")
+            print(f"{'Comm ID':<10} {'Size':<8} {'Fraud':<8} {'Rate':<12} {'Lift':<8}")
+            print("-" * 50)
+            for _, row in top_fraud_communities.iterrows():
+                lift = row["fraud_rate"] / overall_fraud_rate if overall_fraud_rate > 0 else 0
+                print(
+                    f"{int(row['leiden_id']):<10} {int(row['size']):<8} "
+                    f"{int(row['fraud_count']):<8} {row['fraud_rate']:.4%}      {lift:.2f}x"
+                )
+
+        # ============================================
+        # [Pure Fraud Rings - Highest Confidence]
+        # ============================================
+        pure_fraud_communities = community_stats[
+            (community_stats["fraud_rate"] == 1.0) & (community_stats["size"] >= 2)
+        ]
+
+        if not pure_fraud_communities.empty:
+            print("\n[Potential Fraud Rings: 100% Fraudulent Communities (size >= 2)]")
+            print("-" * 60)
+            print(
+                f"Found {len(pure_fraud_communities)} suspicious communities that are 100% fraudulent"
+            )
+            print(
+                f"Total fraudulent nodes in these rings: {pure_fraud_communities['size'].sum():,}"
+            )
+            size_stats = pure_fraud_communities['size'].describe()
+            print(
+                f"Community sizes (min/mean/max): "
+                f"{int(size_stats['min'])}/{int(size_stats['mean'])}/{int(size_stats['max'])}"
+            )
+
+        # ============================================
+        # [High-Risk Community Detection]
+        # ============================================
+        print("\n[High-Risk Communities (>2x baseline fraud rate)]")
+        print("-" * 60)
+
+        high_fraud_communities = community_stats[
+            community_stats["fraud_rate"] > overall_fraud_rate * 2
+        ]
+        if not high_fraud_communities.empty:
+            fraud_in_high = int(high_fraud_communities["fraud_count"].sum())
+            pct_fraud_captured = fraud_in_high / total_fraud if total_fraud > 0 else 0
+            print(
+                f"Communities capturing {pct_fraud_captured:.2%} of fraud: {len(high_fraud_communities):,} communities"
+            )
+            print(
+                f"Fraudulent nodes in high-risk communities: {fraud_in_high:,} / {int(total_fraud):,}"
+            )
+        else:
+            print("No communities with >2x baseline fraud rate detected.")
+
+        # ============================================
+        # [Leiden Algorithm Quality]
+        # ============================================
+        print("\n[Leiden Algorithm Quality Metrics]")
+        print("-" * 60)
+
+        # Modularity score (higher is better - indicates strong community structure)
+        mean_modularity = final_df["leiden_modularity"].mean()
+        print(f"Mean Modularity Score (Q): {mean_modularity:.4f}")
+        print("  (Range: 0-1, higher indicates stronger community structure)")
+
+        # Community density analysis
+        community_density = (n_communities / len(final_df)) * 100 if len(final_df) > 0 else 0
+        print(f"Community Density: {community_density:.2f}% (communities per node)")
+
+        # Entropy / balance of community sizes
+        size_std = community_stats["size"].std()
+        size_mean = community_stats["size"].mean()
+        print(f"Community size distribution (mean/std): {size_mean:.1f} / {size_std:.1f}")
+
+        # ============================================
+        # [Overall Effectiveness Summary]
+        # ============================================
+        print("\n[Leiden Effectiveness for Money Laundering Detection]")
+        print("-" * 60)
+
+        # Key effectiveness metrics
+        recall_threshold_10_pct = (
+            (high_fraud_communities["fraud_count"].sum() / total_fraud) if total_fraud > 0 else 0
         )
-        print(
-            f"Total fraudulent nodes in these rings: {pure_fraud_communities['size'].sum():,}"
-        )
-        size_stats = pure_fraud_communities['size'].describe()
-        print(
-            f"Community sizes (min/mean/max): "
-            f"{int(size_stats['min'])}/{int(size_stats['mean'])}/{int(size_stats['max'])}"
-        )
+        print(f"Fraud detected in 2x-risk communities: {recall_threshold_10_pct:.1%}")
 
-    # ============================================
-    # [High-Risk Community Detection]
-    # ============================================
-    print("\n[High-Risk Communities (>2x baseline fraud rate)]")
-    print("-" * 60)
+        # Best case: pure fraud communities
+        if not pure_fraud_communities.empty:
+            pure_fraud_recall = pure_fraud_communities["size"].sum() / total_fraud if total_fraud > 0 else 0
+            print(f"Fraud in 100% fraud communities (highest confidence): {pure_fraud_recall:.1%}")
 
-    high_fraud_communities = community_stats[
-        community_stats["fraud_rate"] > overall_fraud_rate * 2
-    ]
-    if not high_fraud_communities.empty:
-        fraud_in_high = int(high_fraud_communities["fraud_count"].sum())
-        pct_fraud_captured = fraud_in_high / total_fraud if total_fraud > 0 else 0
-        print(
-            f"Communities capturing {pct_fraud_captured:.2%} of fraud: {len(high_fraud_communities):,} communities"
-        )
-        print(
-            f"Fraudulent nodes in high-risk communities: {fraud_in_high:,} / {int(total_fraud):,}"
-        )
-    else:
-        print("No communities with >2x baseline fraud rate detected.")
+        # Average precision: what % of detected fraud is actually fraud
+        if not high_fraud_communities.empty:
+            avg_precision_high = high_fraud_communities["fraud_rate"].mean()
+            print(f"Precision in 2x-risk communities: {avg_precision_high:.2%} fraud rate")
 
-    # ============================================
-    # [Leiden Algorithm Quality]
-    # ============================================
-    print("\n[Leiden Algorithm Quality Metrics]")
-    print("-" * 60)
+        # Final verdict
+        print("\n[Verdict]")
+        print("-" * 60)
+        if communities_with_fraud / n_communities > 0.3:
+            print("✓ Leiden effectively separates fraud into distinct communities")
+            print("  Many communities contain fraudulent entities as distinct groups")
+        else:
+            print("⚠ Leiden shows mixed results")
+            print("  Fraud is spread across many communities")
 
-    # Modularity score (higher is better - indicates strong community structure)
-    mean_modularity = leiden_df["leiden_modularity"].mean()
-    print(f"Mean Modularity Score (Q): {mean_modularity:.4f}")
-    print("  (Range: 0-1, higher indicates stronger community structure)")
-
-    # Community density analysis
-    community_density = (n_communities / len(final_df)) * 100
-    print(f"Community Density: {community_density:.2f}% (communities per node)")
-
-    # Entropy / balance of community sizes
-    size_std = community_stats["size"].std()
-    size_mean = community_stats["size"].mean()
-    print(f"Community size distribution (mean/std): {size_mean:.1f} / {size_std:.1f}")
-
-    # ============================================
-    # [Overall Effectiveness Summary]
-    # ============================================
-    print("\n[Leiden Effectiveness for Money Laundering Detection]")
-    print("-" * 60)
-
-    # Key effectiveness metrics
-    recall_threshold_10_pct = (high_fraud_communities["fraud_count"].sum() / total_fraud) if total_fraud > 0 else 0
-    print(f"Fraud detected in 2x-risk communities: {recall_threshold_10_pct:.1%}")
-
-    # Best case: pure fraud communities
-    if not pure_fraud_communities.empty:
-        pure_fraud_recall = pure_fraud_communities["size"].sum() / total_fraud if total_fraud > 0 else 0
-        print(f"Fraud in 100% fraud communities (highest confidence): {pure_fraud_recall:.1%}")
-
-    # Average precision: what % of detected fraud is actually fraud
-    if not high_fraud_communities.empty:
-        avg_precision_high = high_fraud_communities["fraud_rate"].mean()
-        print(f"Precision in 2x-risk communities: {avg_precision_high:.2%} fraud rate")
-
-    # Final verdict
-    print("\n[Verdict]")
-    print("-" * 60)
-    if communities_with_fraud / n_communities > 0.3:
-        print("✓ Leiden effectively separates fraud into distinct communities")
-        print("  Many communities contain fraudulent entities as distinct groups")
-    else:
-        print("⚠ Leiden shows mixed results")
-        print("  Fraud is spread across many communities")
-
-    if overall_fraud_rate < 0.5 and recall_threshold_10_pct > 0.1:
-        print("✓ Strong signal: High-risk communities concentrate fraud")
-        print("  Using Leiden for anomaly detection is promising")
-    else:
-        print("⚠ Leiden alone may not be sufficient for filtering")
-        print("  Consider combining with other detection methods")
+        if overall_fraud_rate < 0.5 and recall_threshold_10_pct > 0.1:
+            print("✓ Strong signal: High-risk communities concentrate fraud")
+            print("  Using Leiden for anomaly detection is promising")
+        else:
+            print("⚠ Leiden alone may not be sufficient for filtering")
+            print("  Consider combining with other detection methods")
 
 def main() -> None:
     """Main entry point for summary reporting."""

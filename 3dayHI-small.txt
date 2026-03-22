@@ -1,4 +1,4 @@
-==========================================================================================
+============================================================
 PixFraudDetection Pipeline Summary
 Dataset: SMALL
 ============================================================
@@ -9,730 +9,741 @@ Aggregate Evaluation Summary (Mean & Median Across All Days)
 
 [PR_VOL_DEEP]
 ----------------------------------------
-  Mean ROC-AUC:            0.6269
-  Median ROC-AUC:          0.6342
-  Mean Average Precision:  0.0735
-  Median Average Precision:0.0722
+  Mean ROC-AUC:            0.5318
+  Median ROC-AUC:          0.5316
+  Mean Average Precision:  0.0411
+  Median Average Precision:0.0410
 
   Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 60.5000% (lift: 55.92x)
-    @  100: 44.2500% (lift: 40.84x)
-    @  500: 24.4000% (lift: 22.38x)
+    @    1: 100.0000% (lift: 103.23x)
+    @    2: 100.0000% (lift: 103.23x)
+    @   10: 90.0000% (lift: 88.72x)
+    @   50: 50.6667% (lift: 46.02x)
+    @  100: 38.8889% (lift: 33.76x)
+    @  500: 18.1111% (lift: 14.33x)
 
   Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 58.0000% (lift: 55.21x)
-    @  100: 43.0000% (lift: 38.29x)
-    @  500: 23.7000% (lift: 22.00x)
+    @    1: 100.0000% (lift: 66.20x)
+    @    2: 100.0000% (lift: 66.20x)
+    @   10: 90.0000% (lift: 66.20x)
+    @   50: 54.0000% (lift: 37.07x)
+    @  100: 42.0000% (lift: 27.80x)
+    @  500: 20.0000% (lift: 13.24x)
 
 [PR_VOL_SHALLOW]
 ----------------------------------------
-  Mean ROC-AUC:            0.6262
-  Median ROC-AUC:          0.6308
-  Mean Average Precision:  0.0766
-  Median Average Precision:0.0742
+  Mean ROC-AUC:            0.5387
+  Median ROC-AUC:          0.5387
+  Mean Average Precision:  0.0521
+  Median Average Precision:0.0535
 
   Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 63.0000% (lift: 58.44x)
-    @  100: 46.3750% (lift: 42.81x)
-    @  500: 25.0250% (lift: 22.93x)
+    @    1: 100.0000% (lift: 103.23x)
+    @    2: 100.0000% (lift: 103.23x)
+    @   10: 96.6667% (lift: 93.96x)
+    @   50: 61.7778% (lift: 53.74x)
+    @  100: 49.6667% (lift: 40.85x)
+    @  500: 23.2889% (lift: 17.52x)
 
   Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 62.0000% (lift: 55.21x)
-    @  100: 46.0000% (lift: 43.17x)
-    @  500: 24.4000% (lift: 22.57x)
+    @    1: 100.0000% (lift: 66.20x)
+    @    2: 100.0000% (lift: 66.20x)
+    @   10: 100.0000% (lift: 66.20x)
+    @   50: 66.0000% (lift: 46.34x)
+    @  100: 53.0000% (lift: 35.09x)
+    @  500: 24.8000% (lift: 16.42x)
 
 [PR_COUNT]
 ----------------------------------------
-  Mean ROC-AUC:            0.6014
-  Median ROC-AUC:          0.6031
-  Mean Average Precision:  0.0748
-  Median Average Precision:0.0712
+  Mean ROC-AUC:            0.5443
+  Median ROC-AUC:          0.5475
+  Mean Average Precision:  0.0648
+  Median Average Precision:0.0670
 
   Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 76.0000% (lift: 70.02x)
-    @  100: 53.3750% (lift: 49.39x)
-    @  500: 25.1750% (lift: 23.12x)
+    @    1: 100.0000% (lift: 103.23x)
+    @    2: 100.0000% (lift: 103.23x)
+    @   10: 96.6667% (lift: 93.96x)
+    @   50: 84.8889% (lift: 71.17x)
+    @  100: 67.1111% (lift: 53.31x)
+    @  500: 29.5111% (lift: 22.60x)
 
   Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 76.0000% (lift: 66.45x)
-    @  100: 54.5000% (lift: 45.28x)
-    @  500: 24.3000% (lift: 22.88x)
+    @    1: 100.0000% (lift: 66.20x)
+    @    2: 100.0000% (lift: 66.20x)
+    @   10: 100.0000% (lift: 66.20x)
+    @   50: 94.0000% (lift: 62.23x)
+    @  100: 75.0000% (lift: 49.65x)
+    @  500: 32.2000% (lift: 21.32x)
 
 [HITS_HUB]
 ----------------------------------------
-  Mean ROC-AUC:            0.7313
-  Median ROC-AUC:          0.7354
-  Mean Average Precision:  0.0534
-  Median Average Precision:0.0550
+  Mean ROC-AUC:            0.6717
+  Median ROC-AUC:          0.6705
+  Mean Average Precision:  0.0340
+  Median Average Precision:0.0324
 
   Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 73.7500% (lift: 67.66x)
-    @  100: 43.0000% (lift: 39.61x)
-    @  500: 12.3250% (lift: 11.22x)
+    @    1: 100.0000% (lift: 103.23x)
+    @    2: 94.4444% (lift: 84.47x)
+    @   10: 70.0000% (lift: 54.54x)
+    @   50: 33.3333% (lift: 26.82x)
+    @  100: 25.8889% (lift: 20.62x)
+    @  500: 10.6444% (lift: 8.14x)
 
   Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 73.0000% (lift: 65.05x)
-    @  100: 42.5000% (lift: 37.89x)
-    @  500: 12.3000% (lift: 10.59x)
+    @    1: 100.0000% (lift: 66.20x)
+    @    2: 100.0000% (lift: 66.20x)
+    @   10: 70.0000% (lift: 46.34x)
+    @   50: 36.0000% (lift: 25.16x)
+    @  100: 26.0000% (lift: 17.21x)
+    @  500: 10.0000% (lift: 6.62x)
 
 [HITS_AUTH]
 ----------------------------------------
-  Mean ROC-AUC:            0.6208
-  Median ROC-AUC:          0.6213
-  Mean Average Precision:  0.0174
-  Median Average Precision:0.0170
+  Mean ROC-AUC:            0.5992
+  Median ROC-AUC:          0.5922
+  Mean Average Precision:  0.0240
+  Median Average Precision:0.0228
 
   Mean Precision@K:
-    @    1: 12.5000% (lift: 13.42x)
-    @    2: 6.2500% (lift: 6.71x)
-    @   10: 5.0000% (lift: 4.93x)
-    @   50: 5.0000% (lift: 4.63x)
-    @  100: 4.1250% (lift: 3.77x)
-    @  500: 3.6500% (lift: 3.32x)
+    @    1: 100.0000% (lift: 103.23x)
+    @    2: 94.4444% (lift: 84.47x)
+    @   10: 61.1111% (lift: 47.96x)
+    @   50: 14.4444% (lift: 11.18x)
+    @  100: 8.1111% (lift: 6.57x)
+    @  500: 4.3111% (lift: 3.36x)
 
   Median Precision@K:
-    @    1: 0.0000% (lift: 0.00x)
-    @    2: 0.0000% (lift: 0.00x)
-    @   10: 0.0000% (lift: 0.00x)
-    @   50: 5.0000% (lift: 4.42x)
-    @  100: 4.0000% (lift: 3.90x)
-    @  500: 3.7000% (lift: 3.15x)
+    @    1: 100.0000% (lift: 66.20x)
+    @    2: 100.0000% (lift: 66.20x)
+    @   10: 60.0000% (lift: 39.72x)
+    @   50: 12.0000% (lift: 8.85x)
+    @  100: 7.0000% (lift: 4.84x)
+    @  500: 4.0000% (lift: 2.80x)
 
 [BETWEENNESS]
 ----------------------------------------
-  Mean ROC-AUC:            0.6681
-  Median ROC-AUC:          0.6650
-  Mean Average Precision:  0.0669
-  Median Average Precision:0.0660
+  Mean ROC-AUC:            0.6630
+  Median ROC-AUC:          0.6653
+  Mean Average Precision:  0.0686
+  Median Average Precision:0.0659
 
   Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 93.7500% (lift: 85.93x)
-    @   10: 93.7500% (lift: 86.13x)
-    @   50: 40.2500% (lift: 36.66x)
-    @  100: 32.2500% (lift: 29.42x)
-    @  500: 25.4500% (lift: 22.92x)
+    @    1: 100.0000% (lift: 103.23x)
+    @    2: 100.0000% (lift: 103.23x)
+    @   10: 90.0000% (lift: 82.16x)
+    @   50: 41.1111% (lift: 38.25x)
+    @  100: 32.7778% (lift: 28.56x)
+    @  500: 24.3778% (lift: 18.33x)
 
   Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 83.30x)
-    @   10: 90.0000% (lift: 82.47x)
-    @   50: 42.0000% (lift: 35.60x)
-    @  100: 32.0000% (lift: 28.03x)
-    @  500: 25.9000% (lift: 22.97x)
+    @    1: 100.0000% (lift: 66.20x)
+    @    2: 100.0000% (lift: 66.20x)
+    @   10: 90.0000% (lift: 59.58x)
+    @   50: 42.0000% (lift: 24.76x)
+    @  100: 35.0000% (lift: 23.17x)
+    @  500: 25.2000% (lift: 16.68x)
 
 [K_CORE]
 ----------------------------------------
-  Mean ROC-AUC:            0.7126
-  Median ROC-AUC:          0.7182
-  Mean Average Precision:  0.0532
-  Median Average Precision:0.0549
+  Mean ROC-AUC:            0.6935
+  Median ROC-AUC:          0.6971
+  Mean Average Precision:  0.0582
+  Median Average Precision:0.0575
 
   Mean Precision@K:
-    @    1: 87.5000% (lift: 81.10x)
-    @    2: 75.0000% (lift: 68.22x)
-    @   10: 62.5000% (lift: 56.21x)
-    @   50: 41.0000% (lift: 36.52x)
-    @  100: 35.5000% (lift: 31.84x)
-    @  500: 24.3250% (lift: 21.86x)
+    @    1: 77.7778% (lift: 56.52x)
+    @    2: 72.2222% (lift: 50.29x)
+    @   10: 62.2222% (lift: 43.64x)
+    @   50: 35.5556% (lift: 26.70x)
+    @  100: 34.1111% (lift: 25.83x)
+    @  500: 25.4000% (lift: 19.12x)
 
   Median Precision@K:
-    @    1: 100.0000% (lift: 87.10x)
-    @    2: 75.0000% (lift: 66.24x)
-    @   10: 55.0000% (lift: 54.65x)
-    @   50: 43.0000% (lift: 36.96x)
-    @  100: 38.0000% (lift: 31.31x)
-    @  500: 22.9000% (lift: 21.83x)
-
-[VOL_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.6825
-  Median ROC-AUC:          0.6950
-  Mean Average Precision:  0.0304
-  Median Average Precision:0.0319
-
-  Mean Precision@K:
-    @    1: 25.0000% (lift: 24.97x)
-    @    2: 50.0000% (lift: 45.47x)
-    @   10: 38.7500% (lift: 35.47x)
-    @   50: 29.0000% (lift: 26.78x)
-    @  100: 23.6250% (lift: 21.63x)
-    @  500: 10.6250% (lift: 9.67x)
-
-  Median Precision@K:
-    @    1: 0.0000% (lift: 0.00x)
-    @    2: 50.0000% (lift: 41.65x)
-    @   10: 40.0000% (lift: 33.15x)
-    @   50: 29.0000% (lift: 25.67x)
-    @  100: 23.5000% (lift: 22.21x)
-    @  500: 10.7000% (lift: 9.70x)
-
-[VOL_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.6097
-  Median ROC-AUC:          0.6136
-  Mean Average Precision:  0.0253
-  Median Average Precision:0.0259
-
-  Mean Precision@K:
-    @    1: 50.0000% (lift: 43.79x)
-    @    2: 50.0000% (lift: 42.86x)
-    @   10: 43.7500% (lift: 39.16x)
-    @   50: 27.7500% (lift: 25.24x)
-    @  100: 20.6250% (lift: 18.66x)
-    @  500: 9.1000% (lift: 8.25x)
-
-  Median Precision@K:
-    @    1: 50.0000% (lift: 38.63x)
-    @    2: 50.0000% (lift: 49.95x)
-    @   10: 45.0000% (lift: 41.44x)
-    @   50: 29.0000% (lift: 24.20x)
-    @  100: 21.5000% (lift: 18.19x)
-    @  500: 8.8000% (lift: 8.37x)
-
-[IN_DEGREE]
-----------------------------------------
-  Mean ROC-AUC:            0.6933
-  Median ROC-AUC:          0.6939
-  Mean Average Precision:  0.0942
-  Median Average Precision:0.0921
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 75.2500% (lift: 69.46x)
-    @  100: 56.7500% (lift: 52.37x)
-    @  500: 28.3750% (lift: 25.88x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 75.0000% (lift: 68.22x)
-    @  100: 56.0000% (lift: 51.47x)
-    @  500: 28.0000% (lift: 25.53x)
-
-[OUT_DEGREE]
-----------------------------------------
-  Mean ROC-AUC:            0.7225
-  Median ROC-AUC:          0.7269
-  Mean Average Precision:  0.0888
-  Median Average Precision:0.0887
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 86.2500% (lift: 78.82x)
-    @  100: 69.3750% (lift: 63.27x)
-    @  500: 27.9500% (lift: 25.41x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 86.0000% (lift: 77.10x)
-    @  100: 69.5000% (lift: 61.52x)
-    @  500: 27.2000% (lift: 24.75x)
-
-[TX_COUNT]
-----------------------------------------
-  Mean ROC-AUC:            0.6412
-  Median ROC-AUC:          0.6379
-  Mean Average Precision:  0.0938
-  Median Average Precision:0.0912
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 91.0000% (lift: 83.30x)
-    @  100: 74.7500% (lift: 68.29x)
-    @  500: 29.4500% (lift: 26.79x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 91.0000% (lift: 80.02x)
-    @  100: 73.5000% (lift: 65.11x)
-    @  500: 28.7000% (lift: 26.04x)
-
-[TIME_VARIANCE]
-----------------------------------------
-  Mean ROC-AUC:            0.5883
-  Median ROC-AUC:          0.5856
-  Mean Average Precision:  0.0140
-  Median Average Precision:0.0143
-
-  Mean Precision@K:
-    @    1: 0.0000% (lift: 0.00x)
-    @    2: 6.2500% (lift: 6.71x)
-    @   10: 2.5000% (lift: 2.68x)
-    @   50: 4.0000% (lift: 3.80x)
-    @  100: 4.3750% (lift: 4.01x)
-    @  500: 2.8750% (lift: 2.73x)
-
-  Median Precision@K:
-    @    1: 0.0000% (lift: 0.00x)
-    @    2: 0.0000% (lift: 0.00x)
-    @   10: 0.0000% (lift: 0.00x)
-    @   50: 4.0000% (lift: 3.55x)
-    @  100: 4.5000% (lift: 4.28x)
-    @  500: 2.3000% (lift: 1.89x)
-
-[WIRE_COUNT_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.5480
-  Median ROC-AUC:          0.5477
-  Mean Average Precision:  0.0416
-  Median Average Precision:0.0413
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 70.5000% (lift: 64.33x)
-    @  100: 50.3750% (lift: 45.95x)
-    @  500: 16.5250% (lift: 15.04x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 69.0000% (lift: 62.49x)
-    @  100: 52.0000% (lift: 44.04x)
-    @  500: 16.6000% (lift: 15.13x)
-
-[WIRE_COUNT_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.5347
-  Median ROC-AUC:          0.5323
-  Mean Average Precision:  0.0429
-  Median Average Precision:0.0423
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 82.2500% (lift: 75.15x)
-    @  100: 53.6250% (lift: 49.10x)
-    @  500: 17.4250% (lift: 15.79x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 83.0000% (lift: 71.10x)
-    @  100: 54.5000% (lift: 47.18x)
-    @  500: 16.7000% (lift: 15.98x)
-
-[CASH_COUNT_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.5608
-  Median ROC-AUC:          0.5607
-  Mean Average Precision:  0.0563
-  Median Average Precision:0.0550
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 89.0000% (lift: 81.31x)
-    @  100: 62.8750% (lift: 57.16x)
-    @  500: 19.9500% (lift: 18.20x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 90.0000% (lift: 77.95x)
-    @  100: 61.5000% (lift: 57.19x)
-    @  500: 19.5000% (lift: 17.66x)
-
-[CASH_COUNT_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.5537
-  Median ROC-AUC:          0.5481
-  Mean Average Precision:  0.0617
-  Median Average Precision:0.0602
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 85.5000% (lift: 78.65x)
-    @  100: 65.7500% (lift: 60.17x)
-    @  500: 23.7750% (lift: 21.66x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 86.0000% (lift: 74.47x)
-    @  100: 65.5000% (lift: 56.75x)
-    @  500: 23.4000% (lift: 21.14x)
-
-[BITCOIN_COUNT_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.5054
-  Median ROC-AUC:          0.5050
-  Mean Average Precision:  0.0157
-  Median Average Precision:0.0153
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 63.7500% (lift: 58.39x)
-    @   50: 20.7500% (lift: 18.70x)
-    @  100: 13.2500% (lift: 12.04x)
-    @  500: 8.7250% (lift: 7.92x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 60.0000% (lift: 56.34x)
-    @   50: 20.0000% (lift: 19.37x)
-    @  100: 13.5000% (lift: 11.79x)
-    @  500: 8.8000% (lift: 8.10x)
-
-[BITCOIN_COUNT_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.5018
-  Median ROC-AUC:          0.5018
-  Mean Average Precision:  0.0146
-  Median Average Precision:0.0147
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 63.7500% (lift: 58.39x)
-    @   50: 23.0000% (lift: 20.66x)
-    @  100: 14.8750% (lift: 13.48x)
-    @  500: 8.1250% (lift: 7.32x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 60.0000% (lift: 56.34x)
-    @   50: 24.0000% (lift: 20.69x)
-    @  100: 14.5000% (lift: 12.95x)
-    @  500: 7.3000% (lift: 7.67x)
-
-[CHEQUE_COUNT_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.5862
-  Median ROC-AUC:          0.5851
-  Mean Average Precision:  0.0720
-  Median Average Precision:0.0698
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 86.2500% (lift: 78.87x)
-    @  100: 67.7500% (lift: 61.68x)
-    @  500: 25.6250% (lift: 23.26x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 86.0000% (lift: 77.10x)
-    @  100: 68.0000% (lift: 60.34x)
-    @  500: 24.5000% (lift: 23.37x)
-
-[CHEQUE_COUNT_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.5582
-  Median ROC-AUC:          0.5532
-  Mean Average Precision:  0.0735
-  Median Average Precision:0.0728
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 86.2500% (lift: 78.92x)
-    @  100: 64.8750% (lift: 59.01x)
-    @  500: 27.0500% (lift: 24.59x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 86.0000% (lift: 77.35x)
-    @  100: 65.5000% (lift: 58.31x)
-    @  500: 26.0000% (lift: 24.65x)
-
-[CREDIT_CARD_COUNT_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.5897
-  Median ROC-AUC:          0.5880
-  Mean Average Precision:  0.0729
-  Median Average Precision:0.0711
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 84.2500% (lift: 77.11x)
-    @  100: 68.6250% (lift: 62.48x)
-    @  500: 26.1750% (lift: 23.76x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 84.0000% (lift: 75.32x)
-    @  100: 68.0000% (lift: 60.35x)
-    @  500: 25.4000% (lift: 23.87x)
-
-[CREDIT_CARD_COUNT_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.5619
-  Median ROC-AUC:          0.5604
-  Mean Average Precision:  0.0712
-  Median Average Precision:0.0703
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 86.0000% (lift: 78.78x)
-    @  100: 66.1250% (lift: 60.15x)
-    @  500: 26.3750% (lift: 23.95x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 86.0000% (lift: 77.46x)
-    @  100: 66.5000% (lift: 58.83x)
-    @  500: 25.4000% (lift: 23.72x)
-
-[ACH_COUNT_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.7422
-  Median ROC-AUC:          0.7424
-  Mean Average Precision:  0.0785
-  Median Average Precision:0.0764
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 83.0000% (lift: 75.80x)
-    @  100: 64.6250% (lift: 58.70x)
-    @  500: 24.7750% (lift: 22.60x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 83.0000% (lift: 76.54x)
-    @  100: 63.0000% (lift: 57.27x)
-    @  500: 24.5000% (lift: 21.49x)
-
-[ACH_COUNT_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.7127
-  Median ROC-AUC:          0.7139
-  Mean Average Precision:  0.0795
-  Median Average Precision:0.0775
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 100.0000% (lift: 91.70x)
-    @   50: 78.0000% (lift: 71.37x)
-    @  100: 51.6250% (lift: 47.63x)
-    @  500: 25.6000% (lift: 23.36x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 79.0000% (lift: 69.14x)
-    @  100: 51.5000% (lift: 44.51x)
-    @  500: 25.6000% (lift: 22.81x)
-
-[REINVESTMENT_COUNT_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.5192
-  Median ROC-AUC:          0.5000
-  Mean Average Precision:  0.0197
-  Median Average Precision:0.0120
-
-  Mean Precision@K:
-    @    1: 25.0000% (lift: 23.07x)
-    @    2: 31.2500% (lift: 29.98x)
-    @   10: 35.0000% (lift: 32.93x)
-    @   50: 23.0000% (lift: 22.17x)
-    @  100: 16.5000% (lift: 16.09x)
-    @  500: 9.4750% (lift: 8.93x)
-
-  Median Precision@K:
-    @    1: 0.0000% (lift: 0.00x)
-    @    2: 0.0000% (lift: 0.00x)
-    @   10: 20.0000% (lift: 16.26x)
-    @   50: 17.0000% (lift: 13.98x)
-    @  100: 10.5000% (lift: 8.34x)
-    @  500: 7.5000% (lift: 6.83x)
-
-[REINVESTMENT_COUNT_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.5192
-  Median ROC-AUC:          0.5000
-  Mean Average Precision:  0.0197
-  Median Average Precision:0.0120
-
-  Mean Precision@K:
-    @    1: 25.0000% (lift: 23.07x)
-    @    2: 31.2500% (lift: 29.98x)
-    @   10: 35.0000% (lift: 32.93x)
-    @   50: 23.0000% (lift: 22.17x)
-    @  100: 16.5000% (lift: 16.09x)
-    @  500: 9.4750% (lift: 8.93x)
-
-  Median Precision@K:
-    @    1: 0.0000% (lift: 0.00x)
-    @    2: 0.0000% (lift: 0.00x)
-    @   10: 20.0000% (lift: 16.26x)
-    @   50: 17.0000% (lift: 13.98x)
-    @  100: 10.5000% (lift: 8.34x)
-    @  500: 7.5000% (lift: 6.83x)
-
-[DISTINCT_CURRENCIES_SENT]
-----------------------------------------
-  Mean ROC-AUC:            0.7102
-  Median ROC-AUC:          0.7207
-  Mean Average Precision:  0.0577
-  Median Average Precision:0.0577
-
-  Mean Precision@K:
-    @    1: 100.0000% (lift: 91.70x)
-    @    2: 100.0000% (lift: 91.70x)
-    @   10: 98.7500% (lift: 90.32x)
-    @   50: 77.5000% (lift: 70.33x)
-    @  100: 59.3750% (lift: 53.89x)
-    @  500: 23.3500% (lift: 20.95x)
-
-  Median Precision@K:
-    @    1: 100.0000% (lift: 88.66x)
-    @    2: 100.0000% (lift: 88.66x)
-    @   10: 100.0000% (lift: 88.66x)
-    @   50: 75.0000% (lift: 70.21x)
-    @  100: 56.0000% (lift: 53.39x)
-    @  500: 23.8000% (lift: 21.41x)
-
-[DISTINCT_CURRENCIES_RECV]
-----------------------------------------
-  Mean ROC-AUC:            0.5355
-  Median ROC-AUC:          0.5357
-  Mean Average Precision:  0.0160
-  Median Average Precision:0.0160
-
-  Mean Precision@K:
-    @    1: 50.0000% (lift: 49.77x)
-    @    2: 50.0000% (lift: 49.77x)
-    @   10: 46.2500% (lift: 43.66x)
-    @   50: 19.0000% (lift: 17.91x)
-    @  100: 12.7500% (lift: 11.89x)
-    @  500: 5.9000% (lift: 5.42x)
-
-  Median Precision@K:
-    @    1: 50.0000% (lift: 40.87x)
-    @    2: 50.0000% (lift: 40.87x)
-    @   10: 50.0000% (lift: 46.15x)
-    @   50: 19.0000% (lift: 17.03x)
-    @  100: 13.5000% (lift: 11.93x)
-    @  500: 6.0000% (lift: 5.20x)
+    @    1: 100.0000% (lift: 46.28x)
+    @    2: 100.0000% (lift: 46.28x)
+    @   10: 80.0000% (lift: 37.02x)
+    @   50: 36.0000% (lift: 24.76x)
+    @  100: 30.0000% (lift: 21.53x)
+    @  500: 24.6000% (lift: 16.29x)
 
 ============================================================
 Leiden Community Detection Analysis (Money Laundering)
 ============================================================
 
-Analysis based on latest window: 2022-09-11
-Total nodes with community assignment: 157,067
-Total communities detected: 411
-Total fraudulent entities: 1,422
-Overall fraud rate: 0.9053%
+============================================================
+Leiden Analysis for date: 2022-09-02 00:00:00
+============================================================
+Total nodes with community assignment: 156,576
+Total communities detected: 9,925
+Total fraudulent entities: 604
+Overall fraud rate: 0.3858%
 
 [Leiden Effectiveness: Fraud Concentration]
 ------------------------------------------------------------
-Communities containing fraud: 40 / 411
-Pure fraud communities (100% fraud): 0
-Avg fraud rate in communities with fraud: 0.9778%
+Communities containing fraud: 305 / 9,925
+Pure fraud communities (100% fraud): 45
+Avg fraud rate in communities with fraud: 18.0947%
 
 [Community Size Distribution]
 ------------------------------------------------------------
-Size       # Comm   # Nodes    # Fraud  Rate       Lift    
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
 ------------------------------------------------------------
-1          1        1          0        0.0000%   0.00x
-2-4        335      739        0        0.0000%   0.00x
-5-9        8        55         0        0.0000%   0.00x
-10-49      28       515        2        0.3883%   0.43x
-50-99      2        120        2        1.6667%   1.84x
-100-499    2        912        9        0.9868%   1.09x
-500+       35       154725     1409     0.9106%   1.01x
+1          6127     6127       45       0.7345%   1.90x
+2-4        1797     4524       9        0.1989%   0.52x
+5-9        534      3482       13       0.3733%   0.97x
+10-49      870      20714      71       0.3428%   0.89x
+50-99      352      25272      70       0.2770%   0.72x
+100-499    219      34859      129      0.3701%   0.96x
+500+       26       61598      267      0.4335%   1.12x
 
 [Top 10 Communities by Fraud Risk (min 3 members)]
 ----------------------------------------------------------------------
-Comm ID    Size     Fraud    Rate         Lift    
+Comm ID    Size     Fraud    Rate         Lift
 --------------------------------------------------
-63         12       1        8.3333%      9.20x
-37         63       2        3.1746%      3.51x
-39         41       1        2.4390%      2.69x
-13         5140     77       1.4981%      1.65x
-8          6520     86       1.3190%      1.46x
-0          33569    436      1.2988%      1.43x
-7          6779     83       1.2244%      1.35x
-32         539      6        1.1132%      1.23x
-35         498      5        1.0040%      1.11x
-9          6517     65       0.9974%      1.10x
+2442       3        1        33.3333%      86.41x
+2125       4        1        25.0000%      64.81x
+2136       4        1        25.0000%      64.81x
+2189       4        1        25.0000%      64.81x
+1903       5        1        20.0000%      51.85x
+2010       5        1        20.0000%      51.85x
+1290       12       2        16.6667%      43.21x
+1629       7        1        14.2857%      37.03x
+1631       7        1        14.2857%      37.03x
+1687       7        1        14.2857%      37.03x
 
 [High-Risk Communities (>2x baseline fraud rate)]
 ------------------------------------------------------------
-Communities capturing 0.28% of fraud: 3 communities
-Fraudulent nodes in high-risk communities: 4 / 1,422
+Communities capturing 51.82% of fraud: 235 communities
+Fraudulent nodes in high-risk communities: 313 / 604
 
 [Leiden Algorithm Quality Metrics]
 ------------------------------------------------------------
-Mean Modularity Score (Q): 0.7168
+Mean Modularity Score (Q): 0.5747
   (Range: 0-1, higher indicates stronger community structure)
-Community Density: 0.26% (communities per node)
-Community size distribution (mean/std): 382.2 / 2239.9
+Community Density: 6.34% (communities per node)
+Community size distribution (mean/std): 15.8 / 160.9
 
 [Leiden Effectiveness for Money Laundering Detection]
 ------------------------------------------------------------
-Fraud detected in 2x-risk communities: 0.3%
-Precision in 2x-risk communities: 4.65% fraud rate
+Fraud detected in 2x-risk communities: 51.8%
+Precision in 2x-risk communities: 23.33% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+✓ Strong signal: High-risk communities concentrate fraud
+  Using Leiden for anomaly detection is promising
+
+============================================================
+Leiden Analysis for date: 2022-09-03 00:00:00
+============================================================
+Total nodes with community assignment: 103,773
+Total communities detected: 2,943
+Total fraudulent entities: 604
+Overall fraud rate: 0.5820%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 299 / 2,943
+Pure fraud communities (100% fraud): 18
+Avg fraud rate in communities with fraud: 9.5997%
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
+------------------------------------------------------------
+1          663      663        18       2.7149%   4.66x
+2-4        661      1804       6        0.3326%   0.57x
+5-9        396      2625       13       0.4952%   0.85x
+10-49      818      20479      103      0.5030%   0.86x
+50-99      276      19233      104      0.5407%   0.93x
+100-499    106      16314      96       0.5885%   1.01x
+500+       23       42655      264      0.6189%   1.06x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift
+--------------------------------------------------
+1594       3        1        33.3333%      57.27x
+1787       3        1        33.3333%      57.27x
+1563       7        2        28.5714%      49.09x
+1780       4        1        25.0000%      42.95x
+1881       4        1        25.0000%      42.95x
+1440       5        1        20.0000%      34.36x
+1678       5        1        20.0000%      34.36x
+860        27       5        18.5185%      31.82x
+1320       6        1        16.6667%      28.63x
+1171       7        1        14.2857%      24.54x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+Communities capturing 46.19% of fraud: 221 communities
+Fraudulent nodes in high-risk communities: 279 / 604
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.4315
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 2.84% (communities per node)
+Community size distribution (mean/std): 35.3 / 206.6
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 46.2%
+Precision in 2x-risk communities: 12.72% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+✓ Strong signal: High-risk communities concentrate fraud
+  Using Leiden for anomaly detection is promising
+
+============================================================
+Leiden Analysis for date: 2022-09-04 00:00:00
+============================================================
+Total nodes with community assignment: 103,683
+Total communities detected: 2,868
+Total fraudulent entities: 599
+Overall fraud rate: 0.5777%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 310 / 2,868
+Pure fraud communities (100% fraud): 25
+Avg fraud rate in communities with fraud: 12.3698%
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
+------------------------------------------------------------
+1          612      612        25       4.0850%   7.07x
+2-4        654      1788       15       0.8389%   1.45x
+5-9        357      2363       11       0.4655%   0.81x
+10-49      825      20116      99       0.4921%   0.85x
+50-99      283      19394      91       0.4692%   0.81x
+100-499    116      18184      99       0.5444%   0.94x
+500+       21       41226      259      0.6282%   1.09x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift
+--------------------------------------------------
+1498       3        1        33.3333%      57.70x
+1724       3        1        33.3333%      57.70x
+1847       3        1        33.3333%      57.70x
+1955       3        1        33.3333%      57.70x
+2208       3        1        33.3333%      57.70x
+1719       4        1        25.0000%      43.27x
+1733       4        1        25.0000%      43.27x
+1897       4        1        25.0000%      43.27x
+1978       4        1        25.0000%      43.27x
+1591       5        1        20.0000%      34.62x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+Communities capturing 45.08% of fraud: 218 communities
+Fraudulent nodes in high-risk communities: 270 / 599
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.4180
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 2.77% (communities per node)
+Community size distribution (mean/std): 36.2 / 208.9
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 45.1%
+Precision in 2x-risk communities: 17.26% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+✓ Strong signal: High-risk communities concentrate fraud
+  Using Leiden for anomaly detection is promising
+
+============================================================
+Leiden Analysis for date: 2022-09-05 00:00:00
+============================================================
+Total nodes with community assignment: 148,530
+Total communities detected: 2,923
+Total fraudulent entities: 661
+Overall fraud rate: 0.4450%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 302 / 2,923
+Pure fraud communities (100% fraud): 22
+Avg fraud rate in communities with fraud: 9.9786%
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
+------------------------------------------------------------
+1          406      406        22       5.4187%   12.18x
+2-4        721      1908       4        0.2096%   0.47x
+5-9        365      2427       11       0.4532%   1.02x
+10-49      818      19408      65       0.3349%   0.75x
+50-99      354      25110      82       0.3266%   0.73x
+100-499    235      37384      171      0.4574%   1.03x
+500+       24       61887      306      0.4944%   1.11x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift
+--------------------------------------------------
+2086       3        1        33.3333%      74.90x
+1499       8        2        25.0000%      56.18x
+1876       4        1        25.0000%      56.18x
+1931       4        1        25.0000%      56.18x
+1644       6        1        16.6667%      37.45x
+1680       6        1        16.6667%      37.45x
+1542       7        1        14.2857%      32.10x
+1574       7        1        14.2857%      32.10x
+1598       7        1        14.2857%      32.10x
+748        40       5        12.5000%      28.09x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+Communities capturing 44.48% of fraud: 218 communities
+Fraudulent nodes in high-risk communities: 294 / 661
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.4082
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 1.97% (communities per node)
+Community size distribution (mean/std): 50.8 / 307.5
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 44.5%
+Precision in 2x-risk communities: 13.59% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+✓ Strong signal: High-risk communities concentrate fraud
+  Using Leiden for anomaly detection is promising
+
+============================================================
+Leiden Analysis for date: 2022-09-06 00:00:00
+============================================================
+Total nodes with community assignment: 148,466
+Total communities detected: 2,832
+Total fraudulent entities: 771
+Overall fraud rate: 0.5193%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 350 / 2,832
+Pure fraud communities (100% fraud): 20
+Avg fraud rate in communities with fraud: 8.4707%
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
+------------------------------------------------------------
+1          360      360        20       5.5556%   10.70x
+2-4        692      1878       6        0.3195%   0.62x
+5-9        381      2488       9        0.3617%   0.70x
+10-49      799      19056      77       0.4041%   0.78x
+50-99      335      24298      117      0.4815%   0.93x
+100-499    239      37462      187      0.4992%   0.96x
+500+       26       62924      355      0.5642%   1.09x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift
+--------------------------------------------------
+2011       3        1        33.3333%      64.19x
+2174       3        1        33.3333%      64.19x
+1799       4        1        25.0000%      48.14x
+1870       4        1        25.0000%      48.14x
+1532       5        1        20.0000%      38.51x
+1661       5        1        20.0000%      38.51x
+1672       5        1        20.0000%      38.51x
+1739       5        1        20.0000%      38.51x
+900        27       4        14.8148%      28.53x
+1481       7        1        14.2857%      27.51x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+Communities capturing 43.32% of fraud: 241 communities
+Fraudulent nodes in high-risk communities: 334 / 771
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.3976
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 1.91% (communities per node)
+Community size distribution (mean/std): 52.4 / 310.7
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 43.3%
+Precision in 2x-risk communities: 11.99% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+✓ Strong signal: High-risk communities concentrate fraud
+  Using Leiden for anomaly detection is promising
+
+============================================================
+Leiden Analysis for date: 2022-09-07 00:00:00
+============================================================
+Total nodes with community assignment: 148,424
+Total communities detected: 2,842
+Total fraudulent entities: 721
+Overall fraud rate: 0.4858%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 333 / 2,842
+Pure fraud communities (100% fraud): 12
+Avg fraud rate in communities with fraud: 6.3138%
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
+------------------------------------------------------------
+1          342      342        12       3.5088%   7.22x
+2-4        719      1945       7        0.3599%   0.74x
+5-9        377      2496       9        0.3606%   0.74x
+10-49      784      18936      71       0.3749%   0.77x
+50-99      342      24548      104      0.4237%   0.87x
+100-499    256      40856      199      0.4871%   1.00x
+500+       22       59301      319      0.5379%   1.11x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift
+--------------------------------------------------
+2046       3        1        33.3333%      68.62x
+1690       4        1        25.0000%      51.46x
+1884       4        1        25.0000%      51.46x
+1933       4        1        25.0000%      51.46x
+1957       4        1        25.0000%      51.46x
+1642       5        1        20.0000%      41.17x
+1566       6        1        16.6667%      34.31x
+1419       8        1        12.5000%      25.73x
+1448       8        1        12.5000%      25.73x
+1491       8        1        12.5000%      25.73x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+Communities capturing 43.13% of fraud: 215 communities
+Fraudulent nodes in high-risk communities: 311 / 721
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.3879
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 1.91% (communities per node)
+Community size distribution (mean/std): 52.2 / 310.7
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 43.1%
+Precision in 2x-risk communities: 9.42% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+✓ Strong signal: High-risk communities concentrate fraud
+  Using Leiden for anomaly detection is promising
+
+============================================================
+Leiden Analysis for date: 2022-09-08 00:00:00
+============================================================
+Total nodes with community assignment: 148,530
+Total communities detected: 2,789
+Total fraudulent entities: 798
+Overall fraud rate: 0.5373%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 361 / 2,789
+Pure fraud communities (100% fraud): 16
+Avg fraud rate in communities with fraud: 7.2480%
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
+------------------------------------------------------------
+1          287      287        16       5.5749%   10.38x
+2-4        718      1923       6        0.3120%   0.58x
+5-9        358      2366       9        0.3804%   0.71x
+10-49      819      20286      94       0.4634%   0.86x
+50-99      348      24765      124      0.5007%   0.93x
+100-499    237      38696      199      0.5143%   0.96x
+500+       22       60207      350      0.5813%   1.08x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift
+--------------------------------------------------
+2112       3        1        33.3333%      62.04x
+2146       3        1        33.3333%      62.04x
+2154       3        1        33.3333%      62.04x
+1835       4        1        25.0000%      46.53x
+1931       4        1        25.0000%      46.53x
+1949       4        1        25.0000%      46.53x
+1433       10       2        20.0000%      37.23x
+1642       5        1        20.0000%      37.23x
+1654       5        1        20.0000%      37.23x
+1747       5        1        20.0000%      37.23x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+Communities capturing 40.35% of fraud: 232 communities
+Fraudulent nodes in high-risk communities: 322 / 798
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.3817
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 1.88% (communities per node)
+Community size distribution (mean/std): 53.3 / 318.8
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 40.4%
+Precision in 2x-risk communities: 10.88% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+✓ Strong signal: High-risk communities concentrate fraud
+  Using Leiden for anomaly detection is promising
+
+============================================================
+Leiden Analysis for date: 2022-09-09 00:00:00
+============================================================
+Total nodes with community assignment: 156,233
+Total communities detected: 2,824
+Total fraudulent entities: 727
+Overall fraud rate: 0.4653%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 330 / 2,824
+Pure fraud communities (100% fraud): 18
+Avg fraud rate in communities with fraud: 8.4453%
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
+------------------------------------------------------------
+1          273      273        18       6.5934%   14.17x
+2-4        751      2015       5        0.2481%   0.53x
+5-9        351      2354       9        0.3823%   0.82x
+10-49      816      20065      92       0.4585%   0.99x
+50-99      342      24811      80       0.3224%   0.69x
+100-499    268      43978      196      0.4457%   0.96x
+500+       23       62737      327      0.5212%   1.12x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift
+--------------------------------------------------
+2037       3        1        33.3333%      71.63x
+2143       3        1        33.3333%      71.63x
+1934       4        1        25.0000%      53.73x
+1699       5        1        20.0000%      42.98x
+1730       5        1        20.0000%      42.98x
+1777       5        1        20.0000%      42.98x
+1806       5        1        20.0000%      42.98x
+1331       12       2        16.6667%      35.82x
+1658       6        1        16.6667%      35.82x
+723        44       7        15.9091%      34.19x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+Communities capturing 46.08% of fraud: 220 communities
+Fraudulent nodes in high-risk communities: 335 / 727
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.3732
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 1.81% (communities per node)
+Community size distribution (mean/std): 55.3 / 329.9
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 46.1%
+Precision in 2x-risk communities: 12.34% fraud rate
+
+[Verdict]
+------------------------------------------------------------
+⚠ Leiden shows mixed results
+  Fraud is spread across many communities
+✓ Strong signal: High-risk communities concentrate fraud
+  Using Leiden for anomaly detection is promising
+
+============================================================
+Leiden Analysis for date: 2022-09-10 00:00:00
+============================================================
+Total nodes with community assignment: 1,132
+Total communities detected: 435
+Total fraudulent entities: 0
+Overall fraud rate: 0.0000%
+
+[Leiden Effectiveness: Fraud Concentration]
+------------------------------------------------------------
+Communities containing fraud: 0 / 435
+Pure fraud communities (100% fraud): 0
+
+[Community Size Distribution]
+------------------------------------------------------------
+Size       # Comm   # Nodes    # Fraud  Rate       Lift
+------------------------------------------------------------
+1          265      265        0        0.0000%   0.00x
+2-4        141      361        0        0.0000%   0.00x
+5-9        14       84         0        0.0000%   0.00x
+10-49      14       372        0        0.0000%   0.00x
+50-99      1        50         0        0.0000%   0.00x
+
+[Top 10 Communities by Fraud Risk (min 3 members)]
+----------------------------------------------------------------------
+Comm ID    Size     Fraud    Rate         Lift
+--------------------------------------------------
+0          38       0        0.0000%      0.00x
+1          48       0        0.0000%      0.00x
+2          50       0        0.0000%      0.00x
+3          36       0        0.0000%      0.00x
+4          32       0        0.0000%      0.00x
+5          27       0        0.0000%      0.00x
+6          23       0        0.0000%      0.00x
+7          30       0        0.0000%      0.00x
+8          27       0        0.0000%      0.00x
+9          26       0        0.0000%      0.00x
+
+[High-Risk Communities (>2x baseline fraud rate)]
+------------------------------------------------------------
+No communities with >2x baseline fraud rate detected.
+
+[Leiden Algorithm Quality Metrics]
+------------------------------------------------------------
+Mean Modularity Score (Q): 0.3676
+  (Range: 0-1, higher indicates stronger community structure)
+Community Density: 38.43% (communities per node)
+Community size distribution (mean/std): 2.6 / 5.4
+
+[Leiden Effectiveness for Money Laundering Detection]
+------------------------------------------------------------
+Fraud detected in 2x-risk communities: 0.0%
 
 [Verdict]
 ------------------------------------------------------------
@@ -741,6 +752,9 @@ Precision in 2x-risk communities: 4.65% fraud rate
 ⚠ Leiden alone may not be sufficient for filtering
   Consider combining with other detection methods
 
+============================================================
+Summary Complete!
+============================================================
 
 ==================================================
 ==================================================
