@@ -827,26 +827,46 @@ PHASE 3: GLOBAL INTERPRETABILITY (SHAP)
 GLOBAL SHAP FEATURE IMPORTANCE (ACROSS ALL WINDOWS)
 ================================================================================
                  feature  mean_abs_shap
-          ach_count_sent       0.959987
-          ach_count_recv       0.624048
-               hits_auth       0.511393
-               in_degree       0.288479
-       cheque_count_sent       0.238604
-                hits_hub       0.228009
-                vol_sent       0.225575
-                vol_recv       0.168708
-                  degree       0.127304
-       cheque_count_recv       0.116929
-                tx_count       0.112856
- leiden_macro_modularity       0.100385
-          pr_vol_shallow       0.094702
-distinct_currencies_sent       0.093526
-  credit_card_count_sent       0.092866
-              out_degree       0.091146
-             pr_vol_deep       0.088036
-             betweenness       0.082894
-       leiden_micro_size       0.071983
-                pr_count       0.069434
+              ach_count_sent       0.937313
+              ach_count_recv       0.601124
+                   hits_auth       0.502287
+                   in_degree       0.344825
+           cheque_count_sent       0.261047
+                    vol_sent       0.248912
+                    hits_hub       0.246097
+                    vol_recv       0.175606
+                      degree       0.137213
+           cheque_count_recv       0.122566
+                    tx_count       0.119522
+                    pr_count       0.106295
+    distinct_currencies_sent       0.103277
+      credit_card_count_sent       0.093977
+                  out_degree       0.085855
+     leiden_macro_modularity       0.078162
+                 betweenness       0.077626
+           leiden_macro_size       0.073227
+           leiden_micro_size       0.071016
+               time_variance       0.069050
+                 pr_vol_deep       0.066994
+                  flow_ratio       0.064239
+                      k_core       0.061324
+      credit_card_count_recv       0.048401
+             cash_count_sent       0.047782
+              pr_vol_shallow       0.041268
+             cash_count_recv       0.036586
+     reinvestment_count_sent       0.027049
+    distinct_currencies_recv       0.026443
+     leiden_micro_modularity       0.020794
+        scatter_gather_count       0.014096
+             wire_count_sent       0.011779
+             wire_count_recv       0.010829
+                fan_in_count       0.010315
+        gather_scatter_count       0.008692
+     reinvestment_count_recv       0.005107
+          bitcoin_count_sent       0.003444
+               fan_out_count       0.001726
+                 cycle_count       0.001355
+          bitcoin_count_recv       0.000051
 
 ✓ Global SHAP plot saved to: data/HI_Small/results/global_shap_beeswarm.png
 ✓ Raw SHAP matrix serialized to: data/HI_Small/results/raw_shap_values.npy
@@ -854,4 +874,3 @@ distinct_currencies_sent       0.093526
 ================================================================================
 PIPELINE EXECUTION COMPLETE.
 ================================================================================
-
