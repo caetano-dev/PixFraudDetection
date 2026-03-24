@@ -15,6 +15,8 @@ A machine learning pipeline for detecting fraudulent *entities* in the AMLworld 
 
 ### Setup
 
+Download the dataset https://www.kaggle.com/datasets/ealtman2019/ibm-transactions-for-anti-money-laundering-aml/data
+
 ```bash
 # Create and activate virtual environment
 python3 -m venv venv
@@ -61,3 +63,19 @@ python3 -m scripts.07_summary
 5. **Model Training**: Train and evaluate models using temporal forward-chaining validation
 6. **Interpretability**: Analyze model decisions with SHAP and ablation studies
 7. **Summary**: Generate results and evaluation reports
+
+```
+..                                  SMALL           MEDIUM           LARGE
+..                                  HI     LI        HI      LI       HI       LI
+.. Date Range HI + LI (2022)         Sep 1-10         Sep 1-16        Aug 1 - Nov 5
+.. # of Days Spanned                 10     10        16      16       97       97
+.. # of Bank Accounts               515K   705K     2077K   2028K    2116K    2064K
+.. # of Transactions                  5M     7M       32M     31M      180M    176M
+.. # of Laundering Transactions     5.1K   4.0K       35K     16K      223K    100K
+.. Laundering Rate (1 per N Trans)  981   1942       905    1948       807     1750
+..                                  SMALL           MEDIUM           LARGE
+```
+
+Longest laundering chain per dataset:
+
+8, 12 and 69 days
