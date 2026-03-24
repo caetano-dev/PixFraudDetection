@@ -1,13 +1,3 @@
-"""
-Forward-Chaining Time-Series Cross-Validation for Money Laundering Detection.
-
-Methodological Fixes Applied:
-1. Inner-loop Optuna hyperparameter optimization (prevents baseline parameter bias).
-2. Out-of-sample threshold calibration (prevents look-ahead bias).
-3. Consistent 1:20 asymmetric undersampling across all training distributions.
-4. Global SHAP value accumulation across all out-of-fold predictions.
-"""
-
 import pandas as pd
 import numpy as np
 import xgboost as xgb
@@ -219,14 +209,14 @@ def generate_shap_analysis(
     print("\n" + "=" * 80)
     print("GLOBAL SHAP FEATURE IMPORTANCE (ACROSS ALL WINDOWS)")
     print("=" * 80)
-    print(feature_importance.head(20).to_string(index=False))
+    print(feature_importance.to_string(index=False))
 
     plt.figure(figsize=(12, 10))
     shap.summary_plot(
         stacked_shap_values,
         global_x_test_df,
         feature_names=feature_names,
-        max_display=25,
+#        max_display=25,
         show=False
     )
     plt.title("Global SHAP Feature Impact Across All Forward-Chaining Windows", fontsize=14, fontweight='bold')
