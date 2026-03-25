@@ -11,7 +11,7 @@ WITH RawTx AS (
         t.to_account,
         t.is_laundering,
         CAST(t.timestamp AS TIMESTAMP) AS ts,
-        t.amount_sent_c * fx.rate AS amount_sent_usd, -- anomaly detection of graphs, weirdnodes
+        t.amount_sent_c * fx.rate AS amount_sent_usd,
         t.payment_currency,
         t.payment_format
     FROM read_parquet('data/HI_Small/1_filtered_transactions.parquet') t
@@ -87,6 +87,7 @@ COPY (
             r.source_entity AS entity_id, 
             SUM(r.adj_sent) AS vol_sent, 
             COUNT(*) AS tx_count_sent, 
+            COUNT(DISTINCT r.target_entity) AS out_degree,
             COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM r.ts)), 0.0) AS time_variance,
             COUNT(DISTINCT r.payment_currency) AS distinct_currencies_sent,
             SUM(CASE WHEN r.payment_format = 'Wire' THEN 1 ELSE 0 END) AS wire_count_sent,
@@ -108,6 +109,7 @@ COPY (
             r.target_entity AS entity_id, 
             SUM(r.adj_sent) AS vol_recv, 
             COUNT(*) AS tx_count_recv,
+            COUNT(DISTINCT r.source_entity) AS in_degree,
             COUNT(DISTINCT r.payment_currency) AS distinct_currencies_recv,
             SUM(CASE WHEN r.payment_format = 'Wire' THEN 1 ELSE 0 END) AS wire_count_recv,
             SUM(CASE WHEN r.payment_format = 'Cash' THEN 1 ELSE 0 END) AS cash_count_recv,
@@ -139,6 +141,9 @@ COPY (
         strftime(COALESCE(s.window_start, r.window_start), '%Y-%m-%d') AS window_start,
         strftime(COALESCE(s.window_end, r.window_end), '%Y-%m-%d') AS window_end,
         COALESCE(s.entity_id, r.entity_id) AS entity_id,
+        COALESCE(s.out_degree, 0) AS out_degree,
+        COALESCE(r.in_degree, 0) AS in_degree,
+        COALESCE(s.out_degree, 0) + COALESCE(r.in_degree, 0) AS degree,
         COALESCE(s.vol_sent, 0.0) AS vol_sent,
         COALESCE(r.vol_recv, 0.0) AS vol_recv,
         COALESCE(s.tx_count_sent, 0) + COALESCE(r.tx_count_recv, 0) AS tx_count,

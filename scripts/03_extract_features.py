@@ -89,7 +89,8 @@ def process_window(
         "cheque_count_sent", "cheque_count_recv",
         "credit_card_count_sent", "credit_card_count_recv",
         "ach_count_sent", "ach_count_recv",
-        "reinvestment_count_sent", "reinvestment_count_recv"
+        "reinvestment_count_sent", "reinvestment_count_recv",
+        "in_degree", "out_degree", "degree"
     ]
 
     if "is_fraud" in day_nodes.columns:
@@ -124,9 +125,9 @@ def process_window(
             "leiden_micro_id": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_id", -1),
             "leiden_micro_size": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_size", 0),
             "leiden_micro_modularity": daily_metrics.get("leiden_micro", {}).get(node, {}).get("leiden_modularity", 0.0),
-            "degree": G.degree(node) if G.has_node(node) else 0,
-            "in_degree": G.in_degree(node) if G.has_node(node) else 0,
-            "out_degree": G.out_degree(node) if G.has_node(node) else 0,
+            "degree": ns.get("degree", 0),
+            "in_degree": ns.get("in_degree", 0),
+            "out_degree": ns.get("out_degree", 0),
             "vol_sent": vol_s,
             "vol_recv": vol_r,
             "tx_count": ns.get("tx_count", 0),
@@ -201,11 +202,11 @@ def process_window(
             for node in G.nodes()
         }
         in_degree_scores = {
-            node: G.in_degree(node) if G.has_node(node) else 0
+            node: node_stats.get(node, {}).get("in_degree", 0)
             for node in G.nodes()
         }
         out_degree_scores = {
-            node: G.out_degree(node) if G.has_node(node) else 0
+            node: node_stats.get(node, {}).get("out_degree", 0)
             for node in G.nodes()
         }
         tx_count_scores = {
