@@ -2,6 +2,7 @@ duckdb_spill_dir/
 .DS_Store
 notebooks/shap_feature_importance.png
 *.parquet
+!data/fx_rates.parquet
 
 data/
 *.csv
