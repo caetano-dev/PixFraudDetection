@@ -97,8 +97,9 @@ def forward_chaining_validation(
                 'objective': 'binary:logistic',
                 'eval_metric': 'aucpr',
                 'tree_method': 'hist',
+                'device': 'cuda',
                 'random_state': 42,
-                'n_jobs': -1
+                #'n_jobs': -1
             }
             model = xgb.XGBClassifier(**params)
             model.fit(X_inner_train, y_inner_train)
@@ -244,8 +245,7 @@ def main():
         'pr_vol_deep', 'pr_vol_shallow', 'pr_count', 'hits_hub', 'hits_auth',
         'leiden_macro_size', 'leiden_macro_modularity', 'leiden_micro_size', 
         'leiden_micro_modularity', 'betweenness', 'k_core', 'degree', 'in_degree', 
-        'out_degree', 'fan_out_count', 'fan_in_count', 'scatter_gather_count', 
-        'gather_scatter_count', 'cycle_count'
+        'out_degree'
     ]
     FULL_COLS = BEHAVIORAL_COLS + TOPOLOGICAL_COLS
 
