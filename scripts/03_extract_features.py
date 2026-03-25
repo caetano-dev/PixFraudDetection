@@ -29,6 +29,7 @@ from src.features.centrality import (
     PageRankVolumeExtractor,
 )
 from src.features.community import KCoreExtractor, LeidenCommunityExtractor
+from src.features.motifs import SubgraphMotifExtractor
 
 
 def process_window(
@@ -61,6 +62,7 @@ def process_window(
         "hits": HITSExtractor(max_iter=HITS_MAX_ITER),
         "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
         "k_core": KCoreExtractor(),
+        "motifs": SubgraphMotifExtractor(fan_threshold=6, cycle_bound=6, max_degree=16, max_cycles=10000),
     }
 
     if run_flags.get("run_leiden", False):
@@ -150,6 +152,11 @@ def process_window(
             "reinvestment_count_recv": ns.get("reinvestment_count_recv", 0),
             "betweenness": daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0),
             "k_core": daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0),
+            "fan_out_count": daily_metrics.get("motifs", {}).get(node, {}).get("fan_out_count", 0),
+            "fan_in_count": daily_metrics.get("motifs", {}).get(node, {}).get("fan_in_count", 0),
+            "scatter_gather_count": daily_metrics.get("motifs", {}).get(node, {}).get("scatter_gather_count", 0),
+            "gather_scatter_count": daily_metrics.get("motifs", {}).get(node, {}).get("gather_scatter_count", 0),
+            "cycle_count": daily_metrics.get("motifs", {}).get(node, {}).get("cycle_count", 0),
         }
         features.append(record)
 

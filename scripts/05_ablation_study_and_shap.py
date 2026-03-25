@@ -45,7 +45,8 @@ TOPOLOGICAL_COLS = [
     'pr_vol_deep', 'pr_vol_shallow', 'pr_count', 'hits_hub', 'hits_auth',
     'leiden_macro_size', 'leiden_macro_modularity', 'leiden_micro_size', 
     'leiden_micro_modularity', 'betweenness', 'k_core', 'degree', 'in_degree', 
-    'out_degree',
+    'out_degree', 'fan_out_count', 'fan_in_count', 'scatter_gather_count', 
+    'gather_scatter_count', 'cycle_count'
 ]
 
 FULL_COLS = BEHAVIORAL_COLS + TOPOLOGICAL_COLS
