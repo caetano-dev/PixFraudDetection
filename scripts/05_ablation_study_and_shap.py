@@ -1,14 +1,3 @@
-"""
-Ablation Study and SHAP Interpretability Analysis for Money Laundering Detection.
-
-Methodological Fixes Applied:
-1. Imports the unbiased, nested forward-chaining validation loop from script 04.
-2. Evaluates the Behavioral-only baseline and Full model with independent inner-loop tuning.
-3. Computes rigorous AUPRC lift without hyperparameter confounding.
-4. Leverages accumulated global SHAP values for valid temporal interpretability.
-5. Serializes raw arrays and plots full evaluation metrics.
-"""
-
 import pandas as pd
 import numpy as np
 import matplotlib
