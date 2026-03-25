@@ -391,20 +391,18 @@ def main() -> None:
         con.close()
         return
 
-    window_bad_actors: dict[int, set] = {}
-    if RUN_EVALUATION:
-        print("Pre-computing per-window fraud labels with DuckDB...")
-        for window_id in unique_window_ids:
-            bad_actor_df = con.execute(
-                f"""
-                SELECT DISTINCT entity_id
-                FROM read_parquet('{nodes_path}')
-                WHERE window_id = {window_id} AND is_fraud = 1
-                """,
-            ).df()
-            window_bad_actors[window_id] = set(bad_actor_df["entity_id"].tolist())
-            del bad_actor_df
-            gc.collect()
+    def get_bad_actors_for_window(wid: int) -> set:
+        """Fetch fraud labels on-demand to avoid holding all in memory."""
+        bad_actor_df = con.execute(
+            f"""
+            SELECT DISTINCT entity_id
+            FROM read_parquet('{nodes_path}')
+            WHERE window_id = {wid} AND is_fraud = 1
+            """,
+        ).df()
+        result = set(bad_actor_df["entity_id"].tolist())
+        del bad_actor_df
+        return result
 
     run_flags_base: dict = {
         "run_evaluation": RUN_EVALUATION,
@@ -415,24 +413,32 @@ def main() -> None:
     max_workers = 2
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
-    all_daily_metrics: list[dict] = []
+    metrics_chunks_dir = Path(tempfile.mkdtemp(prefix="metrics_chunks_")) if RUN_EVALUATION else None
     written_chunk_files = 0
+    written_metrics_files = 0
 
     with ProcessPoolExecutor(max_workers=max_workers) as executor:
         futures: dict = {}
-        for window_id in unique_window_ids:
-            run_flags = {
-                **run_flags_base,
-                "bad_actors": window_bad_actors.get(window_id, set()),
-            }
-            future = executor.submit(
-                process_window,
-                window_id,
-                edges_path,
-                nodes_path,
-                run_flags,
-            )
-            futures[future] = window_id
+        window_queue = list(unique_window_ids)
+        
+        # Submit initial batch (max_workers * 2 to keep workers busy)
+        initial_batch_size = min(max_workers * 2, len(window_queue))
+        for _ in range(initial_batch_size):
+            if window_queue:
+                window_id = window_queue.pop(0)
+                bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
+                run_flags = {
+                    **run_flags_base,
+                    "bad_actors": bad_actors,
+                }
+                future = executor.submit(
+                    process_window,
+                    window_id,
+                    edges_path,
+                    nodes_path,
+                    run_flags,
+                )
+                futures[future] = window_id
 
         with tqdm(total=len(unique_window_ids), desc="Processing windows", unit="window") as pbar:
             for future in as_completed(futures):
@@ -446,13 +452,38 @@ def main() -> None:
                         written_chunk_files += 1
                         del feature_df
 
-                    if RUN_EVALUATION and result["metrics"]:
-                        all_daily_metrics.extend(result["metrics"])
+                    if RUN_EVALUATION and result["metrics"] and metrics_chunks_dir:
+                        metrics_df = pd.DataFrame(result["metrics"])
+                        metrics_chunk_path = metrics_chunks_dir / f"metrics_{result['window_id']}.parquet"
+                        metrics_df.to_parquet(metrics_chunk_path, index=False)
+                        written_metrics_files += 1
+                        del metrics_df
                     
+                    # Free memory: daily_metrics is not needed after features are extracted
+                    del result["daily_metrics"]
                     del result
                     gc.collect()
                 except Exception as exc:
                     print(f"Window generated an exception: {exc}")
+                
+                # Remove completed future and submit next window
+                del futures[future]
+                if window_queue:
+                    window_id = window_queue.pop(0)
+                    bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
+                    run_flags = {
+                        **run_flags_base,
+                        "bad_actors": bad_actors,
+                    }
+                    new_future = executor.submit(
+                        process_window,
+                        window_id,
+                        edges_path,
+                        nodes_path,
+                        run_flags,
+                    )
+                    futures[new_future] = window_id
+                
                 pbar.update(1)
 
     if written_chunk_files == 0:
@@ -486,11 +517,19 @@ def main() -> None:
 
     shutil.rmtree(feature_chunks_dir, ignore_errors=False)
 
-    if RUN_EVALUATION and all_daily_metrics:
-        metrics_df = pd.DataFrame(all_daily_metrics)
+    if RUN_EVALUATION and metrics_chunks_dir and written_metrics_files > 0:
         metrics_path = DATA_PATH / OUTPUT_METRICS_FILE
-        print(f"Saving metrics to {metrics_path}...")
-        metrics_df.to_parquet(metrics_path, index=False)
+        print(f"Merging {written_metrics_files} metrics chunks to {metrics_path}...")
+        con.execute(
+            f"""
+            COPY (
+                SELECT * FROM read_parquet('{metrics_chunks_dir / "*.parquet"}')
+            ) TO '{metrics_path}' (FORMAT PARQUET);
+            """
+        )
+        shutil.rmtree(metrics_chunks_dir, ignore_errors=False)
+    elif metrics_chunks_dir:
+        shutil.rmtree(metrics_chunks_dir, ignore_errors=False)
 
     con.close()
     print("\nFeature extraction complete!")
