@@ -410,7 +410,7 @@ def main() -> None:
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    max_workers = 2
+    max_workers = 1
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     metrics_chunks_dir = Path(tempfile.mkdtemp(prefix="metrics_chunks_")) if RUN_EVALUATION else None
