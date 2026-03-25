@@ -1,5 +1,6 @@
 from __future__ import annotations
 import gc
+import json
 import shutil
 import sys
 import tempfile
@@ -357,6 +358,20 @@ def process_window(
     return result
 
 
+def load_checkpoint(checkpoint_path: Path) -> dict:
+    """Load checkpoint data from disk."""
+    if checkpoint_path.exists():
+        with open(checkpoint_path, 'r') as f:
+            return json.load(f)
+    return {"completed_windows": [], "feature_chunks_dir": None, "metrics_chunks_dir": None}
+
+
+def save_checkpoint(checkpoint_path: Path, data: dict) -> None:
+    """Save checkpoint data to disk."""
+    with open(checkpoint_path, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
 def main() -> None:
     print("=" * 60)
     print("Graph Feature Generation Pipeline")
@@ -368,7 +383,28 @@ def main() -> None:
     edges_path = DATA_PATH / "lookback_edges.parquet"
     nodes_path = DATA_PATH / "target_nodes.parquet" 
     features_out = DATA_PATH / OUTPUT_FEATURES_FILE
-    feature_chunks_dir = Path(tempfile.mkdtemp(prefix="feature_chunks_"))
+    
+    # Checkpoint file to track progress
+    checkpoint_path = DATA_PATH / "feature_extraction_checkpoint.json"
+    checkpoint = load_checkpoint(checkpoint_path)
+    
+    # Reuse existing chunk directories if resuming, otherwise create new ones
+    if checkpoint.get("feature_chunks_dir") and Path(checkpoint["feature_chunks_dir"]).exists():
+        feature_chunks_dir = Path(checkpoint["feature_chunks_dir"])
+        print(f"Resuming from checkpoint: {checkpoint_path}")
+        print(f"Using existing chunk directory: {feature_chunks_dir}")
+    else:
+        feature_chunks_dir = Path(tempfile.mkdtemp(prefix="feature_chunks_"))
+        checkpoint["feature_chunks_dir"] = str(feature_chunks_dir)
+    
+    if RUN_EVALUATION:
+        if checkpoint.get("metrics_chunks_dir") and Path(checkpoint["metrics_chunks_dir"]).exists():
+            metrics_chunks_dir = Path(checkpoint["metrics_chunks_dir"])
+        else:
+            metrics_chunks_dir = Path(tempfile.mkdtemp(prefix="metrics_chunks_"))
+            checkpoint["metrics_chunks_dir"] = str(metrics_chunks_dir)
+    else:
+        metrics_chunks_dir = None
 
     con = duckdb.connect()
 
@@ -384,12 +420,28 @@ def main() -> None:
     del unique_windows_df
     gc.collect()
 
-    print(f"Found {len(unique_window_ids)} windows to process.")
-    if not unique_window_ids:
+    # Filter out already completed windows
+    completed_windows = set(checkpoint.get("completed_windows", []))
+    remaining_window_ids = [wid for wid in unique_window_ids if wid not in completed_windows]
+    
+    print(f"Found {len(unique_window_ids)} total windows.")
+    if completed_windows:
+        print(f"Already completed: {len(completed_windows)} windows")
+        print(f"Remaining to process: {len(remaining_window_ids)} windows")
+    
+    if not remaining_window_ids:
+        print("All windows already processed. Proceeding to final merge...")
+        # Skip to merge step
+        unique_window_ids = []
+    elif not unique_window_ids:
         print("No windows found. Nothing to process.")
+        if checkpoint_path.exists():
+            checkpoint_path.unlink()
         shutil.rmtree(feature_chunks_dir, ignore_errors=False)
         con.close()
         return
+    else:
+        unique_window_ids = remaining_window_ids
 
     def get_bad_actors_for_window(wid: int) -> set:
         """Fetch fraud labels on-demand to avoid holding all in memory."""
@@ -413,61 +465,23 @@ def main() -> None:
     max_workers = 1
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
-    metrics_chunks_dir = Path(tempfile.mkdtemp(prefix="metrics_chunks_")) if RUN_EVALUATION else None
-    written_chunk_files = 0
-    written_metrics_files = 0
+    # Count existing chunks
+    written_chunk_files = len(list(feature_chunks_dir.glob("*.parquet"))) if feature_chunks_dir.exists() else 0
+    written_metrics_files = len(list(metrics_chunks_dir.glob("*.parquet"))) if metrics_chunks_dir and metrics_chunks_dir.exists() else 0
+    
+    print(f"Existing feature chunks: {written_chunk_files}")
+    if RUN_EVALUATION:
+        print(f"Existing metrics chunks: {written_metrics_files}")
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures: dict = {}
-        window_queue = list(unique_window_ids)
-        
-        # Submit initial batch (max_workers * 2 to keep workers busy)
-        initial_batch_size = min(max_workers * 2, len(window_queue))
-        for _ in range(initial_batch_size):
-            if window_queue:
-                window_id = window_queue.pop(0)
-                bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
-                run_flags = {
-                    **run_flags_base,
-                    "bad_actors": bad_actors,
-                }
-                future = executor.submit(
-                    process_window,
-                    window_id,
-                    edges_path,
-                    nodes_path,
-                    run_flags,
-                )
-                futures[future] = window_id
-
-        with tqdm(total=len(unique_window_ids), desc="Processing windows", unit="window") as pbar:
-            for future in as_completed(futures):
-                try:
-                    result = future.result()  # propagates worker exceptions
-
-                    if result["features"]:
-                        feature_df = pd.DataFrame(result["features"])
-                        chunk_path = feature_chunks_dir / f"features_{result['window_id']}.parquet"
-                        feature_df.to_parquet(chunk_path, index=False)
-                        written_chunk_files += 1
-                        del feature_df
-
-                    if RUN_EVALUATION and result["metrics"] and metrics_chunks_dir:
-                        metrics_df = pd.DataFrame(result["metrics"])
-                        metrics_chunk_path = metrics_chunks_dir / f"metrics_{result['window_id']}.parquet"
-                        metrics_df.to_parquet(metrics_chunk_path, index=False)
-                        written_metrics_files += 1
-                        del metrics_df
-                    
-                    # Free memory: daily_metrics is not needed after features are extracted
-                    del result["daily_metrics"]
-                    del result
-                    gc.collect()
-                except Exception as exc:
-                    print(f"Window generated an exception: {exc}")
-                
-                # Remove completed future and submit next window
-                del futures[future]
+    # Only run processing if there are windows remaining
+    if unique_window_ids:
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            futures: dict = {}
+            window_queue = list(unique_window_ids)
+            
+            # Submit initial batch (max_workers * 2 to keep workers busy)
+            initial_batch_size = min(max_workers * 2, len(window_queue))
+            for _ in range(initial_batch_size):
                 if window_queue:
                     window_id = window_queue.pop(0)
                     bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
@@ -475,20 +489,81 @@ def main() -> None:
                         **run_flags_base,
                         "bad_actors": bad_actors,
                     }
-                    new_future = executor.submit(
+                    future = executor.submit(
                         process_window,
                         window_id,
                         edges_path,
                         nodes_path,
                         run_flags,
                     )
-                    futures[new_future] = window_id
-                
-                pbar.update(1)
+                    futures[future] = window_id
 
+            # Show progress including already completed windows
+            total_windows = len(checkpoint.get("completed_windows", [])) + len(unique_window_ids)
+            initial_progress = len(checkpoint.get("completed_windows", []))
+            
+            with tqdm(total=total_windows, desc="Processing windows", unit="window", initial=initial_progress) as pbar:
+                for future in as_completed(futures):
+                    completed_window_id = futures[future]
+                    try:
+                        result = future.result()  # propagates worker exceptions
+
+                        if result["features"]:
+                            feature_df = pd.DataFrame(result["features"])
+                            chunk_path = feature_chunks_dir / f"features_{result['window_id']}.parquet"
+                            feature_df.to_parquet(chunk_path, index=False)
+                            written_chunk_files += 1
+                            del feature_df
+
+                        if RUN_EVALUATION and result["metrics"] and metrics_chunks_dir:
+                            metrics_df = pd.DataFrame(result["metrics"])
+                            metrics_chunk_path = metrics_chunks_dir / f"metrics_{result['window_id']}.parquet"
+                            metrics_df.to_parquet(metrics_chunk_path, index=False)
+                            written_metrics_files += 1
+                            del metrics_df
+                        
+                        # Save checkpoint after each successful window
+                        checkpoint["completed_windows"].append(completed_window_id)
+                        save_checkpoint(checkpoint_path, checkpoint)
+                        
+                        # Free memory: daily_metrics is not needed after features are extracted
+                        del result["daily_metrics"]
+                        del result
+                        gc.collect()
+                    except Exception as exc:
+                        print(f"\nWindow {completed_window_id} generated an exception: {exc}")
+                        print("Checkpoint saved. You can restart the script to resume.")
+                    
+                    # Remove completed future and submit next window
+                    del futures[future]
+                    if window_queue:
+                        window_id = window_queue.pop(0)
+                        bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
+                        run_flags = {
+                            **run_flags_base,
+                            "bad_actors": bad_actors,
+                        }
+                        new_future = executor.submit(
+                            process_window,
+                            window_id,
+                            edges_path,
+                            nodes_path,
+                            run_flags,
+                        )
+                        futures[new_future] = window_id
+                    
+                    pbar.update(1)
+
+    # Recount chunks in case we resumed from checkpoint
+    written_chunk_files = len(list(feature_chunks_dir.glob("*.parquet")))
+    if RUN_EVALUATION and metrics_chunks_dir:
+        written_metrics_files = len(list(metrics_chunks_dir.glob("*.parquet")))
+    
     if written_chunk_files == 0:
         print("Warning: No features were generated!")
         shutil.rmtree(feature_chunks_dir, ignore_errors=False)
+        if checkpoint_path.exists():
+            checkpoint_path.unlink()
         con.close()
         return
 
@@ -532,6 +607,12 @@ def main() -> None:
         shutil.rmtree(metrics_chunks_dir, ignore_errors=False)
 
     con.close()
+    
+    # Clean up checkpoint file after successful completion
+    if checkpoint_path.exists():
+        checkpoint_path.unlink()
+        print(f"Checkpoint file removed: {checkpoint_path}")
+    
     print("\nFeature extraction complete!")
 
 
