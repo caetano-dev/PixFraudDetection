@@ -62,7 +62,7 @@ def process_window(
         "hits": HITSExtractor(max_iter=HITS_MAX_ITER),
         "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
         "k_core": KCoreExtractor(),
-        "motifs": SubgraphMotifExtractor(fan_threshold=5, cycle_bound=5, max_degree=16, max_cycles=1000),
+        "motifs": SubgraphMotifExtractor(fan_threshold=6, cycle_bound=6, max_degree=16, max_cycles=10000),
     }
 
     if run_flags.get("run_leiden", False):
@@ -412,7 +412,7 @@ def main() -> None:
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    max_workers = 1
+    max_workers = 2
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     all_daily_metrics: list[dict] = []
