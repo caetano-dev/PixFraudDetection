@@ -62,7 +62,7 @@ def process_window(
         "hits": HITSExtractor(max_iter=HITS_MAX_ITER),
         "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
         "k_core": KCoreExtractor(),
-        "motifs": SubgraphMotifExtractor(fan_threshold=6, cycle_bound=6, max_degree=16, max_cycles=10000),
+        "motifs": SubgraphMotifExtractor(fan_threshold=6, cycle_bound=6, max_degree=16, max_cycles=2000),
     }
 
     if run_flags.get("run_leiden", False):

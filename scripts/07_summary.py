@@ -122,6 +122,138 @@ def print_aggregate_evaluation_summary(con: duckdb.DuckDBPyConnection, metrics_p
                     print(f"    @{k:>5}: {median_prec:.4%} (lift: {median_lift:.2f}x)")
 
 
+def print_motif_analysis(con: duckdb.DuckDBPyConnection, features_path: Path) -> None:
+    """Analyze subgraph motif patterns in the transaction network."""
+    if not features_path.exists():
+        return
+    
+    # Check if required motif columns exist
+    sample_df = con.execute(f"SELECT * FROM read_parquet('{features_path}') LIMIT 1").df()
+    motif_cols = {"fan_out_count", "fan_in_count", "scatter_gather_count", "gather_scatter_count", "cycle_count"}
+    if not motif_cols.issubset(set(sample_df.columns)):
+        return
+    
+    print("\n" + "=" * 60)
+    print("Subgraph Motif Analysis")
+    print("=" * 60)
+    
+    # Read motif data
+    motif_df = con.execute(
+        f"""
+        SELECT
+            entity_id,
+            fan_out_count,
+            fan_in_count,
+            scatter_gather_count,
+            gather_scatter_count,
+            cycle_count,
+            is_fraud
+        FROM read_parquet('{features_path}')
+        """
+    ).df()
+    
+    if motif_df.empty:
+        print("No motif data found.")
+        return
+    
+    # Overall statistics
+    total_entities = len(motif_df)
+    total_fraud = motif_df["is_fraud"].sum()
+    fraud_rate = motif_df["is_fraud"].mean()
+    
+    print(f"\nTotal entities: {total_entities:,}")
+    print(f"Fraudulent entities: {int(total_fraud):,} ({fraud_rate:.2%})")
+    
+    # Motif prevalence
+    print("\n[Motif Pattern Prevalence]")
+    print("-" * 60)
+    
+    motif_patterns = {
+        "Fan-out (1→many)": "fan_out_count",
+        "Fan-in (many→1)": "fan_in_count", 
+        "Scatter-Gather (1→many→1)": "scatter_gather_count",
+        "Gather-Scatter (many→1→many)": "gather_scatter_count",
+        "Cycles": "cycle_count"
+    }
+    
+    for pattern_name, col_name in motif_patterns.items():
+        entities_with_pattern = (motif_df[col_name] > 0).sum()
+        pct_entities = entities_with_pattern / total_entities if total_entities > 0 else 0
+        total_instances = motif_df[col_name].sum()
+        avg_per_entity = motif_df[col_name].mean()
+        
+        print(f"\n{pattern_name}:")
+        print(f"  Entities with pattern: {int(entities_with_pattern):,} ({pct_entities:.2%})")
+        print(f"  Total instances: {int(total_instances):,}")
+        print(f"  Average per entity: {avg_per_entity:.2f}")
+    
+    # Fraud correlation
+    print("\n[Motif Patterns vs Fraud]")
+    print("-" * 60)
+    
+    fraud_df = motif_df[motif_df["is_fraud"] == 1]
+    non_fraud_df = motif_df[motif_df["is_fraud"] == 0]
+    
+    print(f"{'Motif Pattern':<30} {'Fraud Avg':<12} {'Non-Fraud Avg':<15} {'Ratio':<8}")
+    print("-" * 60)
+    
+    for pattern_name, col_name in motif_patterns.items():
+        fraud_avg = fraud_df[col_name].mean() if len(fraud_df) > 0 else 0
+        non_fraud_avg = non_fraud_df[col_name].mean() if len(non_fraud_df) > 0 else 0
+        ratio = fraud_avg / non_fraud_avg if non_fraud_avg > 0 else float('inf')
+        
+        print(f"{pattern_name:<30} {fraud_avg:<12.2f} {non_fraud_avg:<15.2f} {ratio:<8.2f}x")
+    
+    # High-risk entities by motif patterns
+    print("\n[High-Risk Entities by Motif Patterns]")
+    print("-" * 60)
+    
+    # Create a combined motif score
+    motif_df['total_motif_count'] = (
+        motif_df['fan_out_count'] + 
+        motif_df['fan_in_count'] + 
+        motif_df['scatter_gather_count'] + 
+        motif_df['gather_scatter_count'] + 
+        motif_df['cycle_count']
+    )
+    
+    # Find entities with high motif activity
+    top_motif_entities = motif_df.nlargest(10, 'total_motif_count')
+    
+    if not top_motif_entities.empty:
+        print("\nTop 10 Entities by Total Motif Count:")
+        print(f"{'Entity ID':<15} {'Total':<8} {'Cycles':<8} {'Fan-out':<10} {'Fan-in':<10} {'Fraud':<8}")
+        print("-" * 70)
+        for _, row in top_motif_entities.iterrows():
+            fraud_status = "YES" if row['is_fraud'] == 1 else "NO"
+            print(
+                f"{str(row['entity_id']):<15} "
+                f"{int(row['total_motif_count']):<8} "
+                f"{int(row['cycle_count']):<8} "
+                f"{int(row['fan_out_count']):<10} "
+                f"{int(row['fan_in_count']):<10} "
+                f"{fraud_status:<8}"
+            )
+    
+    # Fraud detection based on cycle presence
+    print("\n[Cycle-Based Fraud Detection]")
+    print("-" * 60)
+    
+    entities_with_cycles = motif_df[motif_df['cycle_count'] > 0]
+    if not entities_with_cycles.empty:
+        cycle_fraud_rate = entities_with_cycles['is_fraud'].mean()
+        cycle_lift = cycle_fraud_rate / fraud_rate if fraud_rate > 0 else 0
+        
+        print(f"Entities with cycles: {len(entities_with_cycles):,}")
+        print(f"Fraud rate in entities with cycles: {cycle_fraud_rate:.2%}")
+        print(f"Lift over baseline: {cycle_lift:.2f}x")
+        
+        if cycle_fraud_rate > fraud_rate * 1.5:
+            print("\n✓ Cycles are a strong indicator of fraudulent activity")
+        else:
+            print("\n⚠ Cycles show weak correlation with fraud")
+
+
 def print_leiden_community_analysis(con: duckdb.DuckDBPyConnection, features_path: Path) -> None:
     """Analyze Leiden community detection effectiveness for money laundering detection."""
     if not RUN_LEIDEN or not features_path.exists():
@@ -397,6 +529,7 @@ def main() -> None:
 
     # Print all summary sections
     print_aggregate_evaluation_summary(con, metrics_path)
+    print_motif_analysis(con, features_path)
     print_leiden_community_analysis(con, features_path)
 
     con.close()
