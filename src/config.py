@@ -1,5 +1,5 @@
 from pathlib import Path
-DATASET_SIZE: str = "MEDIUM"
+DATASET_SIZE: str = "SMALL"
 
 _DATASET_CONFIG = {
     "SMALL": {
@@ -13,6 +13,7 @@ _DATASET_CONFIG = {
         "hits_max_iter": 500,
         "leiden_resolution_macro": 1.0, 
         "leiden_resolution_micro": 2.0,
+        "workers": 4,
     },
     "MEDIUM": {
         "data_path": Path("data/HI_Medium"),
@@ -25,6 +26,7 @@ _DATASET_CONFIG = {
         "hits_max_iter": 1000,
         "leiden_resolution_macro": 2.0,
         "leiden_resolution_micro": 5.0,
+        "workers": 2,
     },
     "LARGE": {
         "data_path": Path("data/LI_Large"),
@@ -37,6 +39,7 @@ _DATASET_CONFIG = {
         "hits_max_iter": 1000,
         "leiden_resolution_macro": 2.0,
         "leiden_resolution_micro": 5.0,
+        "workers": 1,
     },
 }
 
@@ -53,6 +56,7 @@ HITS_MAX_ITER: int = _DATASET_CONFIG[DATASET_SIZE]["hits_max_iter"]
 EVALUATION_K_VALUES: list = [1, 2, 10, 50, 100, 500]
 LEIDEN_RESOLUTION_MACRO: float = _DATASET_CONFIG[DATASET_SIZE]["leiden_resolution_macro"]
 LEIDEN_RESOLUTION_MICRO: float = _DATASET_CONFIG[DATASET_SIZE]["leiden_resolution_micro"]
+NUM_WORKERS: int = _DATASET_CONFIG[DATASET_SIZE]["workers"]
 
 RUN_EVALUATION: bool = True
 RUN_LEIDEN: bool = True

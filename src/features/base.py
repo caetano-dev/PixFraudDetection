@@ -1,13 +1,10 @@
 from __future__ import annotations
-
 from abc import ABC, abstractmethod
-
-import networkx as nx
-
+import igraph as ig
 
 class FeatureExtractor(ABC):
     @abstractmethod
-    def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float | int]]:
+    def extract(self, G: ig.Graph) -> dict[object, dict[str, float | int]]:
         """
         """
 

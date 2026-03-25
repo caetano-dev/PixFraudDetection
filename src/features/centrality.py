@@ -1,51 +1,52 @@
 from __future__ import annotations
-
-import networkx as nx
-
+import igraph as ig
 from src.features.base import FeatureExtractor
-
 
 class PageRankVolumeExtractor(FeatureExtractor):
     def __init__(self, alpha: float, max_iter: int) -> None:
         self._alpha = alpha
-        self._max_iter = max_iter
+        self._max_iter = max_iter # Kept for pipeline compatibility
 
     @property
     def name(self) -> str:
         return f"PageRankVolumeExtractor(alpha={self._alpha})"
 
-    def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float]]:
-        if len(G) == 0:
+    def extract(self, G: ig.Graph) -> dict[object, dict[str, float]]:
+        if G.vcount() == 0:
             return {}
 
         try:
-            scores: dict = nx.pagerank(G, weight="volume", alpha=self._alpha, max_iter=self._max_iter)
-        except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
+            scores = G.pagerank(
+                vertices=None, directed=True, damping=self._alpha, 
+                weights="volume"
+            )
+        except ig.InternalError:
             return {}
 
-        return {node: {"pagerank": score} for node, score in scores.items()}
-
+        return {name: {"pagerank": score} for name, score in zip(G.vs["name"], scores)}
 
 class PageRankFrequencyExtractor(FeatureExtractor):
     def __init__(self, alpha: float, max_iter: int) -> None:
         self._alpha = alpha
-        self._max_iter = max_iter
+        self._max_iter = max_iter # Kept for pipeline compatibility
 
     @property
     def name(self) -> str:
         return f"PageRankFrequencyExtractor(alpha={self._alpha})"
 
-    def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float]]:
-        if len(G) == 0:
+    def extract(self, G: ig.Graph) -> dict[object, dict[str, float]]:
+        if G.vcount() == 0:
             return {}
 
         try:
-            scores: dict = nx.pagerank(G, weight="count", alpha=self._alpha, max_iter=self._max_iter)
-        except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
+            scores = G.pagerank(
+                vertices=None, directed=True, damping=self._alpha, 
+                weights="count"
+            )
+        except ig.InternalError:
             return {}
 
-        return {node: {"pagerank_count": score} for node, score in scores.items()}
-
+        return {name: {"pagerank_count": score} for name, score in zip(G.vs["name"], scores)}
 
 class HITSExtractor(FeatureExtractor):
     def __init__(self, max_iter: int = 500) -> None:
@@ -55,37 +56,40 @@ class HITSExtractor(FeatureExtractor):
     def name(self) -> str:
         return f"HITSExtractor(max_iter={self._max_iter})"
 
-    def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float]]:
-        if len(G) == 0:
+    def extract(self, G: ig.Graph) -> dict[object, dict[str, float]]:
+        if G.vcount() == 0:
             return {}
 
         try:
-            hubs, auths = nx.hits(G, max_iter=self._max_iter)
-        except (nx.NetworkXError, nx.PowerIterationFailedConvergence):
+            # hub_score and authority_score do not accept max_iter in python-igraph
+            hubs = G.hub_score()
+            auths = G.authority_score()
+        except ig.InternalError:
             return {}
 
         return {
-            node: {"hits_hub": hubs.get(node, 0.0), "hits_auth": auths.get(node, 0.0)}
-            for node in G.nodes()
+            name: {"hits_hub": h, "hits_auth": a} 
+            for name, h, a in zip(G.vs["name"], hubs, auths)
         }
-
 
 class BetweennessExtractor(FeatureExtractor):
     def __init__(self, k: int = 50, seed: int = 42) -> None:
         self._k = k
         self._seed = seed if seed is not None else 42
+        self._cutoff = 6 # Bounds the BFS search depth
 
     @property
     def name(self) -> str:
-        return f"BetweennessExtractor(k={self._k}, seed={self._seed})"
+        return f"BetweennessExtractor(cutoff={self._cutoff})"
 
-    def extract(self, G: nx.DiGraph) -> dict[object, dict[str, float]]:
-        if len(G) == 0:
+    def extract(self, G: ig.Graph) -> dict[object, dict[str, float]]:
+        if G.vcount() == 0:
             return {}
 
         try:
-            b_scores: dict = nx.betweenness_centrality(G, k=self._k, seed=self._seed)
-        except nx.NetworkXError:
+            # The cutoff parameter prevents the O(|V||E|) explosion
+            b_scores = G.betweenness(directed=True, cutoff=self._cutoff)
+        except ig.InternalError:
             return {}
 
-        return {node: {"betweenness": score} for node, score in b_scores.items()}
+        return {name: {"betweenness": score} for name, score in zip(G.vs["name"], b_scores)}
