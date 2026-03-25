@@ -6,15 +6,13 @@ import tempfile
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 import duckdb
-import igraph as ig
+import networkx as nx
 import pandas as pd
 from tqdm import tqdm
-from src.config import DATA_PATH, PR_ALPHA_DEEP, PR_ALPHA_SHALLOW, PR_MAX_ITER, BETWEENNESS_K, HITS_MAX_ITER, LEIDEN_RESOLUTION_MACRO, LEIDEN_RESOLUTION_MICRO, NUM_WORKERS
-
+from src.config import DATA_PATH, PR_ALPHA_DEEP, PR_ALPHA_SHALLOW, PR_MAX_ITER, BETWEENNESS_K, HITS_MAX_ITER, LEIDEN_RESOLUTION_MACRO, LEIDEN_RESOLUTION_MICRO
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
-
 from src.config import (
     DATASET_SIZE,
     EVALUATION_K_VALUES,
@@ -74,31 +72,12 @@ def process_window(
     window_start = day_edges["window_start"].iloc[0] if not day_edges.empty else None
     window_end = day_edges["window_end"].iloc[0] if not day_edges.empty else None
 
-    # Construct igraph object using strict 0-based integer mapping
-    node_names = day_nodes["entity_id"].drop_duplicates().tolist()
-    name_to_idx = {name: idx for idx, name in enumerate(node_names)}
-
-    # Map edge strings to integers
-    mapped_sources = day_edges["source"].map(name_to_idx)
-    mapped_targets = day_edges["target"].map(name_to_idx)
-
-    # Filter out orphaned edges (where nodes aren't in target_nodes) to prevent C-level segfaults
-    valid_mask = mapped_sources.notna() & mapped_targets.notna()
-    
-    edge_list = list(zip(
-        mapped_sources[valid_mask].astype(int), 
-        mapped_targets[valid_mask].astype(int)
-    ))
-
-    G = ig.Graph(
-        n=len(node_names),
-        edges=edge_list,
-        directed=True,
-        vertex_attrs={"name": node_names},
-        edge_attrs={
-            "volume": day_edges.loc[valid_mask, "volume"].tolist(),
-            "count": day_edges.loc[valid_mask, "count"].tolist()
-        }
+    G = nx.from_pandas_edgelist(
+        day_edges,
+        source="source",
+        target="target",
+        edge_attr=["volume", "count"],
+        create_using=nx.DiGraph,
     )
 
     node_stat_columns = [
@@ -111,7 +90,7 @@ def process_window(
         "credit_card_count_sent", "credit_card_count_recv",
         "ach_count_sent", "ach_count_recv",
         "reinvestment_count_sent", "reinvestment_count_recv",
-        "in_degree", "out_degree", "degree" 
+        "in_degree", "out_degree", "degree"
     ]
 
     if "is_fraud" in day_nodes.columns:
@@ -122,13 +101,10 @@ def process_window(
     for key, extractor in extractors.items():
         daily_metrics[key] = extractor.extract(G)
 
-    bad_actors_up_to_date: set = run_flags.get("bad_actors", set())
+    bad_actors_up_to_date: set = run_flags.get("bad_actors", set()) # AMLworld, graph based anomaly survey
 
     features: list[dict] = []
-    
-    node_list = day_nodes["entity_id"].unique()
-    
-    for node in node_list:
+    for node in day_nodes["entity_id"].unique():
         ns = node_stats.get(node, {})
         vol_s = ns.get("vol_sent", 0.0)
         vol_r = ns.get("vol_recv", 0.0)
@@ -189,128 +165,128 @@ def process_window(
     if run_flags.get("run_evaluation", False):
         pr_vol_deep_scores = {
             node: daily_metrics.get("pr_vol_deep", {}).get(node, {}).get("pagerank", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         pr_vol_shallow_scores = {
             node: daily_metrics.get("pr_vol_shallow", {}).get(node, {}).get("pagerank", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         pr_count_scores = {
             node: daily_metrics.get("pr_count", {}).get(node, {}).get("pagerank_count", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         hits_hubs = {
             node: daily_metrics.get("hits", {}).get(node, {}).get("hits_hub", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         hits_auths = {
             node: daily_metrics.get("hits", {}).get(node, {}).get("hits_auth", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         betweenness_scores = {
             node: daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         k_core_scores = {
             node: daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0)
-            for node in node_list
+            for node in G.nodes()
         }
         
+        # Basic feature scores
         vol_sent_scores = {
             node: node_stats.get(node, {}).get("vol_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         vol_recv_scores = {
             node: node_stats.get(node, {}).get("vol_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
-        
         in_degree_scores = {
             node: node_stats.get(node, {}).get("in_degree", 0)
-            for node in node_list
+            for node in G.nodes()
         }
         out_degree_scores = {
             node: node_stats.get(node, {}).get("out_degree", 0)
-            for node in node_list
+            for node in G.nodes()
         }
-        
         tx_count_scores = {
             node: node_stats.get(node, {}).get("tx_count", 0)
-            for node in node_list
+            for node in G.nodes()
         }
         time_variance_scores = {
             node: node_stats.get(node, {}).get("time_variance", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         
+        # Baseline heuristic feature scores
         wire_count_sent_scores = {
             node: node_stats.get(node, {}).get("wire_count_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         wire_count_recv_scores = {
             node: node_stats.get(node, {}).get("wire_count_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         cash_count_sent_scores = {
             node: node_stats.get(node, {}).get("cash_count_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         cash_count_recv_scores = {
             node: node_stats.get(node, {}).get("cash_count_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         bitcoin_count_sent_scores = {
             node: node_stats.get(node, {}).get("bitcoin_count_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         bitcoin_count_recv_scores = {
             node: node_stats.get(node, {}).get("bitcoin_count_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         cheque_count_sent_scores = {
             node: node_stats.get(node, {}).get("cheque_count_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         cheque_count_recv_scores = {
             node: node_stats.get(node, {}).get("cheque_count_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         credit_card_count_sent_scores = {
             node: node_stats.get(node, {}).get("credit_card_count_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         credit_card_count_recv_scores = {
             node: node_stats.get(node, {}).get("credit_card_count_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         ach_count_sent_scores = {
             node: node_stats.get(node, {}).get("ach_count_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         ach_count_recv_scores = {
             node: node_stats.get(node, {}).get("ach_count_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         reinvestment_count_sent_scores = {
             node: node_stats.get(node, {}).get("reinvestment_count_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         reinvestment_count_recv_scores = {
             node: node_stats.get(node, {}).get("reinvestment_count_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         distinct_currencies_sent_scores = {
             node: node_stats.get(node, {}).get("distinct_currencies_sent", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
         distinct_currencies_recv_scores = {
             node: node_stats.get(node, {}).get("distinct_currencies_recv", 0.0)
-            for node in node_list
+            for node in G.nodes()
         }
 
         if pr_vol_deep_scores:
             evaluation_k_values = run_flags.get("evaluation_k_values", [])
-            valid_k_values = [k for k in evaluation_k_values if k <= len(node_list)]
+            valid_k_values = [k for k in evaluation_k_values if k <= len(G)]
             if valid_k_values:
                 from src.features._evaluation import compute_daily_evaluation_metrics
 
@@ -380,6 +356,7 @@ def process_window(
 
     return result
 
+
 def main() -> None:
     print("=" * 60)
     print("Graph Feature Generation Pipeline")
@@ -435,7 +412,7 @@ def main() -> None:
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    max_workers = NUM_WORKERS
+    max_workers = 1
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     all_daily_metrics: list[dict] = []
@@ -460,7 +437,7 @@ def main() -> None:
         with tqdm(total=len(unique_window_ids), desc="Processing windows", unit="window") as pbar:
             for future in as_completed(futures):
                 try:
-                    result = future.result() 
+                    result = future.result()  # propagates worker exceptions
 
                     if result["features"]:
                         feature_df = pd.DataFrame(result["features"])
@@ -484,7 +461,7 @@ def main() -> None:
         con.close()
         return
 
-    print("\nUsing pre-aggregated is_fraud labels from target_nodes.parquet...")
+    print("\nUsing pre-aggregated is_fraud labels from aggregated_nodes.parquet...")
 
     stability_join = ""
     stability_select = (
@@ -517,6 +494,7 @@ def main() -> None:
 
     con.close()
     print("\nFeature extraction complete!")
+
 
 if __name__ == "__main__":
     main()
