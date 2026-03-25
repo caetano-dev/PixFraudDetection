@@ -98,6 +98,7 @@ def forward_chaining_validation(
                 'eval_metric': 'aucpr',
                 'tree_method': 'hist',
                 'random_state': 42,
+                'device': 'cuda',
                 'n_jobs': -1
             }
             model = xgb.XGBClassifier(**params)
@@ -285,6 +286,12 @@ def main():
         global_x_test_df=global_x_test_df,
         output_dir=output_dir
     )
+    
+    # Save SHAP outputs for downstream feature pruning pipeline
+    feature_importance.to_csv(output_dir / "shap_feature_importance.csv", index=False)
+    np.save(output_dir / "raw_shap_values.npy", stacked_shap)
+    print(f"\n✓ SHAP feature importance saved to: {output_dir / 'shap_feature_importance.csv'}")
+    print(f"✓ Raw SHAP values saved to: {output_dir / 'raw_shap_values.npy'}")
 
 if __name__ == "__main__":
     main()
