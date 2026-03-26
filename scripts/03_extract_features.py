@@ -349,7 +349,6 @@ def process_window(
         "window_end": window_end,
         "features": features,
         "metrics": eval_metric_records,
-        "daily_metrics": daily_metrics,
     }
 
     del G, day_edges, day_nodes, node_stats, daily_metrics
@@ -526,8 +525,6 @@ def main() -> None:
                         checkpoint["completed_windows"].append(completed_window_id)
                         save_checkpoint(checkpoint_path, checkpoint)
                         
-                        # Free memory: daily_metrics is not needed after features are extracted
-                        del result["daily_metrics"]
                         del result
                         gc.collect()
                     except Exception as exc:

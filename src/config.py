@@ -1,5 +1,5 @@
 from pathlib import Path
-DATASET_SIZE: str = "SMALL"
+DATASET_SIZE: str = "MEDIUM"
 
 _DATASET_CONFIG = {
     "SMALL": {
@@ -16,13 +16,13 @@ _DATASET_CONFIG = {
     },
     "MEDIUM": {
         "data_path": Path("data/HI_Medium"),
-        "window_size": 7,             
+        "window_size": 3,             
         "window_stride": 1,          
-        "pr_alpha_deep": 0.95,      
+        "pr_alpha_deep": 0.85,      
         "pr_alpha_shallow": 0.75,  
-        "pr_max_iter": 1000,      
-        "betweenness_k": 500,    
-        "hits_max_iter": 1000,
+        "pr_max_iter": 100,      
+        "betweenness_k": 200,    
+        "hits_max_iter": 500,
         "leiden_resolution_macro": 2.0,
         "leiden_resolution_micro": 5.0,
     },
