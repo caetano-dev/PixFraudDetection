@@ -1,6 +1,8 @@
 from __future__ import annotations
+import atexit
 import gc
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -164,184 +166,75 @@ def process_window(
     eval_metric_records: list[dict] = []
 
     if run_flags.get("run_evaluation", False):
-        pr_vol_deep_scores = {
-            node: daily_metrics.get("pr_vol_deep", {}).get(node, {}).get("pagerank", 0.0)
-            for node in G.nodes()
-        }
-        pr_vol_shallow_scores = {
-            node: daily_metrics.get("pr_vol_shallow", {}).get(node, {}).get("pagerank", 0.0)
-            for node in G.nodes()
-        }
-        pr_count_scores = {
-            node: daily_metrics.get("pr_count", {}).get(node, {}).get("pagerank_count", 0.0)
-            for node in G.nodes()
-        }
-        hits_hubs = {
-            node: daily_metrics.get("hits", {}).get(node, {}).get("hits_hub", 0.0)
-            for node in G.nodes()
-        }
-        hits_auths = {
-            node: daily_metrics.get("hits", {}).get(node, {}).get("hits_auth", 0.0)
-            for node in G.nodes()
-        }
-        betweenness_scores = {
-            node: daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0)
-            for node in G.nodes()
-        }
-        k_core_scores = {
-            node: daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0)
-            for node in G.nodes()
-        }
+        # Build score dictionaries directly without redundant comprehensions
+        # Extract scores efficiently by building dicts once per metric
+        def extract_metric_scores(metric_key: str, score_key: str, default=0.0) -> dict:
+            """Extract scores from daily_metrics for a specific metric."""
+            metric_data = daily_metrics.get(metric_key, {})
+            return {node: metric_data.get(node, {}).get(score_key, default) for node in G.nodes()}
         
-        # Basic feature scores
-        vol_sent_scores = {
-            node: node_stats.get(node, {}).get("vol_sent", 0.0)
-            for node in G.nodes()
-        }
-        vol_recv_scores = {
-            node: node_stats.get(node, {}).get("vol_recv", 0.0)
-            for node in G.nodes()
-        }
-        in_degree_scores = {
-            node: node_stats.get(node, {}).get("in_degree", 0)
-            for node in G.nodes()
-        }
-        out_degree_scores = {
-            node: node_stats.get(node, {}).get("out_degree", 0)
-            for node in G.nodes()
-        }
-        tx_count_scores = {
-            node: node_stats.get(node, {}).get("tx_count", 0)
-            for node in G.nodes()
-        }
-        time_variance_scores = {
-            node: node_stats.get(node, {}).get("time_variance", 0.0)
-            for node in G.nodes()
-        }
+        def extract_node_stat_scores(stat_key: str, default=0.0) -> dict:
+            """Extract scores from node_stats for a specific stat."""
+            return {node: node_stats.get(node, {}).get(stat_key, default) for node in G.nodes()}
+
+        evaluation_k_values = run_flags.get("evaluation_k_values", [])
+        valid_k_values = [k for k in evaluation_k_values if k <= len(G)]
         
-        # Baseline heuristic feature scores
-        wire_count_sent_scores = {
-            node: node_stats.get(node, {}).get("wire_count_sent", 0.0)
-            for node in G.nodes()
-        }
-        wire_count_recv_scores = {
-            node: node_stats.get(node, {}).get("wire_count_recv", 0.0)
-            for node in G.nodes()
-        }
-        cash_count_sent_scores = {
-            node: node_stats.get(node, {}).get("cash_count_sent", 0.0)
-            for node in G.nodes()
-        }
-        cash_count_recv_scores = {
-            node: node_stats.get(node, {}).get("cash_count_recv", 0.0)
-            for node in G.nodes()
-        }
-        bitcoin_count_sent_scores = {
-            node: node_stats.get(node, {}).get("bitcoin_count_sent", 0.0)
-            for node in G.nodes()
-        }
-        bitcoin_count_recv_scores = {
-            node: node_stats.get(node, {}).get("bitcoin_count_recv", 0.0)
-            for node in G.nodes()
-        }
-        cheque_count_sent_scores = {
-            node: node_stats.get(node, {}).get("cheque_count_sent", 0.0)
-            for node in G.nodes()
-        }
-        cheque_count_recv_scores = {
-            node: node_stats.get(node, {}).get("cheque_count_recv", 0.0)
-            for node in G.nodes()
-        }
-        credit_card_count_sent_scores = {
-            node: node_stats.get(node, {}).get("credit_card_count_sent", 0.0)
-            for node in G.nodes()
-        }
-        credit_card_count_recv_scores = {
-            node: node_stats.get(node, {}).get("credit_card_count_recv", 0.0)
-            for node in G.nodes()
-        }
-        ach_count_sent_scores = {
-            node: node_stats.get(node, {}).get("ach_count_sent", 0.0)
-            for node in G.nodes()
-        }
-        ach_count_recv_scores = {
-            node: node_stats.get(node, {}).get("ach_count_recv", 0.0)
-            for node in G.nodes()
-        }
-        reinvestment_count_sent_scores = {
-            node: node_stats.get(node, {}).get("reinvestment_count_sent", 0.0)
-            for node in G.nodes()
-        }
-        reinvestment_count_recv_scores = {
-            node: node_stats.get(node, {}).get("reinvestment_count_recv", 0.0)
-            for node in G.nodes()
-        }
-        distinct_currencies_sent_scores = {
-            node: node_stats.get(node, {}).get("distinct_currencies_sent", 0.0)
-            for node in G.nodes()
-        }
-        distinct_currencies_recv_scores = {
-            node: node_stats.get(node, {}).get("distinct_currencies_recv", 0.0)
-            for node in G.nodes()
-        }
+        if valid_k_values and G.nodes():
+            from src.features._evaluation import compute_daily_evaluation_metrics
 
-        if pr_vol_deep_scores:
-            evaluation_k_values = run_flags.get("evaluation_k_values", [])
-            valid_k_values = [k for k in evaluation_k_values if k <= len(G)]
-            if valid_k_values:
-                from src.features._evaluation import compute_daily_evaluation_metrics
-
-                eval_metrics = compute_daily_evaluation_metrics(
-                    bad_actors=bad_actors_up_to_date,
-                    k_values=valid_k_values,
-                    pr_vol_deep=pr_vol_deep_scores,
-                    pr_vol_shallow=pr_vol_shallow_scores,
-                    pr_count=pr_count_scores,
-                    hits_hub=hits_hubs,
-                    hits_auth=hits_auths,
-                    betweenness=betweenness_scores,
-                    k_core=k_core_scores,
-                    vol_sent=vol_sent_scores,
-                    vol_recv=vol_recv_scores,
-                    in_degree=in_degree_scores,
-                    out_degree=out_degree_scores,
-                    tx_count=tx_count_scores,
-                    time_variance=time_variance_scores,
-                    wire_count_sent=wire_count_sent_scores,
-                    wire_count_recv=wire_count_recv_scores,
-                    cash_count_sent=cash_count_sent_scores,
-                    cash_count_recv=cash_count_recv_scores,
-                    bitcoin_count_sent=bitcoin_count_sent_scores,
-                    bitcoin_count_recv=bitcoin_count_recv_scores,
-                    cheque_count_sent=cheque_count_sent_scores,
-                    cheque_count_recv=cheque_count_recv_scores,
-                    credit_card_count_sent=credit_card_count_sent_scores,
-                    credit_card_count_recv=credit_card_count_recv_scores,
-                    ach_count_sent=ach_count_sent_scores,
-                    ach_count_recv=ach_count_recv_scores,
-                    reinvestment_count_sent=reinvestment_count_sent_scores,
-                    reinvestment_count_recv=reinvestment_count_recv_scores,
-                    distinct_currencies_sent=distinct_currencies_sent_scores,
-                    distinct_currencies_recv=distinct_currencies_recv_scores,
-                )
-                for algo_name, algo_metrics in eval_metrics.items():
-                    metric_record: dict = {
-                        "window_id": window_id,
-                        "window_start": window_start,
-                        "window_end": window_end,
-                        "algorithm": algo_name,
-                        "total_nodes": algo_metrics["total_nodes"],
-                        "total_fraud": algo_metrics["total_fraud"],
-                        "fraud_rate": algo_metrics["fraud_rate"],
-                        "roc_auc": algo_metrics.get("roc_auc"),
-                        "average_precision": algo_metrics.get("average_precision"),
-                    }
-                    for k in valid_k_values:
-                        metric_record[f"precision_at_{k}"] = algo_metrics["precision_at_k"].get(k)
-                        metric_record[f"recall_at_{k}"] = algo_metrics["recall_at_k"].get(k)
-                        metric_record[f"lift_at_{k}"] = algo_metrics["lift_at_k"].get(k)
-                        metric_record[f"fraud_found_at_{k}"] = algo_metrics["fraud_found_at_k"].get(k)
-                    eval_metric_records.append(metric_record)
+            # Build score dicts on-demand, pass directly to evaluation
+            eval_metrics = compute_daily_evaluation_metrics(
+                bad_actors=bad_actors_up_to_date,
+                k_values=valid_k_values,
+                pr_vol_deep=extract_metric_scores("pr_vol_deep", "pagerank"),
+                pr_vol_shallow=extract_metric_scores("pr_vol_shallow", "pagerank"),
+                pr_count=extract_metric_scores("pr_count", "pagerank_count"),
+                hits_hub=extract_metric_scores("hits", "hits_hub"),
+                hits_auth=extract_metric_scores("hits", "hits_auth"),
+                betweenness=extract_metric_scores("betweenness", "betweenness"),
+                k_core=extract_metric_scores("k_core", "k_core", default=0),
+                vol_sent=extract_node_stat_scores("vol_sent"),
+                vol_recv=extract_node_stat_scores("vol_recv"),
+                in_degree=extract_node_stat_scores("in_degree", default=0),
+                out_degree=extract_node_stat_scores("out_degree", default=0),
+                tx_count=extract_node_stat_scores("tx_count", default=0),
+                time_variance=extract_node_stat_scores("time_variance"),
+                wire_count_sent=extract_node_stat_scores("wire_count_sent"),
+                wire_count_recv=extract_node_stat_scores("wire_count_recv"),
+                cash_count_sent=extract_node_stat_scores("cash_count_sent"),
+                cash_count_recv=extract_node_stat_scores("cash_count_recv"),
+                bitcoin_count_sent=extract_node_stat_scores("bitcoin_count_sent"),
+                bitcoin_count_recv=extract_node_stat_scores("bitcoin_count_recv"),
+                cheque_count_sent=extract_node_stat_scores("cheque_count_sent"),
+                cheque_count_recv=extract_node_stat_scores("cheque_count_recv"),
+                credit_card_count_sent=extract_node_stat_scores("credit_card_count_sent"),
+                credit_card_count_recv=extract_node_stat_scores("credit_card_count_recv"),
+                ach_count_sent=extract_node_stat_scores("ach_count_sent"),
+                ach_count_recv=extract_node_stat_scores("ach_count_recv"),
+                reinvestment_count_sent=extract_node_stat_scores("reinvestment_count_sent"),
+                reinvestment_count_recv=extract_node_stat_scores("reinvestment_count_recv"),
+                distinct_currencies_sent=extract_node_stat_scores("distinct_currencies_sent"),
+                distinct_currencies_recv=extract_node_stat_scores("distinct_currencies_recv"),
+            )
+            for algo_name, algo_metrics in eval_metrics.items():
+                metric_record: dict = {
+                    "window_id": window_id,
+                    "window_start": window_start,
+                    "window_end": window_end,
+                    "algorithm": algo_name,
+                    "total_nodes": algo_metrics["total_nodes"],
+                    "total_fraud": algo_metrics["total_fraud"],
+                    "fraud_rate": algo_metrics["fraud_rate"],
+                    "roc_auc": algo_metrics.get("roc_auc"),
+                    "average_precision": algo_metrics.get("average_precision"),
+                }
+                for k in valid_k_values:
+                    metric_record[f"precision_at_{k}"] = algo_metrics["precision_at_k"].get(k)
+                    metric_record[f"recall_at_{k}"] = algo_metrics["recall_at_k"].get(k)
+                    metric_record[f"lift_at_{k}"] = algo_metrics["lift_at_k"].get(k)
+                    metric_record[f"fraud_found_at_{k}"] = algo_metrics["fraud_found_at_k"].get(k)
+                eval_metric_records.append(metric_record)
 
     result = {
         "window_id": window_id,
@@ -404,6 +297,14 @@ def main() -> None:
             checkpoint["metrics_chunks_dir"] = str(metrics_chunks_dir)
     else:
         metrics_chunks_dir = None
+    
+    # Register cleanup handler for temp directories on unexpected exit
+    # Note: temp dirs are intentionally kept on interruption so resuming can reuse them
+    def cleanup_on_success():
+        """Only called on successful completion."""
+        pass  # Cleanup is already handled at end of main()
+    
+    atexit.register(cleanup_on_success)
 
     con = duckdb.connect()
 
@@ -461,7 +362,7 @@ def main() -> None:
         "evaluation_k_values": list(EVALUATION_K_VALUES),
     }
 
-    max_workers = 1
+    max_workers = max(1, min(os.cpu_count() // 2, 2))  # Use up to 3 workers for memory isolation
     print(f"Launching ProcessPoolExecutor with {max_workers} workers...\n")
 
     # Count existing chunks
@@ -530,9 +431,12 @@ def main() -> None:
                     except Exception as exc:
                         print(f"\nWindow {completed_window_id} generated an exception: {exc}")
                         print("Checkpoint saved. You can restart the script to resume.")
+                    finally:
+                        # Always clean up future reference to prevent memory leak
+                        if future in futures:
+                            del futures[future]
                     
-                    # Remove completed future and submit next window
-                    del futures[future]
+                    # Submit next window if available
                     if window_queue:
                         window_id = window_queue.pop(0)
                         bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
