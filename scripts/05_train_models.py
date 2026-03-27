@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 import shap
 import xgboost as xgb
+from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import (
     average_precision_score,
     f1_score,
@@ -57,14 +58,34 @@ BEHAVIORAL_COLS = [
 ]
 
 TOPOLOGICAL_COLS = [
-    'pr_vol_deep', 'pr_vol_shallow', 'pr_count', 'hits_hub', 'hits_auth',
-    'leiden_macro_size', 'leiden_macro_modularity', 'leiden_micro_size',
-    'leiden_micro_modularity', 'betweenness', 'k_core', 'degree', 'in_degree',
-    'out_degree', 'fan_out_count', 'fan_in_count', 'scatter_gather_count',
+    # Removed static features that destroy temporal patterns:
+    # - pr_vol_deep, pr_vol_shallow, pr_count (static PageRank)
+    # - leiden_macro_modularity, leiden_micro_modularity (static community)
+    # - betweenness, k_core (static centrality)
+    # - 'hits_hub', 'hits_auth',
+    
+    # Community size features (temporal community size can indicate laundering networks)
+    'leiden_macro_size', 'leiden_micro_size',
+    
+    # Structural connectivity (basic degree features preserved)
+    'degree', 'in_degree', 'out_degree',
+    
+    # Motif patterns (these capture sequential patterns, kept from original)
+    'fan_out_count', 'fan_in_count', 'scatter_gather_count',
     'gather_scatter_count', 'cycle_count',
+    
+    # Ego-network features (local neighborhood structure)
     'egonet_node_count', 'egonet_edge_count', 'egonet_density', 'egonet_total_weight',
+    
+    # Clustering features (local cohesion)
     'local_clustering_coefficient', 'triangle_count',
-    'average_neighbor_degree', 'successor_avg_volume', 'successor_max_volume'
+    
+    # Neighbor aggregation features
+    'average_neighbor_degree', 'successor_avg_volume', 'successor_max_volume',
+    
+    # TEMPORAL MOTIFS (newly integrated - capture chronological laundering patterns)
+    'temporal_triangle_count', 'temporal_fan_out_count', 
+    'temporal_fan_in_count', 'sequential_scatter_gather_count',
 ]
 
 FULL_COLS = BEHAVIORAL_COLS + TOPOLOGICAL_COLS
@@ -103,34 +124,161 @@ def compute_precision_at_k(y_true: np.ndarray, y_probs: np.ndarray, k: int) -> f
 def undersample_data(
     data: pd.DataFrame,
     target_col: str = "is_fraud",
-    ratio: int = UNDERSAMPLE_RATIO
+    ratio: int = UNDERSAMPLE_RATIO,
+    use_hard_negative_mining: bool = True
 ) -> pd.DataFrame:
-    """Enforce strict 1:N asymmetric undersampling for class balance."""
+    """
+    Enforce strict 1:N asymmetric undersampling with density-based hard-negative mining.
+    
+    Instead of random sampling, this implementation uses clustering to identify
+    normal entities that are closest to the fraud distribution in behavioral
+    feature space. This forces the model to learn complex decision boundaries.
+    
+    Args:
+        data: DataFrame with features and target
+        target_col: Name of binary target column
+        ratio: Undersampling ratio (normal:fraud)
+        use_hard_negative_mining: If True, use clustering-based sampling; 
+                                   if False, use random sampling (original behavior)
+    
+    Returns:
+        Undersampled DataFrame with balanced classes
+    """
     fraud = data[data[target_col] == 1]
     normal = data[data[target_col] == 0]
     target_count = len(fraud) * ratio
 
-    if len(normal) > target_count:
+    if len(normal) <= target_count:
+        # No undersampling needed
+        result = pd.concat([fraud, normal]).sample(frac=1, random_state=42)
+        return result
+    
+    if not use_hard_negative_mining or len(fraud) < 2:
+        # Fall back to random sampling if disabled or insufficient fraud samples
         normal = normal.sample(n=target_count, random_state=42)
-
-    result = pd.concat([fraud, normal]).sample(frac=1, random_state=42)
+        result = pd.concat([fraud, normal]).sample(frac=1, random_state=42)
+        return result
+    
+    # Hard-negative mining using behavioral features only
+    behavioral_features = [
+        'vol_sent', 'vol_recv', 'tx_count', 'time_variance', 'flow_ratio',
+        'distinct_currencies_sent', 'distinct_currencies_recv',
+        'wire_count_sent', 'cash_count_sent', 'bitcoin_count_sent', 
+        'cheque_count_sent', 'credit_card_count_sent', 'ach_count_sent', 
+        'reinvestment_count_sent', 'wire_count_recv', 'cash_count_recv',
+        'bitcoin_count_recv', 'cheque_count_recv', 'credit_card_count_recv',
+        'ach_count_recv', 'reinvestment_count_recv'
+    ]
+    
+    # Use only features that exist in the DataFrame
+    available_features = [f for f in behavioral_features if f in normal.columns]
+    
+    if len(available_features) == 0:
+        # No behavioral features available, fall back to random
+        normal = normal.sample(n=target_count, random_state=42)
+        result = pd.concat([fraud, normal]).sample(frac=1, random_state=42)
+        return result
+    
+    # Compute fraud centroid in behavioral feature space
+    fraud_features = fraud[available_features].fillna(0).values
+    fraud_centroid = np.mean(fraud_features, axis=0)
+    
+    # Fit MiniBatchKMeans on normal class (memory-efficient for 8GB constraint)
+    normal_features = normal[available_features].fillna(0).values
+    
+    # Number of clusters: min(sqrt(n_normal), target_count/2)
+    # This ensures we have enough diversity while keeping memory usage low
+    n_clusters = min(int(np.sqrt(len(normal))), max(10, target_count // 2))
+    
+    kmeans = MiniBatchKMeans(
+        n_clusters=n_clusters,
+        random_state=42,
+        batch_size=1024,  # Memory-efficient batch processing
+        n_init=3,
+        max_iter=100
+    )
+    
+    cluster_labels = kmeans.fit_predict(normal_features)
+    cluster_centers = kmeans.cluster_centers_
+    
+    # Compute distance from each cluster center to fraud centroid
+    distances_to_fraud = np.linalg.norm(
+        cluster_centers - fraud_centroid.reshape(1, -1), 
+        axis=1
+    )
+    
+    # Rank clusters by proximity to fraud (closest = highest risk)
+    cluster_ranking = np.argsort(distances_to_fraud)
+    
+    # Sample from high-risk clusters (closest to fraud distribution)
+    selected_indices = []
+    samples_per_cluster = target_count // len(cluster_ranking)
+    remainder = target_count % len(cluster_ranking)
+    
+    for rank, cluster_id in enumerate(cluster_ranking):
+        cluster_mask = cluster_labels == cluster_id
+        cluster_indices = normal.index[cluster_mask].tolist()
+        
+        if not cluster_indices:
+            continue
+        
+        # Allocate more samples to closer clusters
+        n_samples = samples_per_cluster + (1 if rank < remainder else 0)
+        n_samples = min(n_samples, len(cluster_indices))
+        
+        sampled = np.random.RandomState(42 + rank).choice(
+            cluster_indices, 
+            size=n_samples, 
+            replace=False
+        )
+        selected_indices.extend(sampled)
+        
+        if len(selected_indices) >= target_count:
+            break
+    
+    # Ensure exact target count
+    selected_indices = selected_indices[:target_count]
+    normal_sampled = normal.loc[selected_indices]
+    
+    result = pd.concat([fraud, normal_sampled]).sample(frac=1, random_state=42)
     return result
 
 
 def calibrate_threshold(
     y_true: np.ndarray,
-    y_probs: np.ndarray
+    y_probs: np.ndarray,
+    target_recall: float = 0.85
 ) -> float:
-    """Find optimal threshold using F1 maximization on validation set."""
+    """
+    Find optimal threshold using recall-constrained precision maximization.
+    
+    In AML, recall is the operational priority. This function finds the highest
+    possible threshold (maximizing precision/minimizing false alerts) that 
+    strictly maintains the minimum target recall.
+    
+    Args:
+        y_true: Ground truth binary labels
+        y_probs: Predicted probabilities
+        target_recall: Minimum recall to maintain (default 0.85)
+        
+    Returns:
+        Optimal threshold that maintains target_recall with highest precision
+    """
     precisions, recalls, thresholds = precision_recall_curve(y_true, y_probs)
-    f1_scores = np.divide(
-        2 * precisions * recalls,
-        precisions + recalls,
-        out=np.zeros_like(precisions),
-        where=(precisions + recalls) != 0
-    )
-    optimal_idx = np.argmax(f1_scores)
-    optimal_threshold = thresholds[optimal_idx] if optimal_idx < len(thresholds) else 0.5
+    
+    # Find all thresholds that meet or exceed the target recall
+    # Note: recalls array is in descending order
+    valid_indices = np.where(recalls >= target_recall)[0]
+    
+    if len(valid_indices) == 0:
+        # If target recall cannot be achieved, use lowest threshold
+        return float(thresholds[0]) if len(thresholds) > 0 else 0.0
+    
+    # Among valid thresholds, select the one with highest precision
+    # (which corresponds to the highest threshold value)
+    best_idx = valid_indices[np.argmax(precisions[valid_indices])]
+    optimal_threshold = thresholds[best_idx] if best_idx < len(thresholds) else thresholds[-1]
+    
     return float(optimal_threshold)
 
 

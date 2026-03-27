@@ -36,6 +36,7 @@ from src.features.motifs import SubgraphMotifExtractor
 from src.features.egonet import EgonetExtractor
 from src.features.clustering import ClusteringExtractor
 from src.features.neighbor_aggregation import NeighborAggregationExtractor
+from src.features.temporal_motifs import extract_temporal_motifs_from_transactions
 
 
 def process_window(
@@ -64,12 +65,13 @@ def process_window(
         return {"window_id": window_id, "status": "success", "has_features": False, "has_metrics": False}
 
     extractors: dict[str, FeatureExtractor] = {
-        "pr_vol_deep": PageRankVolumeExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
-        "pr_vol_shallow": PageRankVolumeExtractor(alpha=PR_ALPHA_SHALLOW, max_iter=PR_MAX_ITER),
-        "pr_count": PageRankFrequencyExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
-        "hits": HITSExtractor(max_iter=HITS_MAX_ITER),
-        "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
-        "k_core": KCoreExtractor(),
+        # COMMENTED OUT: Memory-hogging static topology extractors that destroy temporal patterns
+        # "pr_vol_deep": PageRankVolumeExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
+        # "pr_vol_shallow": PageRankVolumeExtractor(alpha=PR_ALPHA_SHALLOW, max_iter=PR_MAX_ITER),
+        # "pr_count": PageRankFrequencyExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
+        # "hits": HITSExtractor(max_iter=HITS_MAX_ITER),
+        # "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
+        # "k_core": KCoreExtractor(),
         "motifs": SubgraphMotifExtractor(fan_threshold=6, cycle_bound=6, max_degree=16, max_cycles=2000),
         "egonet": EgonetExtractor(radius=1),
         "clustering": ClusteringExtractor(),
@@ -112,11 +114,46 @@ def process_window(
     for key, extractor in extractors.items():
         daily_metrics[key] = extractor.extract(G)
 
+    # ===== TEMPORAL MOTIFS INTEGRATION =====
+    # Load raw transaction data for this window to extract temporal motifs
+    # Get window boundaries from the nodes data
+    if not day_nodes.empty:
+        window_start = day_nodes['window_start'].iloc[0]
+        window_end = day_nodes['window_end'].iloc[0]
+    else:
+        window_start = None
+        window_end = None
+    
+    transactions_path = run_flags.get("transactions_path", DATA_PATH / "1_filtered_transactions.parquet")
+    if window_start is not None and window_end is not None:
+        query_txns = (
+            f"SELECT from_account, to_account, timestamp "
+            f"FROM read_parquet('{str(transactions_path)}') "
+            f"WHERE timestamp >= TIMESTAMP '{window_start}' AND timestamp < TIMESTAMP '{window_end}'"
+        )
+        window_transactions = duckdb.query(query_txns).df()
+    else:
+        window_transactions = pd.DataFrame(columns=['from_account', 'to_account', 'timestamp'])
+    
+    # Extract temporal motifs from raw transaction data
+    temporal_motifs = extract_temporal_motifs_from_transactions(
+        transactions_df=window_transactions,
+        window_id=window_id,
+        source_col='from_account',
+        target_col='to_account',
+        timestamp_col='timestamp',
+        delta_t_window=86400  # 1 day in seconds
+    )
+    
+    # Clean up transaction data
+    del window_transactions
+    gc.collect()
+    # ===== END TEMPORAL MOTIFS =====
+
     bad_actors_up_to_date: set = run_flags.get("bad_actors", set()) # AMLworld, graph based anomaly survey
 
     features: list[dict] = []
-    for node in day_nodes["entity_id"].unique():
-        ns = node_stats.get(node, {})
+    for node in day_nodes["entity_id"].unique(): ns = node_stats.get(node, {})
         vol_s = ns.get("vol_sent", 0.0)
         vol_r = ns.get("vol_recv", 0.0)
 
@@ -125,11 +162,12 @@ def process_window(
             "window_start": window_start,
             "window_end": window_end,
             "entity_id": node,
-            "pr_vol_deep": daily_metrics.get("pr_vol_deep", {}).get(node, {}).get("pagerank", 0.0),
-            "pr_vol_shallow": daily_metrics.get("pr_vol_shallow", {}).get(node, {}).get("pagerank", 0.0),
-            "pr_count": daily_metrics.get("pr_count", {}).get(node, {}).get("pagerank_count", 0.0),
-            "hits_hub": daily_metrics.get("hits", {}).get(node, {}).get("hits_hub", 0.0),
-            "hits_auth": daily_metrics.get("hits", {}).get(node, {}).get("hits_auth", 0.0),
+            # COMMENTED OUT: Static topology features
+            # "pr_vol_deep": daily_metrics.get("pr_vol_deep", {}).get(node, {}).get("pagerank", 0.0),
+            # "pr_vol_shallow": daily_metrics.get("pr_vol_shallow", {}).get(node, {}).get("pagerank", 0.0),
+            # "pr_count": daily_metrics.get("pr_count", {}).get(node, {}).get("pagerank_count", 0.0),
+            # "hits_hub": daily_metrics.get("hits", {}).get(node, {}).get("hits_hub", 0.0),
+            # "hits_auth": daily_metrics.get("hits", {}).get(node, {}).get("hits_auth", 0.0),
             "leiden_macro_id": daily_metrics.get("leiden_macro", {}).get(node, {}).get("leiden_id", -1),
             "leiden_macro_size": daily_metrics.get("leiden_macro", {}).get(node, {}).get("leiden_size", 0),
             "leiden_macro_modularity": daily_metrics.get("leiden_macro", {}).get(node, {}).get("leiden_modularity", 0.0),
@@ -161,8 +199,9 @@ def process_window(
             "ach_count_recv": ns.get("ach_count_recv", 0),
             "reinvestment_count_sent": ns.get("reinvestment_count_sent", 0),
             "reinvestment_count_recv": ns.get("reinvestment_count_recv", 0),
-            "betweenness": daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0),
-            "k_core": daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0),
+            # COMMENTED OUT: Static topology features
+            # "betweenness": daily_metrics.get("betweenness", {}).get(node, {}).get("betweenness", 0.0),
+            # "k_core": daily_metrics.get("k_core", {}).get(node, {}).get("k_core", 0),
             "fan_out_count": daily_metrics.get("motifs", {}).get(node, {}).get("fan_out_count", 0),
             "fan_in_count": daily_metrics.get("motifs", {}).get(node, {}).get("fan_in_count", 0),
             "scatter_gather_count": daily_metrics.get("motifs", {}).get(node, {}).get("scatter_gather_count", 0),
@@ -177,6 +216,11 @@ def process_window(
             "average_neighbor_degree": daily_metrics.get("neighbor_agg", {}).get(node, {}).get("average_neighbor_degree", 0.0),
             "successor_avg_volume": daily_metrics.get("neighbor_agg", {}).get(node, {}).get("successor_avg_volume", 0.0),
             "successor_max_volume": daily_metrics.get("neighbor_agg", {}).get(node, {}).get("successor_max_volume", 0.0),
+            # TEMPORAL MOTIFS (newly integrated)
+            "temporal_triangle_count": temporal_motifs.get(node, {}).get("temporal_triangle_count", 0),
+            "temporal_fan_out_count": temporal_motifs.get(node, {}).get("temporal_fan_out_count", 0),
+            "temporal_fan_in_count": temporal_motifs.get(node, {}).get("temporal_fan_in_count", 0),
+            "sequential_scatter_gather_count": temporal_motifs.get(node, {}).get("sequential_scatter_gather_count", 0),
         }
         features.append(record)
 
@@ -205,13 +249,14 @@ def process_window(
             eval_metrics = compute_daily_evaluation_metrics(
                 bad_actors=bad_actors_up_to_date,
                 k_values=valid_k_values,
-                pr_vol_deep=extract_metric_scores("pr_vol_deep", "pagerank"),
-                pr_vol_shallow=extract_metric_scores("pr_vol_shallow", "pagerank"),
-                pr_count=extract_metric_scores("pr_count", "pagerank_count"),
-                hits_hub=extract_metric_scores("hits", "hits_hub"),
-                hits_auth=extract_metric_scores("hits", "hits_auth"),
-                betweenness=extract_metric_scores("betweenness", "betweenness"),
-                k_core=extract_metric_scores("k_core", "k_core", default=0),
+                # COMMENTED OUT: Static topology features
+                # pr_vol_deep=extract_metric_scores("pr_vol_deep", "pagerank"),
+                # pr_vol_shallow=extract_metric_scores("pr_vol_shallow", "pagerank"),
+                # pr_count=extract_metric_scores("pr_count", "pagerank_count"),
+                # hits_hub=extract_metric_scores("hits", "hits_hub"),
+                # hits_auth=extract_metric_scores("hits", "hits_auth"),
+                # betweenness=extract_metric_scores("betweenness", "betweenness"),
+                # k_core=extract_metric_scores("k_core", "k_core", default=0),
                 egonet_node_count=extract_metric_scores("egonet", "egonet_node_count", default=1),
                 egonet_edge_count=extract_metric_scores("egonet", "egonet_edge_count", default=0),
                 egonet_density=extract_metric_scores("egonet", "egonet_density", default=0.0),
@@ -359,6 +404,7 @@ def main() -> None:
 
     edges_path = DATA_PATH / "lookback_edges.parquet"
     nodes_path = DATA_PATH / "target_nodes.parquet" 
+    transactions_path = DATA_PATH / "1_filtered_transactions.parquet"
     features_out = DATA_PATH / OUTPUT_FEATURES_FILE
     
     # Checkpoint file to track progress
@@ -445,6 +491,7 @@ def main() -> None:
         "run_evaluation": RUN_EVALUATION,
         "run_leiden": RUN_LEIDEN,
         "evaluation_k_values": list(EVALUATION_K_VALUES),
+        "transactions_path": transactions_path,
     }
 
     max_workers = max(1, min(os.cpu_count() // 2, 2))  # Use up to 3 workers for memory isolation
