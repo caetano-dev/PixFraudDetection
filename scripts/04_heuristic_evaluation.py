@@ -47,6 +47,15 @@ HEURISTIC_FEATURES = [
     'degree',
     'in_degree',
     'out_degree',
+    'egonet_node_count',
+    'egonet_edge_count',
+    'egonet_density',
+    'egonet_total_weight',
+    'local_clustering_coefficient',
+    'triangle_count',
+    'average_neighbor_degree',
+    'successor_avg_volume',
+    'successor_max_volume',
 ]
 
 K_VALUES = [10, 50, 100, 500]

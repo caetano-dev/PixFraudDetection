@@ -61,7 +61,10 @@ TOPOLOGICAL_COLS = [
     'leiden_macro_size', 'leiden_macro_modularity', 'leiden_micro_size',
     'leiden_micro_modularity', 'betweenness', 'k_core', 'degree', 'in_degree',
     'out_degree', 'fan_out_count', 'fan_in_count', 'scatter_gather_count',
-    'gather_scatter_count', 'cycle_count'
+    'gather_scatter_count', 'cycle_count',
+    'egonet_node_count', 'egonet_edge_count', 'egonet_density', 'egonet_total_weight',
+    'local_clustering_coefficient', 'triangle_count',
+    'average_neighbor_degree', 'successor_avg_volume', 'successor_max_volume'
 ]
 
 FULL_COLS = BEHAVIORAL_COLS + TOPOLOGICAL_COLS

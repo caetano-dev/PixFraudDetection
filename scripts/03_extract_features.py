@@ -33,6 +33,9 @@ from src.features.centrality import (
 )
 from src.features.community import KCoreExtractor, LeidenCommunityExtractor
 from src.features.motifs import SubgraphMotifExtractor
+from src.features.egonet import EgonetExtractor
+from src.features.clustering import ClusteringExtractor
+from src.features.neighbor_aggregation import NeighborAggregationExtractor
 
 
 def process_window(
@@ -40,6 +43,8 @@ def process_window(
     edges_path: Path,
     nodes_path: Path,
     run_flags: dict,
+    feature_chunks_dir: Path,
+    metrics_chunks_dir: Path | None,
 ) -> dict:
     query_edges = (
         f"SELECT * FROM read_parquet('{str(edges_path)}') "
@@ -56,7 +61,7 @@ def process_window(
     if day_edges.empty or day_nodes.empty:
         del day_edges, day_nodes
         gc.collect()
-        return {"window_id": window_id, "window_start": None, "features": [], "metrics": [], "daily_metrics": {}}
+        return {"window_id": window_id, "status": "success", "has_features": False, "has_metrics": False}
 
     extractors: dict[str, FeatureExtractor] = {
         "pr_vol_deep": PageRankVolumeExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
@@ -66,6 +71,9 @@ def process_window(
         "betweenness": BetweennessExtractor(k=BETWEENNESS_K, seed=42),
         "k_core": KCoreExtractor(),
         "motifs": SubgraphMotifExtractor(fan_threshold=6, cycle_bound=6, max_degree=16, max_cycles=2000),
+        "egonet": EgonetExtractor(radius=1),
+        "clustering": ClusteringExtractor(),
+        "neighbor_agg": NeighborAggregationExtractor(),
     }
 
     if run_flags.get("run_leiden", False):
@@ -160,6 +168,15 @@ def process_window(
             "scatter_gather_count": daily_metrics.get("motifs", {}).get(node, {}).get("scatter_gather_count", 0),
             "gather_scatter_count": daily_metrics.get("motifs", {}).get(node, {}).get("gather_scatter_count", 0),
             "cycle_count": daily_metrics.get("motifs", {}).get(node, {}).get("cycle_count", 0),
+            "egonet_node_count": daily_metrics.get("egonet", {}).get(node, {}).get("egonet_node_count", 1),
+            "egonet_edge_count": daily_metrics.get("egonet", {}).get(node, {}).get("egonet_edge_count", 0),
+            "egonet_density": daily_metrics.get("egonet", {}).get(node, {}).get("egonet_density", 0.0),
+            "egonet_total_weight": daily_metrics.get("egonet", {}).get(node, {}).get("egonet_total_weight", 0.0),
+            "local_clustering_coefficient": daily_metrics.get("clustering", {}).get(node, {}).get("local_clustering_coefficient", 0.0),
+            "triangle_count": daily_metrics.get("clustering", {}).get(node, {}).get("triangle_count", 0),
+            "average_neighbor_degree": daily_metrics.get("neighbor_agg", {}).get(node, {}).get("average_neighbor_degree", 0.0),
+            "successor_avg_volume": daily_metrics.get("neighbor_agg", {}).get(node, {}).get("successor_avg_volume", 0.0),
+            "successor_max_volume": daily_metrics.get("neighbor_agg", {}).get(node, {}).get("successor_max_volume", 0.0),
         }
         features.append(record)
 
@@ -180,10 +197,11 @@ def process_window(
         evaluation_k_values = run_flags.get("evaluation_k_values", [])
         valid_k_values = [k for k in evaluation_k_values if k <= len(G)]
         
-        if valid_k_values and G.nodes():
+        if evaluation_k_values and G.nodes():
             from src.features._evaluation import compute_daily_evaluation_metrics
 
             # Build score dicts on-demand, pass directly to evaluation
+            # Only compute metrics for valid k values
             eval_metrics = compute_daily_evaluation_metrics(
                 bad_actors=bad_actors_up_to_date,
                 k_values=valid_k_values,
@@ -194,6 +212,15 @@ def process_window(
                 hits_auth=extract_metric_scores("hits", "hits_auth"),
                 betweenness=extract_metric_scores("betweenness", "betweenness"),
                 k_core=extract_metric_scores("k_core", "k_core", default=0),
+                egonet_node_count=extract_metric_scores("egonet", "egonet_node_count", default=1),
+                egonet_edge_count=extract_metric_scores("egonet", "egonet_edge_count", default=0),
+                egonet_density=extract_metric_scores("egonet", "egonet_density", default=0.0),
+                egonet_total_weight=extract_metric_scores("egonet", "egonet_total_weight", default=0.0),
+                local_clustering_coefficient=extract_metric_scores("clustering", "local_clustering_coefficient", default=0.0),
+                triangle_count=extract_metric_scores("clustering", "triangle_count", default=0),
+                average_neighbor_degree=extract_metric_scores("neighbor_agg", "average_neighbor_degree", default=0.0),
+                successor_avg_volume=extract_metric_scores("neighbor_agg", "successor_avg_volume", default=0.0),
+                successor_max_volume=extract_metric_scores("neighbor_agg", "successor_max_volume", default=0.0),
                 vol_sent=extract_node_stat_scores("vol_sent"),
                 vol_recv=extract_node_stat_scores("vol_recv"),
                 in_degree=extract_node_stat_scores("in_degree", default=0),
@@ -229,22 +256,80 @@ def process_window(
                     "roc_auc": algo_metrics.get("roc_auc"),
                     "average_precision": algo_metrics.get("average_precision"),
                 }
-                for k in valid_k_values:
-                    metric_record[f"precision_at_{k}"] = algo_metrics["precision_at_k"].get(k)
-                    metric_record[f"recall_at_{k}"] = algo_metrics["recall_at_k"].get(k)
-                    metric_record[f"lift_at_{k}"] = algo_metrics["lift_at_k"].get(k)
-                    metric_record[f"fraud_found_at_{k}"] = algo_metrics["fraud_found_at_k"].get(k)
+                # CRITICAL: Iterate over ALL evaluation_k_values unconditionally
+                # Insert None for invalid k values to ensure identical schema across all chunks
+                for k in evaluation_k_values:
+                    if k in valid_k_values:
+                        metric_record[f"precision_at_{k}"] = algo_metrics["precision_at_k"].get(k)
+                        metric_record[f"recall_at_{k}"] = algo_metrics["recall_at_k"].get(k)
+                        metric_record[f"lift_at_{k}"] = algo_metrics["lift_at_k"].get(k)
+                        metric_record[f"fraud_found_at_{k}"] = algo_metrics["fraud_found_at_k"].get(k)
+                    else:
+                        # k > len(G), insert None to maintain schema consistency
+                        metric_record[f"precision_at_{k}"] = None
+                        metric_record[f"recall_at_{k}"] = None
+                        metric_record[f"lift_at_{k}"] = None
+                        metric_record[f"fraud_found_at_{k}"] = None
                 eval_metric_records.append(metric_record)
 
+    # Write features to disk in worker process
+    has_features = False
+    if features:
+        feature_df = pd.DataFrame(features)
+        chunk_path = feature_chunks_dir / f"features_{window_id}.parquet"
+        feature_df.to_parquet(chunk_path, index=False)
+        del feature_df
+        has_features = True
+
+    # Write metrics to disk in worker process
+    has_metrics = False
+    if run_flags.get("run_evaluation", False) and eval_metric_records and metrics_chunks_dir:
+        metrics_df = pd.DataFrame(eval_metric_records)
+        metrics_chunk_path = metrics_chunks_dir / f"metrics_{window_id}.parquet"
+        metrics_df.to_parquet(metrics_chunk_path, index=False)
+        del metrics_df
+        has_metrics = True
+
+    # Return only lightweight metadata
     result = {
         "window_id": window_id,
-        "window_start": window_start,
-        "window_end": window_end,
-        "features": features,
-        "metrics": eval_metric_records,
+        "status": "success",
+        "has_features": has_features,
+        "has_metrics": has_metrics,
     }
 
-    del G, day_edges, day_nodes, node_stats, daily_metrics
+    # Best-effort: explicitly clear large structures to help free memory in worker processes
+    try:
+        G.clear()
+    except Exception:
+        pass
+
+    # Close/clear any extractor resources if they expose a close method
+    try:
+        for _ext in list(extractors.values()):
+            if hasattr(_ext, "close"):
+                try:
+                    _ext.close()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+    # Clear large dicts and delete references
+    try:
+        daily_metrics.clear()
+    except Exception:
+        pass
+    try:
+        node_stats.clear()
+    except Exception:
+        pass
+    try:
+        extractors.clear()
+    except Exception:
+        pass
+
+    del G, day_edges, day_nodes, node_stats, daily_metrics, extractors
     gc.collect()
 
     return result
@@ -376,51 +461,41 @@ def main() -> None:
     # Only run processing if there are windows remaining
     if unique_window_ids:
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            # Submit ALL windows upfront (no dynamic queueing)
             futures: dict = {}
-            window_queue = list(unique_window_ids)
-            
-            # Submit initial batch (max_workers * 2 to keep workers busy)
-            initial_batch_size = min(max_workers * 2, len(window_queue))
-            for _ in range(initial_batch_size):
-                if window_queue:
-                    window_id = window_queue.pop(0)
-                    bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
-                    run_flags = {
-                        **run_flags_base,
-                        "bad_actors": bad_actors,
-                    }
-                    future = executor.submit(
-                        process_window,
-                        window_id,
-                        edges_path,
-                        nodes_path,
-                        run_flags,
-                    )
-                    futures[future] = window_id
+            for window_id in unique_window_ids:
+                bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
+                run_flags = {
+                    **run_flags_base,
+                    "bad_actors": bad_actors,
+                }
+                future = executor.submit(
+                    process_window,
+                    window_id,
+                    edges_path,
+                    nodes_path,
+                    run_flags,
+                    feature_chunks_dir,
+                    metrics_chunks_dir,
+                )
+                futures[future] = window_id
 
             # Show progress including already completed windows
             total_windows = len(checkpoint.get("completed_windows", [])) + len(unique_window_ids)
             initial_progress = len(checkpoint.get("completed_windows", []))
             
+            # Use as_completed strictly for progress tracking and checkpointing
             with tqdm(total=total_windows, desc="Processing windows", unit="window", initial=initial_progress) as pbar:
                 for future in as_completed(futures):
                     completed_window_id = futures[future]
                     try:
                         result = future.result()  # propagates worker exceptions
 
-                        if result["features"]:
-                            feature_df = pd.DataFrame(result["features"])
-                            chunk_path = feature_chunks_dir / f"features_{result['window_id']}.parquet"
-                            feature_df.to_parquet(chunk_path, index=False)
+                        # Track chunk counts based on metadata
+                        if result.get("has_features"):
                             written_chunk_files += 1
-                            del feature_df
-
-                        if RUN_EVALUATION and result["metrics"] and metrics_chunks_dir:
-                            metrics_df = pd.DataFrame(result["metrics"])
-                            metrics_chunk_path = metrics_chunks_dir / f"metrics_{result['window_id']}.parquet"
-                            metrics_df.to_parquet(metrics_chunk_path, index=False)
+                        if result.get("has_metrics"):
                             written_metrics_files += 1
-                            del metrics_df
                         
                         # Save checkpoint after each successful window
                         checkpoint["completed_windows"].append(completed_window_id)
@@ -431,27 +506,6 @@ def main() -> None:
                     except Exception as exc:
                         print(f"\nWindow {completed_window_id} generated an exception: {exc}")
                         print("Checkpoint saved. You can restart the script to resume.")
-                    finally:
-                        # Always clean up future reference to prevent memory leak
-                        if future in futures:
-                            del futures[future]
-                    
-                    # Submit next window if available
-                    if window_queue:
-                        window_id = window_queue.pop(0)
-                        bad_actors = get_bad_actors_for_window(window_id) if RUN_EVALUATION else set()
-                        run_flags = {
-                            **run_flags_base,
-                            "bad_actors": bad_actors,
-                        }
-                        new_future = executor.submit(
-                            process_window,
-                            window_id,
-                            edges_path,
-                            nodes_path,
-                            run_flags,
-                        )
-                        futures[new_future] = window_id
                     
                     pbar.update(1)
 
@@ -470,23 +524,17 @@ def main() -> None:
 
     print("\nUsing pre-aggregated is_fraud labels from aggregated_nodes.parquet...")
 
-    stability_join = ""
-    stability_select = (
-        "0::DOUBLE AS weirdnodes_magnitude,\n"
-        "                0::DOUBLE AS weirdnodes_residual,\n"
-        "                0::INTEGER AS is_riser,\n"
-        "                0::INTEGER AS is_faller"
-    )
-
     print(f"Saving features to {features_out} via DuckDB out-of-core join...")
     con.execute(
         f"""
         COPY (
             SELECT
                 f.*,
-                {stability_select}
+                0::DOUBLE AS weirdnodes_magnitude,
+                0::DOUBLE AS weirdnodes_residual,
+                0::INTEGER AS is_riser,
+                0::INTEGER AS is_faller
             FROM read_parquet('{feature_chunks_dir / "*.parquet"}') f
-            {stability_join}
         ) TO '{features_out}' (FORMAT PARQUET);
         """
     )
