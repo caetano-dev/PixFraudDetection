@@ -6,12 +6,14 @@ TCC Pipeline Script 06
 Purpose: Quantify the exact performance delta caused by adding topological features.
 
 Logic: Ingest the outputs from Phase 2. Calculate the paired differences in AUPRC,
-       P@100, and ROC-AUC between the Baseline and Full models. Run a paired t-test
-       on the AUPRC across the temporal windows to prove statistical significance.
+       P@100, ROC-AUC, accuracy, precision, recall, and F1 between the Baseline and
+       Full models. Run paired t-tests across the temporal windows to prove
+       statistical significance.
 
 Outputs:
     - data/results/ablation_results.csv
     - data/results/plots/ablation_lift.png
+    - data/results/plots/ablation_metric_comparison.png
 
 Hardware Constraint: 8GB RAM - minimal memory usage since this phase uses pre-computed predictions.
 """
@@ -28,7 +30,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import stats
-from sklearn.metrics import average_precision_score, roc_auc_score
+from sklearn.metrics import accuracy_score, average_precision_score, f1_score, precision_score, recall_score, roc_auc_score
 
 root_path = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_path))
@@ -56,6 +58,13 @@ def compute_window_metrics(predictions_df: pd.DataFrame) -> pd.DataFrame:
         window_data = predictions_df[predictions_df['window_id'] == window_id]
         y_true = window_data['y_true'].values
         y_prob = window_data['y_prob'].values
+        if 'y_pred' in window_data.columns:
+            y_pred = window_data['y_pred'].values
+        elif 'threshold' in window_data.columns:
+            threshold = float(window_data['threshold'].iloc[0])
+            y_pred = (y_prob >= threshold).astype(int)
+        else:
+            y_pred = (y_prob >= 0.5).astype(int)
         
         if len(np.unique(y_true)) < 2:
             continue
@@ -65,6 +74,10 @@ def compute_window_metrics(predictions_df: pd.DataFrame) -> pd.DataFrame:
             'n_samples': len(y_true),
             'n_fraud': int(y_true.sum()),
             'fraud_rate': float(y_true.mean()),
+            'accuracy': accuracy_score(y_true, y_pred),
+            'precision': precision_score(y_true, y_pred, zero_division=0),
+            'recall': recall_score(y_true, y_pred, zero_division=0),
+            'f1_score': f1_score(y_true, y_pred, zero_division=0),
             'auprc': average_precision_score(y_true, y_prob),
             'roc_auc': roc_auc_score(y_true, y_prob),
         }
@@ -103,6 +116,10 @@ def compute_ablation_metrics(
     
     comparison_df['delta_auprc'] = comparison_df['auprc_full'] - comparison_df['auprc_baseline']
     comparison_df['delta_roc_auc'] = comparison_df['roc_auc_full'] - comparison_df['roc_auc_baseline']
+    comparison_df['delta_accuracy'] = comparison_df['accuracy_full'] - comparison_df['accuracy_baseline']
+    comparison_df['delta_precision'] = comparison_df['precision_full'] - comparison_df['precision_baseline']
+    comparison_df['delta_recall'] = comparison_df['recall_full'] - comparison_df['recall_baseline']
+    comparison_df['delta_f1_score'] = comparison_df['f1_score_full'] - comparison_df['f1_score_baseline']
     comparison_df['delta_P@100'] = comparison_df['P@100_full'] - comparison_df['P@100_baseline']
     
     comparison_df['lift_auprc_pct'] = (
@@ -111,48 +128,45 @@ def compute_ablation_metrics(
     comparison_df['lift_roc_auc_pct'] = (
         comparison_df['delta_roc_auc'] / (comparison_df['roc_auc_baseline'] + 1e-9)
     ) * 100
+    comparison_df['lift_accuracy_pct'] = (
+        comparison_df['delta_accuracy'] / (comparison_df['accuracy_baseline'] + 1e-9)
+    ) * 100
+    comparison_df['lift_precision_pct'] = (
+        comparison_df['delta_precision'] / (comparison_df['precision_baseline'] + 1e-9)
+    ) * 100
+    comparison_df['lift_recall_pct'] = (
+        comparison_df['delta_recall'] / (comparison_df['recall_baseline'] + 1e-9)
+    ) * 100
+    comparison_df['lift_f1_score_pct'] = (
+        comparison_df['delta_f1_score'] / (comparison_df['f1_score_baseline'] + 1e-9)
+    ) * 100
     comparison_df['lift_P@100_pct'] = (
         comparison_df['delta_P@100'] / (comparison_df['P@100_baseline'] + 1e-9)
     ) * 100
     
-    t_stat_auprc, p_value_auprc = stats.ttest_rel(
-        comparison_df['auprc_baseline'].values,
-        comparison_df['auprc_full'].values
-    )
-    
-    t_stat_roc, p_value_roc = stats.ttest_rel(
-        comparison_df['roc_auc_baseline'].values,
-        comparison_df['roc_auc_full'].values
-    )
-    
-    t_stat_p100, p_value_p100 = stats.ttest_rel(
-        comparison_df['P@100_baseline'].values,
-        comparison_df['P@100_full'].values
-    )
-    
-    statistical_tests = {
-        'auprc': {
-            't_statistic': t_stat_auprc,
-            'p_value': p_value_auprc,
-            'significant': p_value_auprc < 0.05,
-            'mean_delta': comparison_df['delta_auprc'].mean(),
-            'std_delta': comparison_df['delta_auprc'].std(),
-        },
-        'roc_auc': {
-            't_statistic': t_stat_roc,
-            'p_value': p_value_roc,
-            'significant': p_value_roc < 0.05,
-            'mean_delta': comparison_df['delta_roc_auc'].mean(),
-            'std_delta': comparison_df['delta_roc_auc'].std(),
-        },
-        'P@100': {
-            't_statistic': t_stat_p100,
-            'p_value': p_value_p100,
-            'significant': p_value_p100 < 0.05,
-            'mean_delta': comparison_df['delta_P@100'].mean(),
-            'std_delta': comparison_df['delta_P@100'].std(),
+    metric_pairs = [
+        ('accuracy', 'accuracy'),
+        ('precision', 'precision'),
+        ('recall', 'recall'),
+        ('f1_score', 'f1_score'),
+        ('roc_auc', 'roc_auc'),
+        ('auprc', 'auprc'),
+        ('P@100', 'P@100'),
+    ]
+
+    statistical_tests = {}
+    for metric_key, metric_col in metric_pairs:
+        t_stat, p_value = stats.ttest_rel(
+            comparison_df[f'{metric_col}_baseline'].values,
+            comparison_df[f'{metric_col}_full'].values
+        )
+        statistical_tests[metric_key] = {
+            't_statistic': t_stat,
+            'p_value': p_value,
+            'significant': p_value < 0.05,
+            'mean_delta': comparison_df[f'delta_{metric_col}'].mean(),
+            'std_delta': comparison_df[f'delta_{metric_col}'].std(),
         }
-    }
     
     return comparison_df, statistical_tests
 
@@ -203,6 +217,52 @@ def print_ablation_report(
     overall_full_auprc = comparison_df['auprc_full'].mean()
     print(f"Overall Baseline AUPRC: {overall_baseline_auprc:.4f}")
     print(f"Overall Full Model AUPRC: {overall_full_auprc:.4f}")
+
+
+def plot_metric_comparison(comparison_df: pd.DataFrame, output_dir: Path) -> None:
+    """Generate a grouped metric comparison plot for baseline vs full model."""
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(exist_ok=True, parents=True)
+
+    metric_specs = [
+        ("Accuracy", "accuracy"),
+        ("Precision", "precision"),
+        ("Recall", "recall"),
+        ("F1", "f1_score"),
+        ("ROC-AUC", "roc_auc"),
+        ("AUPRC", "auprc"),
+    ]
+
+    baseline_values = [comparison_df[f"{col}_baseline"].mean() for _, col in metric_specs]
+    full_values = [comparison_df[f"{col}_full"].mean() for _, col in metric_specs]
+
+    x = np.arange(len(metric_specs))
+    width = 0.36
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, ax = plt.subplots(figsize=(13, 7))
+
+    ax.bar(x - width / 2, baseline_values, width, label='Baseline', color='#e74c3c', alpha=0.85)
+    ax.bar(x + width / 2, full_values, width, label='Full Model', color='#27ae60', alpha=0.85)
+
+    for idx, (baseline_val, full_val) in enumerate(zip(baseline_values, full_values)):
+        ax.text(idx - width / 2, baseline_val + 0.01, f"{baseline_val:.3f}", ha='center', va='bottom', fontsize=8)
+        ax.text(idx + width / 2, full_val + 0.01, f"{full_val:.3f}", ha='center', va='bottom', fontsize=8)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([name for name, _ in metric_specs], rotation=20, ha='right')
+    ax.set_ylabel('Average Score Across Windows', fontsize=11, fontweight='bold')
+    ax.set_title('Ablation Study: Baseline vs Full Model Metrics', fontsize=13, fontweight='bold')
+    ax.set_ylim(0, min(1.05, max(baseline_values + full_values) * 1.2 if baseline_values or full_values else 1.0))
+    ax.legend(loc='lower right')
+    ax.grid(axis='y', alpha=0.3)
+
+    plt.tight_layout()
+    output_path = plots_dir / "ablation_metric_comparison.png"
+    fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+
+    print(f"✓ Metric comparison plot saved to: {output_path}")
 
 
 def plot_ablation_lift(
@@ -439,6 +499,7 @@ def main():
     stats_df.to_csv(stats_path, index=False)
     print(f"✓ Statistical tests saved to: {stats_path}")
     
+    plot_metric_comparison(comparison_df, results_dir)
     plot_ablation_lift(comparison_df, statistical_tests, results_dir)
     
     print("\n" + "=" * 80)
@@ -447,6 +508,7 @@ def main():
     print(f"\nOutputs saved to: {results_dir}")
     print("  • ablation_results.csv")
     print("  • ablation_statistical_tests.csv")
+    print("  • plots/ablation_metric_comparison.png")
     print("  • plots/ablation_lift.png")
     
     auprc_stats = statistical_tests['auprc']

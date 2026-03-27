@@ -14,6 +14,7 @@ Outputs:
     - data/results/pruned_features.json
     - data/results/rfe_history.csv
     - data/results/plots/rfe_degradation_trajectory.png
+    - data/results/plots/rfe_metric_trajectories.png
 
 Hardware Constraint: 8GB RAM - aggressive memory management required.
 """
@@ -33,7 +34,7 @@ import seaborn as sns
 import shap
 import xgboost as xgb
 from scipy.stats import spearmanr
-from sklearn.metrics import average_precision_score, precision_recall_curve
+from sklearn.metrics import accuracy_score, average_precision_score, f1_score, precision_score, recall_score, roc_auc_score
 
 root_path = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_path))
@@ -50,6 +51,7 @@ MIN_FEATURES = 5
 SHAP_SAMPLE_SIZE = 800
 MIN_TRAIN_WINDOWS = 2
 UNDERSAMPLE_RATIO = 20
+CLASSIFICATION_THRESHOLD = 0.5
 
 BEHAVIORAL_COLS = [
     'vol_sent', 'vol_recv', 'tx_count', 'time_variance', 'flow_ratio',
@@ -167,17 +169,34 @@ def compute_collinearity_filter(
     return retained_features, dropped_pairs
 
 
+def compute_classification_metrics(
+    y_true: np.ndarray,
+    y_probs: np.ndarray,
+    threshold: float = CLASSIFICATION_THRESHOLD
+) -> Dict[str, float]:
+    """Compute thresholded and threshold-free classification metrics."""
+    y_pred = (y_probs >= threshold).astype(int)
+    return {
+        'accuracy': accuracy_score(y_true, y_pred),
+        'precision': precision_score(y_true, y_pred, zero_division=0),
+        'recall': recall_score(y_true, y_pred, zero_division=0),
+        'f1_score': f1_score(y_true, y_pred, zero_division=0),
+        'roc_auc': roc_auc_score(y_true, y_probs),
+        'auprc': average_precision_score(y_true, y_probs),
+    }
+
+
 def evaluate_feature_set(
     df: pd.DataFrame,
     feature_cols: List[str],
     window_col: str,
     target_col: str
-) -> Tuple[float, pd.DataFrame, Dict[str, float]]:
+) -> Tuple[Dict[str, float], pd.DataFrame, Dict[str, float]]:
     """
     Run forward-chaining validation and compute SHAP importance.
     
     Returns:
-        - overall_auprc: Float
+        - overall_metrics: Dict of aggregate metrics
         - window_results: DataFrame with per-window metrics
         - shap_importance: Dict mapping feature -> mean |SHAP|
     """
@@ -188,6 +207,7 @@ def evaluate_feature_set(
     window_results = []
     all_y_true = []
     all_y_probs = []
+    all_y_pred = []
     
     global_shap_values = []
     
@@ -219,17 +239,24 @@ def evaluate_feature_set(
         gc.collect()
         
         y_probs = model.predict_proba(X_test)[:, 1]
+        y_pred = (y_probs >= CLASSIFICATION_THRESHOLD).astype(int)
+        window_metrics = compute_classification_metrics(y_test, y_probs)
         
-        auprc = average_precision_score(y_test, y_probs)
         window_results.append({
             'window_id': test_window_id,
-            'auprc': auprc,
+            'accuracy': window_metrics['accuracy'],
+            'precision': window_metrics['precision'],
+            'recall': window_metrics['recall'],
+            'f1_score': window_metrics['f1_score'],
+            'auprc': window_metrics['auprc'],
+            'roc_auc': window_metrics['roc_auc'],
             'n_samples': len(y_test),
-            'n_fraud': int(y_test.sum())
+            'n_fraud': int(y_test.sum()),
         })
         
         all_y_true.extend(y_test)
         all_y_probs.extend(y_probs)
+        all_y_pred.extend(y_pred)
         
         explainer = shap.TreeExplainer(model)
         sample_size = min(SHAP_SAMPLE_SIZE, len(X_test))
@@ -244,7 +271,20 @@ def evaluate_feature_set(
     
     all_y_true = np.array(all_y_true)
     all_y_probs = np.array(all_y_probs)
-    overall_auprc = average_precision_score(all_y_true, all_y_probs)
+    all_y_pred = np.array(all_y_pred)
+    overall_metrics = compute_classification_metrics(all_y_true, all_y_probs)
+    overall_metrics.update({
+        'overall_accuracy': accuracy_score(all_y_true, all_y_pred),
+        'overall_precision': precision_score(all_y_true, all_y_pred, zero_division=0),
+        'overall_recall': recall_score(all_y_true, all_y_pred, zero_division=0),
+        'overall_f1_score': f1_score(all_y_true, all_y_pred, zero_division=0),
+        'overall_roc_auc': roc_auc_score(all_y_true, all_y_probs),
+        'overall_auprc': average_precision_score(all_y_true, all_y_probs),
+        'n_test_windows': len(window_results),
+        'total_test_samples': len(all_y_true),
+        'mean_window_auprc': results_df['auprc'].mean() if not results_df.empty else 0.0,
+        'std_window_auprc': results_df['auprc'].std() if not results_df.empty else 0.0,
+    })
     
     if global_shap_values:
         stacked_shap = np.vstack(global_shap_values)
@@ -256,7 +296,7 @@ def evaluate_feature_set(
     else:
         shap_importance = {f: 0.0 for f in feature_cols}
     
-    return overall_auprc, results_df, shap_importance
+    return overall_metrics, results_df, shap_importance
 
 
 def identify_protected_features(
@@ -308,7 +348,7 @@ def run_shap_rfe_loop(
     initial_shap: Dict[str, float],
     window_col: str,
     target_col: str,
-    baseline_auprc: float
+    baseline_metrics: Dict[str, float]
 ) -> Tuple[List[str], List[Dict], int]:
     """
     Iteratively eliminate lowest-performing features until AUPRC degrades.
@@ -320,6 +360,7 @@ def run_shap_rfe_loop(
     """
     print("\n" + "=" * 80)
     print("STEP 3: ITERATIVE SHAP-RFE LOOP")
+    baseline_auprc = baseline_metrics['overall_auprc']
     print(f"Stopping criterion: ΔAUPRC < {DELTA_AUPRC_THRESHOLD} from baseline ({baseline_auprc:.4f})")
     print("=" * 80)
     
@@ -330,13 +371,17 @@ def run_shap_rfe_loop(
     iteration_history.append({
         'iteration': 0,
         'n_features': len(current_features),
-        'overall_auprc': baseline_auprc,
+        **baseline_metrics,
         'delta_from_baseline': 0.0,
         'features_dropped': [],
         'selected': False
     })
     
-    print(f"\n[ITERATION 0] Baseline: {len(current_features)} features, AUPRC={baseline_auprc:.4f}")
+    print(
+        f"\n[ITERATION 0] Baseline: {len(current_features)} features, "
+        f"AUPRC={baseline_auprc:.4f}, Acc={baseline_metrics['overall_accuracy']:.4f}, "
+        f"F1={baseline_metrics['overall_f1_score']:.4f}"
+    )
     
     best_iteration = 0
     best_auprc = baseline_auprc
@@ -365,21 +410,30 @@ def run_shap_rfe_loop(
         candidate_features = [f for f in current_features if f not in features_to_drop]
         
         print(f"  Retraining with {len(candidate_features)} features...")
-        new_auprc, window_results, new_shap = evaluate_feature_set(
+        new_metrics, window_results, new_shap = evaluate_feature_set(
             df=df,
             feature_cols=candidate_features,
             window_col=window_col,
             target_col=target_col
         )
         
-        delta_from_baseline = new_auprc - baseline_auprc
+        delta_from_baseline = new_metrics['overall_auprc'] - baseline_auprc
         
-        print(f"  AUPRC: {new_auprc:.4f} (Δ from baseline: {delta_from_baseline:+.4f})")
+        print(
+            f"  AUPRC: {new_metrics['overall_auprc']:.4f} (Δ from baseline: {delta_from_baseline:+.4f})"
+        )
+        print(
+            f"  Acc={new_metrics['overall_accuracy']:.4f}, "
+            f"Prec={new_metrics['overall_precision']:.4f}, "
+            f"Recall={new_metrics['overall_recall']:.4f}, "
+            f"F1={new_metrics['overall_f1_score']:.4f}, "
+            f"ROC-AUC={new_metrics['overall_roc_auc']:.4f}"
+        )
         
         iteration_history.append({
             'iteration': iteration,
             'n_features': len(candidate_features),
-            'overall_auprc': new_auprc,
+            **new_metrics,
             'delta_from_baseline': delta_from_baseline,
             'features_dropped': features_to_drop,
             'selected': False
@@ -390,8 +444,8 @@ def run_shap_rfe_loop(
             print(f"[STOPPING] Reverting to iteration {iteration - 1}")
             break
         
-        if new_auprc >= best_auprc:
-            best_auprc = new_auprc
+        if new_metrics['overall_auprc'] >= best_auprc:
+            best_auprc = new_metrics['overall_auprc']
             best_iteration = iteration
         
         current_features = candidate_features
@@ -493,6 +547,71 @@ def plot_rfe_trajectory(
     print(f"✓ RFE trajectory plot saved to: {output_path}")
 
 
+def plot_metric_trajectories(
+    iteration_history: List[Dict],
+    best_iteration: int,
+    baseline_metrics: Dict[str, float],
+    output_dir: Path
+) -> None:
+    """Generate a multi-panel metric trajectory plot across pruning iterations."""
+    print("\n" + "-" * 80)
+    print("GENERATING RFE METRIC TRAJECTORIES PLOT")
+    print("-" * 80)
+
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(exist_ok=True, parents=True)
+
+    metric_specs = [
+        ("Accuracy", "overall_accuracy"),
+        ("Precision", "overall_precision"),
+        ("Recall", "overall_recall"),
+        ("F1", "overall_f1_score"),
+        ("ROC-AUC", "overall_roc_auc"),
+        ("AUPRC", "overall_auprc"),
+    ]
+
+    n_features = [h['n_features'] for h in iteration_history]
+    best_n_features = iteration_history[best_iteration]['n_features']
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    axes = axes.flatten()
+
+    for ax, (label, key) in zip(axes, metric_specs):
+        values = [h.get(key, 0.0) for h in iteration_history]
+        baseline_value = baseline_metrics.get(key, values[0] if values else 0.0)
+        best_value = iteration_history[best_iteration].get(key, 0.0)
+
+        ax.plot(n_features, values, 'o-', color='#3498db', linewidth=2,
+                markersize=7, markerfacecolor='white', markeredgewidth=1.5)
+        ax.axhline(y=baseline_value, color='#e74c3c', linestyle='--', linewidth=1.8)
+        ax.scatter([best_n_features], [best_value], s=140, c='#27ae60', marker='*',
+                   zorder=5, edgecolors='black')
+        ax.annotate(f'It.{best_iteration}', (best_n_features, best_value),
+                    textcoords="offset points", xytext=(0, 10), ha='center', fontsize=8)
+
+        if key == 'overall_auprc':
+            threshold_line = baseline_value + DELTA_AUPRC_THRESHOLD
+            ax.axhline(y=threshold_line, color='#f39c12', linestyle=':', linewidth=1.8)
+            ax.fill_between(n_features, threshold_line, min(values + [threshold_line]),
+                            alpha=0.08, color='#e74c3c')
+
+        ax.set_title(label, fontsize=12, fontweight='bold')
+        ax.set_xlabel('Number of Features', fontsize=10)
+        ax.set_ylabel('Score', fontsize=10)
+        ax.invert_xaxis()
+        ax.grid(True, alpha=0.25)
+
+    fig.suptitle('SHAP-RFE Metric Trajectories Across Feature Pruning', fontsize=15, fontweight='bold')
+    plt.tight_layout(rect=[0, 0.02, 1, 0.96])
+
+    output_path = plots_dir / "rfe_metric_trajectories.png"
+    fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+
+    print(f"✓ RFE metric trajectories plot saved to: {output_path}")
+
+
 def main():
     """
     Phase 4 Main Execution: Feature Pruning Pipeline
@@ -547,13 +666,21 @@ def main():
     )
     
     print("\n[BASELINE EVALUATION] Computing baseline AUPRC after collinearity filter...")
-    baseline_auprc, baseline_window_results, baseline_shap = evaluate_feature_set(
+    baseline_metrics, baseline_window_results, baseline_shap = evaluate_feature_set(
         df=df,
         feature_cols=features_after_collinearity,
         window_col=window_col,
         target_col=target_col
     )
-    print(f"Baseline AUPRC (post-collinearity): {baseline_auprc:.4f}")
+    print(
+        f"Baseline metrics (post-collinearity): "
+        f"AUPRC={baseline_metrics['overall_auprc']:.4f}, "
+        f"Acc={baseline_metrics['overall_accuracy']:.4f}, "
+        f"Prec={baseline_metrics['overall_precision']:.4f}, "
+        f"Recall={baseline_metrics['overall_recall']:.4f}, "
+        f"F1={baseline_metrics['overall_f1_score']:.4f}, "
+        f"ROC-AUC={baseline_metrics['overall_roc_auc']:.4f}"
+    )
     
     protected_features = identify_protected_features(
         df=df,
@@ -569,7 +696,7 @@ def main():
         initial_shap=baseline_shap,
         window_col=window_col,
         target_col=target_col,
-        baseline_auprc=baseline_auprc
+        baseline_metrics=baseline_metrics
     )
     
     del df
@@ -583,12 +710,34 @@ def main():
     final_count = len(final_features)
     reduction_pct = (1 - final_count / initial_count) * 100
     
-    final_auprc = iteration_history[best_iteration]['overall_auprc']
-    delta = final_auprc - iteration_history[0]['overall_auprc']
-    
+    final_metrics = iteration_history[best_iteration]
+    delta = final_metrics['overall_auprc'] - iteration_history[0]['overall_auprc']
+
     print(f"\nFeature Count: {initial_count} → {final_count} ({reduction_pct:.1f}% reduction)")
-    print(f"AUPRC: {iteration_history[0]['overall_auprc']:.4f} → {final_auprc:.4f} (Δ={delta:+.4f})")
+    print(
+        f"AUPRC: {iteration_history[0]['overall_auprc']:.4f} → {final_metrics['overall_auprc']:.4f} "
+        f"(Δ={delta:+.4f})"
+    )
     print(f"Best Iteration: {best_iteration}")
+
+    print("\n" + "-" * 40)
+    print("BASELINE VS FINAL METRICS:")
+    print("-" * 40)
+    metric_rows = [
+        ("Accuracy", "overall_accuracy"),
+        ("Precision", "overall_precision"),
+        ("Recall", "overall_recall"),
+        ("F1", "overall_f1_score"),
+        ("ROC-AUC", "overall_roc_auc"),
+        ("AUPRC", "overall_auprc"),
+    ]
+    print(f"{'Metric':<12} {'Baseline':>12} {'Final':>12} {'Lift':>12}")
+    print("-" * 52)
+    for label, key in metric_rows:
+        baseline_val = baseline_metrics.get(key, 0.0)
+        final_val = final_metrics.get(key, 0.0)
+        lift_pct = ((final_val - baseline_val) / (baseline_val + 1e-9)) * 100
+        print(f"{label:<12} {baseline_val:>12.4f} {final_val:>12.4f} {lift_pct:>+11.2f}%")
     
     print("\n" + "-" * 40)
     print("PRUNED FEATURES:")
@@ -609,8 +758,16 @@ def main():
         'n_features': len(final_features),
         'features': final_features,
         'initial_n_features': initial_count,
+        'baseline_metrics': {k: baseline_metrics.get(k, None) for k in [
+            'overall_accuracy', 'overall_precision', 'overall_recall',
+            'overall_f1_score', 'overall_roc_auc', 'overall_auprc'
+        ]},
+        'final_metrics': {k: final_metrics.get(k, None) for k in [
+            'overall_accuracy', 'overall_precision', 'overall_recall',
+            'overall_f1_score', 'overall_roc_auc', 'overall_auprc'
+        ]},
         'baseline_auprc': iteration_history[0]['overall_auprc'],
-        'final_auprc': final_auprc,
+        'final_auprc': final_metrics['overall_auprc'],
         'delta_auprc': delta,
         'best_iteration': best_iteration,
         'discarded_features': discarded_features,
@@ -627,6 +784,13 @@ def main():
             'iteration': h['iteration'],
             'n_features': h['n_features'],
             'overall_auprc': h['overall_auprc'],
+            'overall_accuracy': h.get('overall_accuracy', 0.0),
+            'overall_precision': h.get('overall_precision', 0.0),
+            'overall_recall': h.get('overall_recall', 0.0),
+            'overall_f1_score': h.get('overall_f1_score', 0.0),
+            'overall_roc_auc': h.get('overall_roc_auc', 0.0),
+            'mean_window_auprc': h.get('mean_window_auprc', 0.0),
+            'std_window_auprc': h.get('std_window_auprc', 0.0),
             'delta_from_baseline': h['delta_from_baseline'],
             'selected': h['selected']
         }
@@ -642,6 +806,12 @@ def main():
         baseline_auprc=iteration_history[0]['overall_auprc'],
         output_dir=results_dir
     )
+    plot_metric_trajectories(
+        iteration_history=iteration_history,
+        best_iteration=best_iteration,
+        baseline_metrics=baseline_metrics,
+        output_dir=results_dir
+    )
     
     print("\n" + "=" * 80)
     print("PHASE 4 COMPLETE")
@@ -650,13 +820,14 @@ def main():
     print("  • pruned_features.json")
     print("  • rfe_history.csv")
     print("  • plots/rfe_degradation_trajectory.png")
+    print("  • plots/rfe_metric_trajectories.png")
     
     print("\n" + "-" * 40)
     print("SUMMARY FOR TCC DEFENSE:")
     print("-" * 40)
     print(f"Original feature set: {initial_count} features")
     print(f"Operational feature set: {final_count} features ({reduction_pct:.1f}% reduction)")
-    print(f"Performance retention: {final_auprc/iteration_history[0]['overall_auprc']*100:.1f}% of baseline AUPRC")
+    print(f"Performance retention: {final_metrics['overall_auprc']/iteration_history[0]['overall_auprc']*100:.1f}% of baseline AUPRC")
     
     n_behavioral = sum(1 for f in final_features if f in BEHAVIORAL_COLS)
     n_topological = sum(1 for f in final_features if f in TOPOLOGICAL_COLS)

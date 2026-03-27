@@ -34,6 +34,7 @@ import shap
 import xgboost as xgb
 from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import (
+    accuracy_score,
     average_precision_score,
     f1_score,
     precision_recall_curve,
@@ -381,6 +382,7 @@ def forward_chaining_validation(
         f1 = f1_score(y_test, y_pred)
         precision = precision_score(y_test, y_pred, zero_division=0)
         recall = recall_score(y_test, y_pred, zero_division=0)
+        accuracy = accuracy_score(y_test, y_pred)
 
         result = {
             "window_id": test_window_id,
@@ -389,6 +391,7 @@ def forward_chaining_validation(
             "fraud_rate": float(y_test.mean()),
             "auprc": auprc,
             "roc_auc": roc_auc,
+            "accuracy": accuracy,
             "f1_score": f1,
             "precision": precision,
             "recall": recall,
@@ -413,8 +416,11 @@ def forward_chaining_validation(
             })
 
         if verbose:
-            print(f"  Window {test_window_id}: AUPRC={auprc:.4f}, F1={f1:.4f}, "
-                  f"P@100={result.get('P@100', 0):.4f}")
+            print(
+                f"  Window {test_window_id}: AUPRC={auprc:.4f}, "
+                f"Acc={accuracy:.4f}, F1={f1:.4f}, "
+                f"P@100={result.get('P@100', 0):.4f}"
+            )
 
         if collect_shap:
             explainer = shap.TreeExplainer(final_model)
@@ -443,6 +449,7 @@ def forward_chaining_validation(
         "n_test_windows": len(window_results),
         "total_test_samples": len(all_y_true),
         "overall_fraud_rate": float(np.mean(all_y_true)),
+        "overall_accuracy": accuracy_score(all_y_true, all_y_pred),
         "overall_auprc": average_precision_score(all_y_true, all_y_probs),
         "overall_roc_auc": roc_auc_score(all_y_true, all_y_probs),
         "overall_f1": f1_score(all_y_true, all_y_pred),
@@ -526,6 +533,7 @@ def print_summary_comparison(baseline_summary: Dict, full_summary: Dict) -> None
     print("=" * 80)
 
     metrics = [
+        ("Overall Accuracy", "overall_accuracy"),
         ("Overall AUPRC", "overall_auprc"),
         ("Overall ROC-AUC", "overall_roc_auc"),
         ("Overall F1", "overall_f1"),
@@ -544,6 +552,50 @@ def print_summary_comparison(baseline_summary: Dict, full_summary: Dict) -> None
         lift_pct = ((full_val - baseline_val) / (baseline_val + 1e-9)) * 100
 
         print(f"{metric_name:<25} {baseline_val:>12.4f} {full_val:>12.4f} {lift_pct:>+11.2f}%")
+
+
+def plot_metric_comparison(baseline_summary: Dict, full_summary: Dict, output_dir: Path) -> None:
+    """Generate an overall metric comparison plot for baseline vs full models."""
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(exist_ok=True, parents=True)
+
+    metric_specs = [
+        ("Accuracy", "overall_accuracy"),
+        ("Precision", "overall_precision"),
+        ("Recall", "overall_recall"),
+        ("ROC-AUC", "overall_roc_auc"),
+        ("F1", "overall_f1"),
+    ]
+
+    baseline_values = [baseline_summary.get(key, 0.0) for _, key in metric_specs]
+    full_values = [full_summary.get(key, 0.0) for _, key in metric_specs]
+    x = np.arange(len(metric_specs))
+    width = 0.36
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, ax = plt.subplots(figsize=(12, 7))
+
+    ax.bar(x - width / 2, baseline_values, width, label='Baseline', color='#e74c3c', alpha=0.85)
+    ax.bar(x + width / 2, full_values, width, label='Full Model', color='#27ae60', alpha=0.85)
+
+    for idx, (baseline_val, full_val) in enumerate(zip(baseline_values, full_values)):
+        ax.text(idx - width / 2, baseline_val + 0.01, f"{baseline_val:.3f}", ha='center', va='bottom', fontsize=9)
+        ax.text(idx + width / 2, full_val + 0.01, f"{full_val:.3f}", ha='center', va='bottom', fontsize=9)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([name for name, _ in metric_specs], rotation=20, ha='right')
+    ax.set_ylim(0, min(1.05, max(baseline_values + full_values) * 1.2 if baseline_values or full_values else 1.0))
+    ax.set_ylabel('Score', fontsize=11, fontweight='bold')
+    ax.set_title('Baseline vs Full Model: Core Classification Metrics', fontsize=13, fontweight='bold')
+    ax.legend(loc='lower right')
+    ax.grid(axis='y', alpha=0.3)
+
+    plt.tight_layout()
+    output_path = plots_dir / "model_metric_comparison.png"
+    fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+
+    print(f"\n✓ Metric comparison plot saved to: {output_path}")
 
 
 def main():
@@ -627,6 +679,7 @@ def main():
     gc.collect()
 
     print_summary_comparison(baseline_summary, full_summary)
+    plot_metric_comparison(baseline_summary, full_summary, results_dir)
 
     if stacked_shap is not None and shap_features_df is not None:
         feature_importance = generate_shap_analysis(
@@ -662,6 +715,7 @@ def main():
     print("  • shap_feature_importance.csv")
     print("  • raw_shap_values.npy")
     print("  • plots/global_shap_beeswarm.png")
+    print("  • plots/model_metric_comparison.png")
 
     print("\n→ Proceed to Phase 3: 06_ablation_study.py")
 
