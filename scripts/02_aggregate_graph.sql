@@ -70,7 +70,7 @@ COPY (
         r.target_entity AS target,
         SUM(r.adj_sent) AS volume,
         COUNT(*) AS count,
-        COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM r.ts)), 0.0) AS time_variance,
+        COALESCE(STDDEV_SAMP(EXTRACT(EPOCH FROM r.ts)), 0.0) AS time_variance
     FROM WindowCalendar w
     JOIN ResolvedTx r 
       ON r.tx_date >= w.window_start 
@@ -135,6 +135,32 @@ COPY (
         ) AS sub_union
         WHERE entity_id IS NOT NULL 
         GROUP BY window_id, entity_id
+    ),
+    TemporalFanOut AS (
+        SELECT 
+            w.window_id, 
+            r.source_entity AS entity_id, 
+            MAX(daily_out) AS temporal_fan_out_count
+        FROM WindowCalendar w
+        JOIN (
+            SELECT source_entity, CAST(ts AS DATE) AS tx_date, COUNT(DISTINCT target_entity) AS daily_out
+            FROM ResolvedTx
+            GROUP BY source_entity, CAST(ts AS DATE)
+        ) r ON r.tx_date >= w.window_start AND r.tx_date < w.window_end
+        GROUP BY w.window_id, r.source_entity
+    ),
+    TemporalFanIn AS (
+        SELECT 
+            w.window_id, 
+            r.target_entity AS entity_id, 
+            MAX(daily_in) AS temporal_fan_in_count
+        FROM WindowCalendar w
+        JOIN (
+            SELECT target_entity, CAST(ts AS DATE) AS tx_date, COUNT(DISTINCT source_entity) AS daily_in
+            FROM ResolvedTx
+            GROUP BY target_entity, CAST(ts AS DATE)
+        ) r ON r.tx_date >= w.window_start AND r.tx_date < w.window_end
+        GROUP BY w.window_id, r.target_entity
     )
     SELECT
         COALESCE(s.window_id, r.window_id) AS window_id,
@@ -164,8 +190,12 @@ COPY (
         COALESCE(r.ach_count_recv, 0) AS ach_count_recv,
         COALESCE(s.reinvestment_count_sent, 0) AS reinvestment_count_sent,
         COALESCE(r.reinvestment_count_recv, 0) AS reinvestment_count_recv,
-        COALESCE(ef.is_fraud, 0) AS is_fraud
+        COALESCE(ef.is_fraud, 0) AS is_fraud,
+        COALESCE(tfo.temporal_fan_out_count, 0) AS temporal_fan_out_count,
+        COALESCE(tfi.temporal_fan_in_count, 0) AS temporal_fan_in_count
     FROM NodeSent s
     FULL OUTER JOIN NodeRecv r ON s.window_id = r.window_id AND s.entity_id = r.entity_id
     LEFT JOIN EntityFraud ef ON COALESCE(s.window_id, r.window_id) = ef.window_id AND COALESCE(s.entity_id, r.entity_id) = ef.entity_id
+    LEFT JOIN TemporalFanOut tfo ON COALESCE(s.window_id, r.window_id) = tfo.window_id AND COALESCE(s.entity_id, r.entity_id) = tfo.entity_id
+    LEFT JOIN TemporalFanIn tfi ON COALESCE(s.window_id, r.window_id) = tfi.window_id AND COALESCE(s.entity_id, r.entity_id) = tfi.entity_id
 ) TO 'data/HI_Small/target_nodes.parquet' (FORMAT PARQUET);
