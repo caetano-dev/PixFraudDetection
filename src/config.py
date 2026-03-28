@@ -1,5 +1,5 @@
 from pathlib import Path
-DATASET_SIZE: str = "SMALL"
+DATASET_SIZE: str = "MEDIUM"
 
 _DATASET_CONFIG = {
     "SMALL": {
