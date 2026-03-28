@@ -6,7 +6,7 @@ TCC Pipeline Script 06
 Purpose: Quantify the exact performance delta caused by adding topological features.
 
 Logic: Ingest the outputs from Phase 2. Calculate the paired differences in AUPRC,
-       P@100, ROC-AUC, accuracy, precision, recall, and F1 between the Baseline and
+       P@100/200/300/500, ROC-AUC, accuracy, precision, recall, and F1 between the Baseline and
        Full models. Run paired t-tests across the temporal windows to prove
        statistical significance.
 
@@ -38,7 +38,7 @@ sys.path.append(str(root_path))
 from src.config import DATA_PATH
 
 
-K_VALUES = [10, 50, 100, 500]
+K_VALUES = [10, 50, 100, 200, 300, 500]
 
 
 def compute_precision_at_k(y_true: np.ndarray, y_probs: np.ndarray, k: int) -> float:
@@ -121,6 +121,9 @@ def compute_ablation_metrics(
     comparison_df['delta_recall'] = comparison_df['recall_full'] - comparison_df['recall_baseline']
     comparison_df['delta_f1_score'] = comparison_df['f1_score_full'] - comparison_df['f1_score_baseline']
     comparison_df['delta_P@100'] = comparison_df['P@100_full'] - comparison_df['P@100_baseline']
+    comparison_df['delta_P@200'] = comparison_df['P@200_full'] - comparison_df['P@200_baseline']
+    comparison_df['delta_P@300'] = comparison_df['P@300_full'] - comparison_df['P@300_baseline']
+    comparison_df['delta_P@500'] = comparison_df['P@500_full'] - comparison_df['P@500_baseline']
     
     comparison_df['lift_auprc_pct'] = (
         comparison_df['delta_auprc'] / (comparison_df['auprc_baseline'] + 1e-9)
@@ -143,6 +146,15 @@ def compute_ablation_metrics(
     comparison_df['lift_P@100_pct'] = (
         comparison_df['delta_P@100'] / (comparison_df['P@100_baseline'] + 1e-9)
     ) * 100
+    comparison_df['lift_P@200_pct'] = (
+        comparison_df['delta_P@200'] / (comparison_df['P@200_baseline'] + 1e-9)
+    ) * 100
+    comparison_df['lift_P@300_pct'] = (
+        comparison_df['delta_P@300'] / (comparison_df['P@300_baseline'] + 1e-9)
+    ) * 100
+    comparison_df['lift_P@500_pct'] = (
+        comparison_df['delta_P@500'] / (comparison_df['P@500_baseline'] + 1e-9)
+    ) * 100
     
     metric_pairs = [
         ('accuracy', 'accuracy'),
@@ -152,6 +164,9 @@ def compute_ablation_metrics(
         ('roc_auc', 'roc_auc'),
         ('auprc', 'auprc'),
         ('P@100', 'P@100'),
+        ('P@200', 'P@200'),
+        ('P@300', 'P@300'),
+        ('P@500', 'P@500'),
     ]
 
     statistical_tests = {}
@@ -176,23 +191,30 @@ def print_ablation_report(
     statistical_tests: Dict
 ) -> None:
     """Print formatted ablation study report."""
-    print("\n" + "-" * 80)
+    print("\n" + "-" * 120)
     print("PER-WINDOW COMPARISON: Baseline vs Full Model")
-    print("-" * 80)
+    print("-" * 120)
     
-    print(f"\n{'Window':<10} {'AUPRC (B/F)':<18} {'ROC-AUC (B/F)':<18} {'P@100 (B/F)':<18} {'AUPRC Lift':<12}")
-    print("-" * 80)
+    print(
+        f"\n{'Window':<10} {'AUPRC (B/F)':<18} {'ROC-AUC (B/F)':<18} "
+        f"{'P@100 (B/F)':<18} {'P@200 (B/F)':<18} {'P@300 (B/F)':<18} "
+        f"{'P@500 (B/F)':<18} {'AUPRC Lift':<12}"
+    )
+    print("-" * 120)
     
     for _, row in comparison_df.iterrows():
         print(f"{row['window_id']:<10} "
               f"{row['auprc_baseline']:.3f} / {row['auprc_full']:.3f}  "
               f"{row['roc_auc_baseline']:.3f} / {row['roc_auc_full']:.3f}  "
               f"{row['P@100_baseline']:.3f} / {row['P@100_full']:.3f}  "
+              f"{row['P@200_baseline']:.3f} / {row['P@200_full']:.3f}  "
+              f"{row['P@300_baseline']:.3f} / {row['P@300_full']:.3f}  "
+              f"{row['P@500_baseline']:.3f} / {row['P@500_full']:.3f}  "
               f"{row['lift_auprc_pct']:+.1f}%")
     
-    print("\n" + "-" * 80)
+    print("\n" + "-" * 120)
     print("STATISTICAL SIGNIFICANCE ANALYSIS")
-    print("-" * 80)
+    print("-" * 120)
     
     for metric, results in statistical_tests.items():
         print(f"\n{metric.upper()}:")
@@ -207,9 +229,9 @@ def print_ablation_report(
             print(f"  ✗ Not statistically significant at α=0.05")
     
     mean_lift = comparison_df['lift_auprc_pct'].mean()
-    print("\n" + "-" * 80)
+    print("\n" + "-" * 120)
     print("SUMMARY")
-    print("-" * 80)
+    print("-" * 120)
     print(f"Mean AUPRC Lift: {mean_lift:+.2f}%")
     print(f"Windows with positive lift: {(comparison_df['delta_auprc'] > 0).sum()}/{len(comparison_df)}")
     
@@ -278,9 +300,9 @@ def plot_ablation_lift(
     - Panel 2: Delta/Lift per window (waterfall-style)
     - Panel 3: Summary statistics with p-value annotation
     """
-    print("\n" + "-" * 80)
+    print("\n" + "-" * 120)
     print("GENERATING ABLATION VISUALIZATION")
-    print("-" * 80)
+    print("-" * 120)
     
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(exist_ok=True, parents=True)

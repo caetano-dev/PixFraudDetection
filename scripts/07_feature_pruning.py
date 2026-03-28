@@ -52,6 +52,7 @@ SHAP_SAMPLE_SIZE = 800
 MIN_TRAIN_WINDOWS = 2
 UNDERSAMPLE_RATIO = 20
 CLASSIFICATION_THRESHOLD = 0.5
+K_VALUES = [100, 200, 300, 500]
 
 BEHAVIORAL_COLS = [
     'vol_sent', 'vol_recv', 'tx_count', 'time_variance', 'flow_ratio',
@@ -186,6 +187,15 @@ def compute_classification_metrics(
     }
 
 
+def compute_precision_at_k(y_true: np.ndarray, y_probs: np.ndarray, k: int) -> float:
+    """Compute Precision@K."""
+    if k > len(y_true):
+        k = len(y_true)
+    sorted_indices = np.argsort(y_probs)[::-1]
+    top_k_labels = y_true[sorted_indices[:k]]
+    return float(np.sum(top_k_labels)) / k
+
+
 def evaluate_feature_set(
     df: pd.DataFrame,
     feature_cols: List[str],
@@ -241,6 +251,8 @@ def evaluate_feature_set(
         y_probs = model.predict_proba(X_test)[:, 1]
         y_pred = (y_probs >= CLASSIFICATION_THRESHOLD).astype(int)
         window_metrics = compute_classification_metrics(y_test, y_probs)
+        for k in K_VALUES:
+            window_metrics[f'P@{k}'] = compute_precision_at_k(y_test, y_probs, k)
         
         window_results.append({
             'window_id': test_window_id,
@@ -250,6 +262,10 @@ def evaluate_feature_set(
             'f1_score': window_metrics['f1_score'],
             'auprc': window_metrics['auprc'],
             'roc_auc': window_metrics['roc_auc'],
+            'P@100': window_metrics['P@100'],
+            'P@200': window_metrics['P@200'],
+            'P@300': window_metrics['P@300'],
+            'P@500': window_metrics['P@500'],
             'n_samples': len(y_test),
             'n_fraud': int(y_test.sum()),
         })
@@ -285,6 +301,8 @@ def evaluate_feature_set(
         'mean_window_auprc': results_df['auprc'].mean() if not results_df.empty else 0.0,
         'std_window_auprc': results_df['auprc'].std() if not results_df.empty else 0.0,
     })
+    for k in K_VALUES:
+        overall_metrics[f'overall_P@{k}'] = compute_precision_at_k(all_y_true, all_y_probs, k)
     
     if global_shap_values:
         stacked_shap = np.vstack(global_shap_values)
@@ -427,7 +445,11 @@ def run_shap_rfe_loop(
             f"Prec={new_metrics['overall_precision']:.4f}, "
             f"Recall={new_metrics['overall_recall']:.4f}, "
             f"F1={new_metrics['overall_f1_score']:.4f}, "
-            f"ROC-AUC={new_metrics['overall_roc_auc']:.4f}"
+            f"ROC-AUC={new_metrics['overall_roc_auc']:.4f}, "
+            f"P@100={new_metrics['overall_P@100']:.4f}, "
+            f"P@200={new_metrics['overall_P@200']:.4f}, "
+            f"P@300={new_metrics['overall_P@300']:.4f}, "
+            f"P@500={new_metrics['overall_P@500']:.4f}"
         )
         
         iteration_history.append({
@@ -730,6 +752,10 @@ def main():
         ("F1", "overall_f1_score"),
         ("ROC-AUC", "overall_roc_auc"),
         ("AUPRC", "overall_auprc"),
+        ("P@100", "overall_P@100"),
+        ("P@200", "overall_P@200"),
+        ("P@300", "overall_P@300"),
+        ("P@500", "overall_P@500"),
     ]
     print(f"{'Metric':<12} {'Baseline':>12} {'Final':>12} {'Lift':>12}")
     print("-" * 52)

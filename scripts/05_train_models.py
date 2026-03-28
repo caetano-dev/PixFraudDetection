@@ -91,7 +91,7 @@ TOPOLOGICAL_COLS = [
 
 FULL_COLS = BEHAVIORAL_COLS + TOPOLOGICAL_COLS
 
-K_VALUES = [10, 50, 100, 500]
+K_VALUES = [10, 50, 100, 200, 300, 500]
 
 XGBOOST_PARAMS = {
     'n_estimators': 200,
@@ -416,10 +416,14 @@ def forward_chaining_validation(
             })
 
         if verbose:
+            p_at_metrics = ", ".join(
+                f"P@{k}={result.get(f'P@{k}', 0):.4f}"
+                for k in (100, 200, 300, 500)
+            )
             print(
                 f"  Window {test_window_id}: AUPRC={auprc:.4f}, "
                 f"Acc={accuracy:.4f}, F1={f1:.4f}, "
-                f"P@100={result.get('P@100', 0):.4f}"
+                f"{p_at_metrics}"
             )
 
         if collect_shap:
@@ -541,6 +545,9 @@ def print_summary_comparison(baseline_summary: Dict, full_summary: Dict) -> None
         ("Overall Recall", "overall_recall"),
         ("Mean Window AUPRC", "mean_window_auprc"),
         ("P@100", "overall_P@100"),
+        ("P@200", "overall_P@200"),
+        ("P@300", "overall_P@300"),
+        ("P@500", "overall_P@500"),
     ]
 
     print(f"\n{'Metric':<25} {'Baseline':>12} {'Full Model':>12} {'Lift':>12}")
