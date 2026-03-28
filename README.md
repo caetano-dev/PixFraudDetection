@@ -43,16 +43,38 @@ mkdir data/HI_Small #change this depending on what dataset you use.
 
 ## Running the Pipeline
 
-Adjust the configuration in the src/config.py file to select your dataset.
+Adjust the configuration in src/config.py to select your dataset. Use the following ordered scripts to run the full pipeline. File/module names below match this repository's scripts and entrypoints.
+
 ```
-python3 scripts/00_generate_convertion_rates.py
-python3 scripts/01_filter_raw_data.py --dataset HI_Small # or HI_Large, LI_Small, LI_Large
-python3 -m scripts.02_run_aggregation
-python3 -m scripts.03_extract_features
-python3 -m scripts.04_train_model_forward_chaining
-python3 -m scripts.05_ablation_study_and_shap
-python3 -m scripts.07_summary
+# 0. Generate conversion rates (if needed)
+python3 scripts/00_generate_conversion_rates.py
+
+# 1. Filter raw data for the chosen dataset (examples: HI_Small, HI_Large, LI_Small, LI_Large)
+python3 scripts/01_filter_raw_data.py --dataset HI_Small
+
+# 2. Aggregate transactions into temporal graph windows
+python3 scripts/02_run_aggregation.py   # runs scripts/02_aggregate_graph.sql via DuckDB
+
+# 3. Extract graph & behavioral features (writes features parquet chunks -> merged output)
+python3 scripts/03_extract_features.py
+
+# 4. Train models with forward-chaining validation and produce predictions and SHAP
+python3 scripts/05_train_models.py
+
+# 5. Ablation study comparing Baseline vs Full model (uses model outputs)
+python3 scripts/06_ablation_study.py
+
+# 6. Optional: Feature pruning and topology summaries
+python3 scripts/07_feature_pruning.py
+python3 scripts/08_topology_summary.py
 ```
+
+Notes:
+- Ensure DATA_PATH and dataset selection are correct in src/config.py before running.
+- scripts/02_run_aggregation.py executes the SQL in scripts/02_aggregate_graph.sql and writes lookback_edges.parquet and target_nodes.parquet under the dataset data folder.
+- scripts/03_extract_features.py produces a merged features parquet file (check src/config.py: OUTPUT_FEATURES_FILE).
+- scripts/05_train_models.py expects the merged features file and will output results to data/results/.
+- If you previously removed temporal motif extractors, temporal motif steps are not available unless re-added.
 
 ## Pipeline Overview
 
