@@ -34,7 +34,7 @@ import seaborn as sns
 import shap
 import xgboost as xgb
 from scipy.stats import spearmanr
-from sklearn.metrics import accuracy_score, average_precision_score, f1_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import accuracy_score, average_precision_score, f1_score, precision_score, recall_score, roc_auc_score, precision_recall_curve
 
 root_path = Path(__file__).resolve().parent.parent
 sys.path.append(str(root_path))
@@ -170,6 +170,23 @@ def compute_collinearity_filter(
     return retained_features, dropped_pairs
 
 
+def calibrate_threshold(
+    y_true: np.ndarray,
+    y_probs: np.ndarray,
+    target_recall: float = 0.85
+) -> float:
+    """Find optimal threshold using recall-constrained precision maximization."""
+    precisions, recalls, thresholds = precision_recall_curve(y_true, y_probs)
+    valid_indices = np.where(recalls >= target_recall)[0]
+    
+    if len(valid_indices) == 0:
+        return float(thresholds[0]) if len(thresholds) > 0 else 0.0
+    
+    best_idx = valid_indices[np.argmax(precisions[valid_indices])]
+    optimal_threshold = thresholds[best_idx] if best_idx < len(thresholds) else thresholds[-1]
+    
+    return float(optimal_threshold)
+
 def compute_classification_metrics(
     y_true: np.ndarray,
     y_probs: np.ndarray,
@@ -195,7 +212,6 @@ def compute_precision_at_k(y_true: np.ndarray, y_probs: np.ndarray, k: int) -> f
     top_k_labels = y_true[sorted_indices[:k]]
     return float(np.sum(top_k_labels)) / k
 
-
 def evaluate_feature_set(
     df: pd.DataFrame,
     feature_cols: List[str],
@@ -203,12 +219,7 @@ def evaluate_feature_set(
     target_col: str
 ) -> Tuple[Dict[str, float], pd.DataFrame, Dict[str, float]]:
     """
-    Run forward-chaining validation and compute SHAP importance.
-    
-    Returns:
-        - overall_metrics: Dict of aggregate metrics
-        - window_results: DataFrame with per-window metrics
-        - shap_importance: Dict mapping feature -> mean |SHAP|
+    Run forward-chaining validation using the Two-Stage Cascade architecture.
     """
     df = df.sort_values(by=window_col).reset_index(drop=True)
     unique_windows = sorted(df[window_col].unique())
@@ -233,26 +244,79 @@ def evaluate_feature_set(
             gc.collect()
             continue
         
-        final_train_df = undersample_data(train_df, target_col)
-        X_train = final_train_df[feature_cols]
-        y_train = final_train_df[target_col].values
+        # Split for Stage 2 Calibration
+        split_idx = int(len(train_df) * 0.8)
+        inner_train_df = train_df.iloc[:split_idx]
+        inner_val_df = train_df.iloc[split_idx:]
+
+        inner_train_df = undersample_data(inner_train_df, target_col)
+
+        X_inner_train = inner_train_df[feature_cols]
+        y_inner_train = inner_train_df[target_col].values
+        X_inner_val = inner_val_df[feature_cols]
+        y_inner_val = inner_val_df[target_col].values
         X_test = test_df[feature_cols]
         y_test = test_df[target_col].values
+
+        # Calibration Model
+        calib_model = xgb.XGBClassifier(**XGBOOST_PARAMS)
+        calib_model.fit(X_inner_train, y_inner_train)
+        val_probs = calib_model.predict_proba(X_inner_val)[:, 1]
+        optimal_threshold = calibrate_threshold(y_inner_val, val_probs)
+
+        # STAGE 1: THE NET
+        final_train_df = undersample_data(train_df, target_col)
+        X_train_final = final_train_df[feature_cols]
+        y_train_final = final_train_df[target_col].values
+
+        stage1_model = xgb.XGBClassifier(**XGBOOST_PARAMS)
+        stage1_model.fit(X_train_final, y_train_final)
+
+        y_probs_s1 = stage1_model.predict_proba(X_test)[:, 1]
+        y_pred_s1 = (y_probs_s1 >= optimal_threshold).astype(int)
+
+        # STAGE 2: THE FILTER
+        s2_train_mask = val_probs >= optimal_threshold
+        X_train_s2 = X_inner_val[s2_train_mask]
+        y_train_s2 = y_inner_val[s2_train_mask]
+
+        STAGE2_PARAMS = XGBOOST_PARAMS.copy()
+        STAGE2_PARAMS['max_depth'] = 3 
+        STAGE2_PARAMS['n_estimators'] = 100
+        STAGE2_PARAMS['learning_rate'] = 0.05
         
-        del train_df, final_train_df
+        if len(np.unique(y_train_s2)) < 2:
+            stage2_model = stage1_model
+        else:
+            # Algorithmic weighting for Stage 2
+            n_neg_s2 = np.sum(y_train_s2 == 0)
+            n_pos_s2 = np.sum(y_train_s2 == 1)
+            base_weight = n_neg_s2 / n_pos_s2 if n_pos_s2 > 0 else 1.0
+            STAGE2_PARAMS['scale_pos_weight'] = base_weight * 0.50
+
+            stage2_model = xgb.XGBClassifier(**STAGE2_PARAMS)
+            stage2_model.fit(X_train_s2, y_train_s2)
+
+        # Memory Cleanup
+        del calib_model, X_inner_train, y_inner_train, X_inner_val, y_inner_val
+        del inner_train_df, inner_val_df, val_probs
         gc.collect()
+
+        # CASCADE FUSION
+        test_suspect_mask = y_pred_s1 == 1
+        y_probs_s2 = np.zeros_like(y_probs_s1)
         
-        model = xgb.XGBClassifier(**XGBOOST_PARAMS)
-        model.fit(X_train, y_train)
+        if np.any(test_suspect_mask):
+            X_test_s2 = X_test[test_suspect_mask]
+            y_probs_s2[test_suspect_mask] = stage2_model.predict_proba(X_test_s2)[:, 1]
+
+        y_probs_final = np.where(test_suspect_mask, y_probs_s2, y_probs_s1 * 0.01)
+        y_pred_final = (y_probs_final >= 0.5).astype(int)
         
-        del X_train, y_train
-        gc.collect()
-        
-        y_probs = model.predict_proba(X_test)[:, 1]
-        y_pred = (y_probs >= CLASSIFICATION_THRESHOLD).astype(int)
-        window_metrics = compute_classification_metrics(y_test, y_probs)
+        # Metric Computation
+        window_metrics = compute_classification_metrics(y_test, y_probs_final)
         for k in K_VALUES:
-            window_metrics[f'P@{k}'] = compute_precision_at_k(y_test, y_probs, k)
+            window_metrics[f'P@{k}'] = compute_precision_at_k(y_test, y_probs_final, k)
         
         window_results.append({
             'window_id': test_window_id,
@@ -271,16 +335,18 @@ def evaluate_feature_set(
         })
         
         all_y_true.extend(y_test)
-        all_y_probs.extend(y_probs)
-        all_y_pred.extend(y_pred)
+        all_y_probs.extend(y_probs_final)
+        all_y_pred.extend(y_pred_final)
         
-        explainer = shap.TreeExplainer(model)
+        # SHAP extracted purely from Stage 1 to dictate RFE logic
+        explainer = shap.TreeExplainer(stage1_model)
         sample_size = min(SHAP_SAMPLE_SIZE, len(X_test))
         X_test_sampled = X_test.sample(sample_size, random_state=42)
         shap_values = explainer.shap_values(X_test_sampled)
         global_shap_values.append(shap_values)
         
-        del model, explainer, X_test, y_test, y_probs, test_df, shap_values, X_test_sampled
+        del stage1_model, stage2_model, explainer, X_test, y_test, test_df, shap_values, X_test_sampled
+        del X_train_final, y_train_final, final_train_df, train_df, X_train_s2, y_train_s2
         gc.collect()
     
     results_df = pd.DataFrame(window_results)
@@ -288,6 +354,7 @@ def evaluate_feature_set(
     all_y_true = np.array(all_y_true)
     all_y_probs = np.array(all_y_probs)
     all_y_pred = np.array(all_y_pred)
+    
     overall_metrics = compute_classification_metrics(all_y_true, all_y_probs)
     overall_metrics.update({
         'overall_accuracy': accuracy_score(all_y_true, all_y_pred),
@@ -315,7 +382,6 @@ def evaluate_feature_set(
         shap_importance = {f: 0.0 for f in feature_cols}
     
     return overall_metrics, results_df, shap_importance
-
 
 def identify_protected_features(
     df: pd.DataFrame,

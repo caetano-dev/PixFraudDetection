@@ -321,6 +321,10 @@ def forward_chaining_validation(
     window_results = []
     all_predictions = []
     
+    # Track Stage 1 predictions separately for independent metric calculation
+    all_y_probs_s1 = []
+    all_y_pred_s1 = []
+    
     global_shap_values = []
     global_x_test = []
 
@@ -360,22 +364,108 @@ def forward_chaining_validation(
         val_probs = calib_model.predict_proba(X_inner_val)[:, 1]
         optimal_threshold = calibrate_threshold(y_inner_val, val_probs)
 
-        del calib_model, X_inner_train, y_inner_train, X_inner_val, y_inner_val
-        del inner_train_df, inner_val_df, val_probs
-        gc.collect()
-
+        # ==========================================================
+        # STAGE 1: THE NET (High Recall)
+        # ==========================================================
         final_train_df = undersample_data(train_df, target_col)
         X_train_final = final_train_df[feature_cols]
         y_train_final = final_train_df[target_col].values
 
-        final_model = xgb.XGBClassifier(**XGBOOST_PARAMS)
-        final_model.fit(X_train_final, y_train_final)
+        stage1_model = xgb.XGBClassifier(**XGBOOST_PARAMS)
+        stage1_model.fit(X_train_final, y_train_final)
 
-        del X_train_final, y_train_final, final_train_df, train_df
+        # Predict on the test set with Stage 1
+        y_probs_s1 = stage1_model.predict_proba(X_test)[:, 1]
+        y_pred_s1 = (y_probs_s1 >= optimal_threshold).astype(int)
+
+        # ==========================================================
+        # STAGE 2: THE FILTER (High Precision)
+        # ==========================================================
+        # Use the out-of-fold calibration set to find the true hard negatives
+        # This prevents the overfitting leakage caused by predicting on the training set.
+        s2_train_mask = val_probs >= optimal_threshold
+        X_train_s2 = X_inner_val[s2_train_mask]
+        y_train_s2 = y_inner_val[s2_train_mask]
+
+        # Stage 2 requires shallow trees to prevent overfitting the hard examples
+        STAGE2_PARAMS = XGBOOST_PARAMS.copy()
+        STAGE2_PARAMS['max_depth'] = 3 
+        STAGE2_PARAMS['n_estimators'] = 100
+        STAGE2_PARAMS['learning_rate'] = 0.05
+        STAGE2_PARAMS['min_child_weight'] = 20
+        STAGE2_PARAMS['gamma'] = 5.0
+        
+        # Fallback in case Stage 1 caught zero false positives in validation
+        if len(np.unique(y_train_s2)) < 2:
+            if verbose:
+                print(f"    Stage 2 bypass: Insufficient variance in flagged validation data (window {test_window_id})")
+            stage2_model = stage1_model
+        else:
+            # DYNAMIC ALGORITHMIC WEIGHTING
+            # Force Stage 2 to care equally about True Positives and False Positives
+            n_neg_s2 = np.sum(y_train_s2 == 0)
+            n_pos_s2 = np.sum(y_train_s2 == 1)
+            base_weight = n_neg_s2 / n_pos_s2 if n_pos_s2 > 0 else 1.0
+            STAGE2_PARAMS['scale_pos_weight'] = base_weight * 0.50
+
+            stage2_model = xgb.XGBClassifier(**STAGE2_PARAMS)
+            stage2_model.fit(X_train_s2, y_train_s2)
+
+        # Safely free memory now that Stage 2 is trained. This keeps the footprint 
+        # minimal for your 8GB machine.
+        del calib_model, X_inner_train, y_inner_train, X_inner_val, y_inner_val
+        del inner_train_df, inner_val_df, val_probs
         gc.collect()
 
-        y_probs = final_model.predict_proba(X_test)[:, 1]
-        y_pred = (y_probs >= optimal_threshold).astype(int)
+        # ==========================================================
+        # CASCADE INFERENCE & PROBABILITY FUSION
+        # ==========================================================
+        # Isolate the test transactions that passed Stage 1
+        test_suspect_mask = y_pred_s1 == 1
+        
+        y_probs_s2 = np.zeros_like(y_probs_s1)
+        
+        if np.any(test_suspect_mask):
+            X_test_s2 = X_test[test_suspect_mask]
+            # Score only the suspects with Stage 2
+            y_probs_s2[test_suspect_mask] = stage2_model.predict_proba(X_test_s2)[:, 1]
+
+        # FUSION: If it passes Stage 1, use Stage 2's probability. 
+        # If it fails Stage 1, crush the Stage 1 probability to keep it at the bottom of the rank.
+        y_probs_final = np.where(test_suspect_mask, y_probs_s2, y_probs_s1 * 0.01)
+        
+        # Final prediction requires passing Stage 2's default threshold
+        y_pred_final = (y_probs_final >= 0.5).astype(int)
+
+        # ==========================================================
+        # CASCADE FUNNEL METRICS (Two-Stage Architecture)
+        # ==========================================================
+        # Compute metrics BEFORE memory cleanup to track Stage 2 effectiveness
+        s1_total_flagged = int(np.sum(y_pred_s1 == 1))
+        s1_tp = int(np.sum((y_pred_s1 == 1) & (y_test == 1)))
+        s1_fp = int(np.sum((y_pred_s1 == 1) & (y_test == 0)))
+        
+        s2_total_flagged = int(np.sum(y_pred_final == 1))
+        s2_tp_retained = int(np.sum((y_pred_final == 1) & (y_test == 1)))
+        s2_fp_retained = int(np.sum((y_pred_final == 1) & (y_test == 0)))
+        
+        # The operational win and cost of Stage 2
+        fp_filtered_by_s2 = s1_fp - s2_fp_retained
+        tp_lost_by_s2 = s1_tp - s2_tp_retained
+
+        # Collect Stage 1 predictions for overall metric calculation
+        all_y_probs_s1.extend(y_probs_s1)
+        all_y_pred_s1.extend(y_pred_s1)
+
+        # Assign final arrays to existing variable names to feed your metric functions
+        y_probs = y_probs_final
+        y_pred = y_pred_final
+        final_model = stage1_model  # Keep Stage 1 as the reference for SHAP extraction
+
+        del X_train_final, y_train_final, final_train_df, train_df
+        del stage2_model, s2_train_mask, X_train_s2, y_train_s2
+        del y_probs_s1, y_pred_s1, y_probs_s2, y_probs_final, y_pred_final, test_suspect_mask
+        gc.collect()
 
         auprc = average_precision_score(y_test, y_probs)
         roc_auc = roc_auc_score(y_test, y_probs)
@@ -396,6 +486,15 @@ def forward_chaining_validation(
             "precision": precision,
             "recall": recall,
             "optimal_threshold": optimal_threshold,
+            # Cascade Funnel Metrics
+            "s1_total_flagged": s1_total_flagged,
+            "s1_tp": s1_tp,
+            "s1_fp": s1_fp,
+            "s2_total_flagged": s2_total_flagged,
+            "s2_tp_retained": s2_tp_retained,
+            "s2_fp_retained": s2_fp_retained,
+            "fp_filtered_by_s2": fp_filtered_by_s2,
+            "tp_lost_by_s2": tp_lost_by_s2,
         }
 
         for k in K_VALUES:
@@ -447,20 +546,49 @@ def forward_chaining_validation(
     all_y_probs = predictions_df['y_prob'].values
     all_y_pred = predictions_df['y_pred'].values
 
+    # Convert Stage 1 predictions to NumPy arrays for metric calculation
+    all_y_probs_s1 = np.array(all_y_probs_s1)
+    all_y_pred_s1 = np.array(all_y_pred_s1)
+
+    # Calculate Stage 1 overall metrics independently
+    s1_overall_precision = precision_score(all_y_true, all_y_pred_s1, zero_division=0)
+    s1_overall_recall = recall_score(all_y_true, all_y_pred_s1, zero_division=0)
+    s1_overall_f1 = f1_score(all_y_true, all_y_pred_s1)
+    s1_overall_auprc = average_precision_score(all_y_true, all_y_probs_s1)
+
+    # Free Stage 1 prediction arrays from RAM
+    del all_y_probs_s1, all_y_pred_s1
+    gc.collect()
+
     summary = {
         "model_name": model_name,
         "n_features": len(feature_cols),
         "n_test_windows": len(window_results),
         "total_test_samples": len(all_y_true),
         "overall_fraud_rate": float(np.mean(all_y_true)),
+        # Stage 2 (Final Cascade) Metrics
         "overall_accuracy": accuracy_score(all_y_true, all_y_pred),
         "overall_auprc": average_precision_score(all_y_true, all_y_probs),
         "overall_roc_auc": roc_auc_score(all_y_true, all_y_probs),
         "overall_f1": f1_score(all_y_true, all_y_pred),
         "overall_precision": precision_score(all_y_true, all_y_pred, zero_division=0),
         "overall_recall": recall_score(all_y_true, all_y_pred, zero_division=0),
+        # Stage 1 (The Net) Independent Metrics
+        "s1_overall_precision": s1_overall_precision,
+        "s1_overall_recall": s1_overall_recall,
+        "s1_overall_f1": s1_overall_f1,
+        "s1_overall_auprc": s1_overall_auprc,
         "mean_window_auprc": results_df["auprc"].mean(),
         "std_window_auprc": results_df["auprc"].std(),
+        # Cascade Funnel Aggregated Metrics (sum across all windows)
+        "total_s1_flagged": int(results_df["s1_total_flagged"].sum()),
+        "total_s1_tp": int(results_df["s1_tp"].sum()),
+        "total_s1_fp": int(results_df["s1_fp"].sum()),
+        "total_s2_flagged": int(results_df["s2_total_flagged"].sum()),
+        "total_s2_tp_retained": int(results_df["s2_tp_retained"].sum()),
+        "total_s2_fp_retained": int(results_df["s2_fp_retained"].sum()),
+        "total_fp_filtered_by_s2": int(results_df["fp_filtered_by_s2"].sum()),
+        "total_tp_lost_by_s2": int(results_df["tp_lost_by_s2"].sum()),
     }
 
     for k in K_VALUES:

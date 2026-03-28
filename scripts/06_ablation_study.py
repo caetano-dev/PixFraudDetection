@@ -458,6 +458,229 @@ def plot_ablation_lift(
     print(f"✓ Ablation visualization saved to: {output_path}")
 
 
+def plot_cascade_funnel(
+    baseline_results: Dict,
+    full_results: Dict,
+    output_dir: Path
+) -> None:
+    """
+    Visualize Two-Stage Cascade Funnel metrics for Baseline vs Full Model.
+    
+    Creates a side-by-side grouped bar chart comparing:
+    - Total Stage 1 Alerts
+    - False Positives filtered by Stage 2 (Green - operational win)
+    - True Positives lost by Stage 2 (Red - operational cost)
+    - Final Stage 2 Alerts sent to investigators
+    
+    Args:
+        baseline_results: Summary dict from baseline model training
+        full_results: Summary dict from full model training
+        output_dir: Directory to save visualization
+    """
+    print("\n" + "-" * 120)
+    print("GENERATING CASCADE FUNNEL VISUALIZATION")
+    print("-" * 120)
+    
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(exist_ok=True, parents=True)
+    
+    # Extract cascade metrics from both models
+    models_data = {
+        'Baseline Model': baseline_results,
+        'Full Model': full_results
+    }
+    
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8))
+    
+    for idx, (model_name, results) in enumerate(models_data.items()):
+        ax = axes[idx]
+        
+        # Extract metrics
+        s1_total = results.get('total_s1_flagged', 0)
+        fp_filtered = results.get('total_fp_filtered_by_s2', 0)
+        tp_lost = results.get('total_tp_lost_by_s2', 0)
+        s2_total = results.get('total_s2_flagged', 0)
+        
+        # Calculate percentages
+        fp_filtered_pct = (fp_filtered / s1_total * 100) if s1_total > 0 else 0
+        tp_lost_pct = (tp_lost / s1_total * 100) if s1_total > 0 else 0
+        
+        # Create waterfall-style bars
+        categories = ['Stage 1\nTotal Alerts', 'FPs Filtered\n(Win)', 'TPs Lost\n(Cost)', 'Stage 2\nFinal Alerts']
+        values = [s1_total, fp_filtered, -tp_lost, s2_total]
+        colors = ['#3498db', '#27ae60', '#e74c3c', '#9b59b6']
+        
+        bars = ax.bar(categories, values, color=colors, alpha=0.85, edgecolor='black', linewidth=1.5)
+        
+        # Add value labels on bars
+        for i, (bar, val) in enumerate(zip(bars, values)):
+            height = bar.get_height()
+            label_y = height + (50 if height > 0 else -50)
+            
+            if i == 0 or i == 3:  # Stage 1 and Stage 2 totals
+                label = f'{abs(int(height)):,}'
+            else:  # FP filtered or TP lost
+                label = f'{abs(int(height)):,}\n({abs(height)/s1_total*100:.1f}%)'
+            
+            ax.text(bar.get_x() + bar.get_width()/2, label_y,
+                   label, ha='center', va='bottom' if height > 0 else 'top',
+                   fontsize=11, fontweight='bold')
+        
+        # Styling
+        ax.set_title(f'{model_name}\nTwo-Stage Cascade Funnel', fontsize=14, fontweight='bold', pad=20)
+        ax.set_ylabel('Number of Transactions', fontsize=12, fontweight='bold')
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=1)
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        # Add annotation box
+        annotation_text = (
+            f"FPs Eliminated: {fp_filtered_pct:.1f}%\n"
+            f"TPs Sacrificed: {tp_lost_pct:.1f}%\n"
+            f"Net Reduction: {(s1_total - s2_total)/s1_total*100:.1f}%"
+        )
+        ax.text(0.98, 0.97, annotation_text,
+               transform=ax.transAxes,
+               fontsize=10,
+               verticalalignment='top',
+               horizontalalignment='right',
+               bbox=dict(boxstyle='round', facecolor='white', edgecolor='gray', alpha=0.9))
+    
+    plt.tight_layout()
+    
+    output_path = plots_dir / "cascade_funnel_comparison.png"
+    fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    
+    print(f"✓ Cascade funnel visualization saved to: {output_path}")
+    
+    # Print console report
+    print("\n" + "=" * 80)
+    print("CASCADE FUNNEL EFFICIENCY")
+    print("=" * 80)
+    
+    for model_name, results in models_data.items():
+        s1_total = results.get('total_s1_flagged', 0)
+        s1_fp = results.get('total_s1_fp', 0)
+        s1_tp = results.get('total_s1_tp', 0)
+        fp_filtered = results.get('total_fp_filtered_by_s2', 0)
+        tp_lost = results.get('total_tp_lost_by_s2', 0)
+        s2_total = results.get('total_s2_flagged', 0)
+        
+        fp_elimination_rate = (fp_filtered / s1_fp * 100) if s1_fp > 0 else 0
+        tp_sacrifice_rate = (tp_lost / s1_tp * 100) if s1_tp > 0 else 0
+        alert_reduction = (s1_total - s2_total) / s1_total * 100 if s1_total > 0 else 0
+        
+        print(f"\n{model_name}:")
+        print(f"  Stage 1 Alerts:              {s1_total:,} ({s1_tp:,} TP + {s1_fp:,} FP)")
+        print(f"  Stage 2 Filters Out:         {fp_filtered + tp_lost:,} transactions")
+        print(f"    ├─ False Positives Killed: {fp_filtered:,} ({fp_elimination_rate:.1f}% of S1 FPs) ✓")
+        print(f"    └─ True Positives Lost:    {tp_lost:,} ({tp_sacrifice_rate:.1f}% of S1 TPs) ✗")
+        print(f"  Stage 2 Final Alerts:        {s2_total:,}")
+        print(f"  Net Alert Reduction:         {alert_reduction:.1f}%")
+        print(f"  ")
+        print(f"  OPERATIONAL IMPACT:")
+        print(f"    • For every 1 TP sacrificed, Stage 2 eliminates {fp_filtered/tp_lost if tp_lost > 0 else float('inf'):.1f} FPs")
+        print(f"    • Investigator workload reduced by {alert_reduction:.1f}%")
+
+
+def plot_stage_evolution(
+    baseline_results: Dict,
+    full_results: Dict,
+    output_dir: Path
+) -> None:
+    """
+    Visualize Stage 1 vs Stage 2 metric evolution for both models.
+    
+    Creates a 1x2 multi-panel figure comparing core classification metrics
+    (Precision, Recall, F1, AUPRC) at Stage 1 (The Net) vs Stage 2 (Final Cascade).
+    
+    Args:
+        baseline_results: Summary dict from baseline model training
+        full_results: Summary dict from full model training
+        output_dir: Directory to save visualization
+    """
+    print("\n" + "-" * 120)
+    print("GENERATING STAGE EVOLUTION VISUALIZATION")
+    print("-" * 120)
+    
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(exist_ok=True, parents=True)
+    
+    # Metric names and display labels
+    metrics = ['precision', 'recall', 'f1', 'auprc']
+    metric_labels = ['Precision', 'Recall', 'F1', 'AUPRC']
+    
+    # Color scheme
+    stage1_color = '#5DADE2'  # Light blue
+    stage2_color = '#8E44AD'  # Dark purple
+    
+    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+    
+    models_data = [
+        ('Baseline Model', baseline_results, axes[0]),
+        ('Full Model', full_results, axes[1])
+    ]
+    
+    for model_name, results, ax in models_data:
+        # Extract Stage 1 and Stage 2 metrics
+        stage1_scores = [
+            results.get(f's1_overall_{m}', 0) for m in metrics
+        ]
+        stage2_scores = [
+            results.get(f'overall_{m}', 0) for m in metrics
+        ]
+        
+        # Set up grouped bar chart
+        x = np.arange(len(metric_labels))
+        width = 0.35
+        
+        bars1 = ax.bar(x - width/2, stage1_scores, width, 
+                      label='Stage 1 (The Net)', color=stage1_color, 
+                      alpha=0.9, edgecolor='black', linewidth=1.2)
+        bars2 = ax.bar(x + width/2, stage2_scores, width, 
+                      label='Stage 2 (Final)', color=stage2_color, 
+                      alpha=0.9, edgecolor='black', linewidth=1.2)
+        
+        # Annotate bars with exact scores
+        for bars in [bars1, bars2]:
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2, height + 0.01,
+                       f'{height:.3f}',
+                       ha='center', va='bottom', fontsize=10, fontweight='bold')
+        
+        # Styling
+        ax.set_title(f'{model_name}: Stage 1 vs Stage 2',
+                    fontsize=14, fontweight='bold', pad=15)
+        ax.set_ylabel('Score', fontsize=12, fontweight='bold')
+        ax.set_xlabel('Metric', fontsize=12, fontweight='bold')
+        ax.set_xticks(x)
+        ax.set_xticklabels(metric_labels, fontsize=11)
+        ax.set_ylim(0, 1.05)
+        ax.legend(fontsize=11, loc='lower right', framealpha=0.95)
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        
+        # Add delta annotations
+        for i, (s1, s2) in enumerate(zip(stage1_scores, stage2_scores)):
+            delta = s2 - s1
+            delta_pct = (delta / s1 * 100) if s1 > 0 else 0
+            color = 'green' if delta > 0 else 'red' if delta < 0 else 'gray'
+            symbol = '▲' if delta > 0 else '▼' if delta < 0 else '='
+            
+            ax.text(i, max(s1, s2) + 0.08,
+                   f'{symbol} {delta:+.3f}\n({delta_pct:+.1f}%)',
+                   ha='center', va='bottom', fontsize=9, 
+                   color=color, fontweight='bold')
+    
+    plt.tight_layout()
+    
+    output_path = plots_dir / "stage_evolution_comparison.png"
+    fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    
+    print(f"✓ Stage evolution visualization saved to: {output_path}")
+
+
 def main():
     """
     Phase 3 Main Execution: Ablation Study Pipeline
@@ -492,6 +715,18 @@ def main():
     print(f"Baseline predictions: {len(baseline_preds):,} samples")
     print(f"Full model predictions: {len(full_preds):,} samples")
     
+    # Load model summaries for cascade metrics
+    summaries_path = results_dir / "model_summaries.csv"
+    if not summaries_path.exists():
+        raise FileNotFoundError(
+            f"Model summaries not found at {summaries_path}. "
+            "Run 05_train_models.py first."
+        )
+    
+    summaries_df = pd.read_csv(summaries_path)
+    baseline_summary = summaries_df[summaries_df['model_name'] == 'Baseline'].iloc[0].to_dict()
+    full_summary = summaries_df[summaries_df['model_name'] == 'Full Model'].iloc[0].to_dict()
+    
     comparison_df, statistical_tests = compute_ablation_metrics(
         baseline_preds=baseline_preds,
         full_preds=full_preds
@@ -523,6 +758,36 @@ def main():
     
     plot_metric_comparison(comparison_df, results_dir)
     plot_ablation_lift(comparison_df, statistical_tests, results_dir)
+    plot_cascade_funnel(baseline_summary, full_summary, results_dir)
+    plot_stage_evolution(baseline_summary, full_summary, results_dir)
+    
+    # Console report: CASCADE METRIC EVOLUTION
+    print("\n" + "=" * 80)
+    print("CASCADE METRIC EVOLUTION (STAGE 1 -> STAGE 2)")
+    print("=" * 80)
+    
+    metrics_to_track = [
+        ('precision', 'Precision'),
+        ('recall', 'Recall'),
+        ('f1', 'F1 Score'),
+        ('auprc', 'AUPRC')
+    ]
+    
+    for model_name, results in [('Baseline Model', baseline_summary), ('Full Model', full_summary)]:
+        print(f"\n{model_name}:")
+        print("-" * 60)
+        
+        for metric_key, metric_label in metrics_to_track:
+            s1_value = results.get(f's1_overall_{metric_key}', 0)
+            s2_value = results.get(f'overall_{metric_key}', 0)
+            delta = s2_value - s1_value
+            delta_pct = (delta / s1_value * 100) if s1_value > 0 else 0
+            
+            symbol = '▲' if delta > 0 else '▼' if delta < 0 else '='
+            direction = 'LIFT' if delta > 0 else 'DROP' if delta < 0 else 'UNCHANGED'
+            
+            print(f"  {metric_label:12s}: S1={s1_value:.4f} → S2={s2_value:.4f}  "
+                  f"{symbol} {delta:+.4f} ({delta_pct:+.2f}%) [{direction}]")
     
     print("\n" + "=" * 80)
     print("PHASE 3 COMPLETE")
@@ -532,6 +797,8 @@ def main():
     print("  • ablation_statistical_tests.csv")
     print("  • plots/ablation_metric_comparison.png")
     print("  • plots/ablation_lift.png")
+    print("  • plots/cascade_funnel_comparison.png")
+    print("  • plots/stage_evolution_comparison.png")
     
     auprc_stats = statistical_tests['auprc']
     print("\n" + "-" * 40)
