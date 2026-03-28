@@ -63,7 +63,6 @@ def process_window(
         return {"window_id": window_id, "status": "success", "has_features": False, "has_metrics": False}
 
     extractors: dict[str, FeatureExtractor] = {
-        # COMMENTED OUT: Memory-hogging static topology extractors that destroy temporal patterns
         "pr_vol_deep": PageRankVolumeExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
         "pr_vol_shallow": PageRankVolumeExtractor(alpha=PR_ALPHA_SHALLOW, max_iter=PR_MAX_ITER),
         "pr_count": PageRankFrequencyExtractor(alpha=PR_ALPHA_DEEP, max_iter=PR_MAX_ITER),
