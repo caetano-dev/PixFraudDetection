@@ -681,6 +681,66 @@ def plot_stage_evolution(
     print(f"✓ Stage evolution visualization saved to: {output_path}")
 
 
+def plot_entity_level_recall(
+    baseline_preds: pd.DataFrame,
+    full_preds: pd.DataFrame,
+    output_dir: Path
+) -> None:
+    """
+    Calculate and visualize the Entity-Level Recall.
+    Measures the percentage of unique fraudulent accounts that were 
+    successfully flagged at least once across all temporal test windows.
+    """
+    print("\n" + "-" * 120)
+    print("OPERATIONAL IMPACT: ENTITY-LEVEL RECALL")
+    print("-" * 120)
+    
+    # Baseline Calculation
+    b_fraud = baseline_preds[baseline_preds['y_true'] == 1]
+    b_total = b_fraud['entity_id'].nunique()
+    b_caught = b_fraud[b_fraud['y_pred'] == 1]['entity_id'].nunique()
+    b_recall = b_caught / b_total if b_total > 0 else 0
+    
+    # Full Model Calculation
+    f_fraud = full_preds[full_preds['y_true'] == 1]
+    f_total = f_fraud['entity_id'].nunique()
+    f_caught = f_fraud[f_fraud['y_pred'] == 1]['entity_id'].nunique()
+    f_recall = f_caught / f_total if f_total > 0 else 0
+    
+    print(f"Baseline Model: Caught {b_caught:,} out of {b_total:,} fraudulent entities ({b_recall:.2%})")
+    print(f"Full Model:     Caught {f_caught:,} out of {f_total:,} fraudulent entities ({f_recall:.2%})")
+    
+    # Visualization
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(exist_ok=True, parents=True)
+    
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, ax = plt.subplots(figsize=(8, 6))
+    
+    models = ['Baseline (Behavioral)', 'Full Model (+Topological)']
+    recalls = [b_recall, f_recall]
+    colors = ['#e74c3c', '#27ae60']
+    
+    bars = ax.bar(models, recalls, color=colors, alpha=0.85, edgecolor='black', linewidth=1.2, width=0.5)
+    
+    for bar, caught, total, rec in zip(bars, [b_caught, f_caught], [b_total, f_total], recalls):
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2, height + 0.02,
+               f'{rec:.1%}\n({caught:,} / {total:,} Accounts)',
+               ha='center', va='bottom', fontsize=11, fontweight='bold')
+        
+    ax.set_ylabel('Entity-Level Recall (Accounts Caught)', fontsize=12, fontweight='bold')
+    ax.set_title('Operational Impact: Entity-Level Recall', fontsize=14, fontweight='bold')
+    ax.set_ylim(0, max(recalls) * 1.25 if max(recalls) > 0 else 1.0)
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    
+    plt.tight_layout()
+    output_path = plots_dir / "entity_level_recall.png"
+    fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+    print(f"✓ Entity-Level Recall plot saved to: {output_path}")
+
+
 def main():
     """
     Phase 3 Main Execution: Ablation Study Pipeline
@@ -714,6 +774,9 @@ def main():
     
     print(f"Baseline predictions: {len(baseline_preds):,} samples")
     print(f"Full model predictions: {len(full_preds):,} samples")
+    
+    # NEW INTEGRATION: Calculate and plot entity-level recall while predictions are in memory
+    plot_entity_level_recall(baseline_preds, full_preds, results_dir)
     
     # Load model summaries for cascade metrics
     summaries_path = results_dir / "model_summaries.csv"
@@ -799,6 +862,7 @@ def main():
     print("  • plots/ablation_lift.png")
     print("  • plots/cascade_funnel_comparison.png")
     print("  • plots/stage_evolution_comparison.png")
+    print("  • plots/entity_level_recall.png")
     
     auprc_stats = statistical_tests['auprc']
     print("\n" + "-" * 40)
