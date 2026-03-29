@@ -287,6 +287,52 @@ def plot_metric_comparison(comparison_df: pd.DataFrame, output_dir: Path) -> Non
     print(f"✓ Metric comparison plot saved to: {output_path}")
 
 
+def plot_precision_at_k_ablation(comparison_df: pd.DataFrame, output_dir: Path) -> None:
+    """Generate precision@k comparison plot for ablation study."""
+    plots_dir = output_dir / "plots"
+    plots_dir.mkdir(exist_ok=True, parents=True)
+
+    metric_specs = [
+        ("P@10", "P@10"),
+        ("P@50", "P@50"),
+        ("P@100", "P@100"),
+        ("P@200", "P@200"),
+        ("P@300", "P@300"),
+        ("P@500", "P@500"),
+    ]
+
+    baseline_values = [comparison_df[f"{col}_baseline"].mean() for _, col in metric_specs]
+    full_values = [comparison_df[f"{col}_full"].mean() for _, col in metric_specs]
+
+    x = np.arange(len(metric_specs))
+    width = 0.36
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, ax = plt.subplots(figsize=(13, 7))
+
+    ax.bar(x - width / 2, baseline_values, width, label='Baseline', color='#e74c3c', alpha=0.85)
+    ax.bar(x + width / 2, full_values, width, label='Full Model', color='#27ae60', alpha=0.85)
+
+    for idx, (baseline_val, full_val) in enumerate(zip(baseline_values, full_values)):
+        ax.text(idx - width / 2, baseline_val + 0.01, f"{baseline_val:.3f}", ha='center', va='bottom', fontsize=8)
+        ax.text(idx + width / 2, full_val + 0.01, f"{full_val:.3f}", ha='center', va='bottom', fontsize=8)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([name for name, _ in metric_specs], rotation=15, ha='right')
+    ax.set_ylabel('Average Precision@K Across Windows', fontsize=11, fontweight='bold')
+    ax.set_title('Ablation Study: Precision@K Metrics', fontsize=13, fontweight='bold')
+    ax.set_ylim(0, min(1.05, max(baseline_values + full_values) * 1.2 if baseline_values or full_values else 1.0))
+    ax.legend(loc='lower right')
+    ax.grid(axis='y', alpha=0.3)
+
+    plt.tight_layout()
+    output_path = plots_dir / "ablation_precision_at_k.png"
+    fig.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close(fig)
+
+    print(f"✓ Precision@K ablation plot saved to: {output_path}")
+
+
 def plot_ablation_lift(
     comparison_df: pd.DataFrame,
     statistical_tests: Dict,
@@ -820,6 +866,7 @@ def main():
     print(f"✓ Statistical tests saved to: {stats_path}")
     
     plot_metric_comparison(comparison_df, results_dir)
+    plot_precision_at_k_ablation(comparison_df, results_dir)
     plot_ablation_lift(comparison_df, statistical_tests, results_dir)
     plot_cascade_funnel(baseline_summary, full_summary, results_dir)
     plot_stage_evolution(baseline_summary, full_summary, results_dir)
@@ -859,6 +906,7 @@ def main():
     print("  • ablation_results.csv")
     print("  • ablation_statistical_tests.csv")
     print("  • plots/ablation_metric_comparison.png")
+    print("  • plots/ablation_precision_at_k.png")
     print("  • plots/ablation_lift.png")
     print("  • plots/cascade_funnel_comparison.png")
     print("  • plots/stage_evolution_comparison.png")
