@@ -378,31 +378,28 @@ def forward_chaining_validation(
         y_probs_s1 = stage1_model.predict_proba(X_test)[:, 1]
         y_pred_s1 = (y_probs_s1 >= optimal_threshold).astype(int)
 
-        # ==========================================================
+      # ==========================================================
         # STAGE 2: THE FILTER (High Precision)
         # ==========================================================
         # Use the out-of-fold calibration set to find the true hard negatives
-        # This prevents the overfitting leakage caused by predicting on the training set.
         s2_train_mask = val_probs >= optimal_threshold
         X_train_s2 = X_inner_val[s2_train_mask]
         y_train_s2 = y_inner_val[s2_train_mask]
 
-        # Stage 2 requires shallow trees to prevent overfitting the hard examples
         STAGE2_PARAMS = XGBOOST_PARAMS.copy()
-        STAGE2_PARAMS['max_depth'] = 3 
+        STAGE2_PARAMS['max_depth'] = 3
         STAGE2_PARAMS['n_estimators'] = 100
         STAGE2_PARAMS['learning_rate'] = 0.05
         STAGE2_PARAMS['min_child_weight'] = 20
         STAGE2_PARAMS['gamma'] = 5.0
         
-        # Fallback in case Stage 1 caught zero false positives in validation
         if len(np.unique(y_train_s2)) < 2:
             if verbose:
                 print(f"    Stage 2 bypass: Insufficient variance in flagged validation data (window {test_window_id})")
             stage2_model = stage1_model
+            s2_optimal_threshold = optimal_threshold
         else:
             # DYNAMIC ALGORITHMIC WEIGHTING
-            # Force Stage 2 to care equally about True Positives and False Positives
             n_neg_s2 = np.sum(y_train_s2 == 0)
             n_pos_s2 = np.sum(y_train_s2 == 1)
             base_weight = n_neg_s2 / n_pos_s2 if n_pos_s2 > 0 else 1.0
@@ -411,13 +408,19 @@ def forward_chaining_validation(
             stage2_model = xgb.XGBClassifier(**STAGE2_PARAMS)
             stage2_model.fit(X_train_s2, y_train_s2)
 
-        # Safely free memory now that Stage 2 is trained. This keeps the footprint 
-        # minimal for your 8GB machine.
+            # CALIBRATE STAGE 2 THRESHOLD
+            # Predict on the validation subset to find the 95% recall boundary
+            s2_val_probs = stage2_model.predict_proba(X_train_s2)[:, 1]
+            s2_optimal_threshold = calibrate_threshold(y_train_s2, s2_val_probs, target_recall=0.95)
+            
+            if verbose:
+                print(f"    Stage 2 Calibrated Threshold: {s2_optimal_threshold:.4f} (Target Recall: 95%)")
+
+        # Safely free memory now that Stage 2 is trained.
         del calib_model, X_inner_train, y_inner_train, X_inner_val, y_inner_val
         del inner_train_df, inner_val_df, val_probs
         gc.collect()
-
-        # ==========================================================
+# ==========================================================
         # CASCADE INFERENCE & PROBABILITY FUSION
         # ==========================================================
         # Isolate the test transactions that passed Stage 1
@@ -429,36 +432,39 @@ def forward_chaining_validation(
             X_test_s2 = X_test[test_suspect_mask]
             # Score only the suspects with Stage 2
             y_probs_s2[test_suspect_mask] = stage2_model.predict_proba(X_test_s2)[:, 1]
-            # --- START DIAGNOSTIC SWEEP ---
-            if verbose:
-                y_true_s2 = y_test[test_suspect_mask]
-                y_probs_s2_only = y_probs_s2[test_suspect_mask]
-                precisions, recalls, thresholds = precision_recall_curve(y_true_s2, y_probs_s2_only)
-                
-                print(f"\n    [Window {test_window_id}] Stage 2 Target Recall Sweep:")
-                print("    Retained TPs% | Precision | FPs Eliminated | TPs Sacrificed | Threshold")
-                for target in [1.0, 0.99, 0.95, 0.90, 0.85, 0.80]:
-                    valid_idx = np.where(recalls >= target)[0]
-                    if len(valid_idx) == 0: continue
-                    best_idx = valid_idx[np.argmax(precisions[valid_idx])]
-                    t = thresholds[best_idx] if best_idx < len(thresholds) else thresholds[-1]
-                    
-                    preds = (y_probs_s2_only >= t).astype(int)
-                    tp_retained = np.sum((preds == 1) & (y_true_s2 == 1))
-                    fp_retained = np.sum((preds == 1) & (y_true_s2 == 0))
-                    tp_sacrificed = np.sum(y_true_s2 == 1) - tp_retained
-                    fp_eliminated = np.sum(y_true_s2 == 0) - fp_retained
-                    current_precision = tp_retained / (tp_retained + fp_retained) if (tp_retained + fp_retained) > 0 else 0
-                    
-                    print(f"    {target*100:11.1f}% | {current_precision:9.3f} | {fp_eliminated:14d} | {tp_sacrificed:14d} | {t:.4f}")
-            # --- END DIAGNOSTIC SWEEP ---
-
-        # FUSION: If it passes Stage 1, use Stage 2's probability. 
-        # If it fails Stage 1, crush the Stage 1 probability to keep it at the bottom of the rank.
+            
         y_probs_final = np.where(test_suspect_mask, y_probs_s2, y_probs_s1 * 0.01)
         
-        # Final prediction requires passing Stage 2's default threshold
-        y_pred_final = (y_probs_final >= 0.5).astype(int)
+        # Final prediction requires passing the dynamically calibrated Stage 2 threshold
+        y_pred_final = np.zeros_like(y_probs_final)
+        
+        # Only evaluate entities that passed Stage 1 against the Stage 2 threshold
+        y_pred_final[test_suspect_mask] = (y_probs_final[test_suspect_mask] >= s2_optimal_threshold).astype(int)
+
+          # --- START DIAGNOSTIC SWEEP ---
+        if verbose:
+            y_true_s2 = y_test[test_suspect_mask]
+            y_probs_s2_only = y_probs_s2[test_suspect_mask]
+            precisions, recalls, thresholds = precision_recall_curve(y_true_s2, y_probs_s2_only)
+            
+            print(f"\n    [Window {test_window_id}] Stage 2 Target Recall Sweep:")
+            print("    Retained TPs% | Precision | FPs Eliminated | TPs Sacrificed | Threshold")
+            for target in [1.0, 0.99, 0.95, 0.90, 0.85, 0.80]:
+                valid_idx = np.where(recalls >= target)[0]
+                if len(valid_idx) == 0:
+                  continue
+                best_idx = valid_idx[np.argmax(precisions[valid_idx])]
+                t = thresholds[best_idx] if best_idx < len(thresholds) else thresholds[-1]
+                
+                preds = (y_probs_s2_only >= t).astype(int)
+                tp_retained = np.sum((preds == 1) & (y_true_s2 == 1))
+                fp_retained = np.sum((preds == 1) & (y_true_s2 == 0))
+                tp_sacrificed = np.sum(y_true_s2 == 1) - tp_retained
+                fp_eliminated = np.sum(y_true_s2 == 0) - fp_retained
+                current_precision = tp_retained / (tp_retained + fp_retained) if (tp_retained + fp_retained) > 0 else 0
+                
+                print(f"    {target*100:11.1f}% | {current_precision:9.3f} | {fp_eliminated:14d} | {tp_sacrificed:14d} | {t:.4f}")
+            # --- END DIAGNOSTIC SWEEP ---
 
         # ==========================================================
         # CASCADE FUNNEL METRICS (Two-Stage Architecture)
