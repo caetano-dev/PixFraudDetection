@@ -429,6 +429,29 @@ def forward_chaining_validation(
             X_test_s2 = X_test[test_suspect_mask]
             # Score only the suspects with Stage 2
             y_probs_s2[test_suspect_mask] = stage2_model.predict_proba(X_test_s2)[:, 1]
+            # --- START DIAGNOSTIC SWEEP ---
+            if verbose:
+                y_true_s2 = y_test[test_suspect_mask]
+                y_probs_s2_only = y_probs_s2[test_suspect_mask]
+                precisions, recalls, thresholds = precision_recall_curve(y_true_s2, y_probs_s2_only)
+                
+                print(f"\n    [Window {test_window_id}] Stage 2 Target Recall Sweep:")
+                print("    Retained TPs% | Precision | FPs Eliminated | TPs Sacrificed | Threshold")
+                for target in [1.0, 0.99, 0.95, 0.90, 0.85, 0.80]:
+                    valid_idx = np.where(recalls >= target)[0]
+                    if len(valid_idx) == 0: continue
+                    best_idx = valid_idx[np.argmax(precisions[valid_idx])]
+                    t = thresholds[best_idx] if best_idx < len(thresholds) else thresholds[-1]
+                    
+                    preds = (y_probs_s2_only >= t).astype(int)
+                    tp_retained = np.sum((preds == 1) & (y_true_s2 == 1))
+                    fp_retained = np.sum((preds == 1) & (y_true_s2 == 0))
+                    tp_sacrificed = np.sum(y_true_s2 == 1) - tp_retained
+                    fp_eliminated = np.sum(y_true_s2 == 0) - fp_retained
+                    current_precision = tp_retained / (tp_retained + fp_retained) if (tp_retained + fp_retained) > 0 else 0
+                    
+                    print(f"    {target*100:11.1f}% | {current_precision:9.3f} | {fp_eliminated:14d} | {tp_sacrificed:14d} | {t:.4f}")
+            # --- END DIAGNOSTIC SWEEP ---
 
         # FUSION: If it passes Stage 1, use Stage 2's probability. 
         # If it fails Stage 1, crush the Stage 1 probability to keep it at the bottom of the rank.
