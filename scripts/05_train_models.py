@@ -59,32 +59,24 @@ BEHAVIORAL_COLS = [
 ]
 
 TOPOLOGICAL_COLS = [
-    # Removed static features that destroy temporal patterns:
     'pr_vol_deep', 'pr_vol_shallow', 'pr_count',
     'leiden_macro_modularity', 'leiden_micro_modularity',
     'betweenness', 'k_core',
     'hits_hub', 'hits_auth',
     
-    # Community size features (temporal community size can indicate laundering networks)
     'leiden_macro_size', 'leiden_micro_size',
     
-    # Structural connectivity (basic degree features preserved)
     'degree', 'in_degree', 'out_degree',
     
-    # Motif patterns (these capture sequential patterns, kept from original)
     'fan_out_count', 'fan_in_count',
     'cycle_count',
     
-    # Ego-network features (local neighborhood structure)
     'egonet_node_count', 'egonet_edge_count', 'egonet_density', 'egonet_total_weight',
     
-    # Clustering features (local cohesion)
     'local_clustering_coefficient', 'triangle_count',
     
-    # Neighbor aggregation features
     'average_neighbor_degree', 'successor_avg_volume', 'successor_max_volume',
     
-    # TEMPORAL MOTIFS (newly integrated - capture chronological laundering patterns)
     'temporal_fan_out_count', 
     'temporal_fan_in_count',
 ]
