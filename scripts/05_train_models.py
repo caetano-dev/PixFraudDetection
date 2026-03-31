@@ -32,7 +32,6 @@ import numpy as np
 import pandas as pd
 import shap
 import xgboost as xgb
-from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import (
     accuracy_score,
     average_precision_score,
@@ -114,127 +113,7 @@ def compute_precision_at_k(y_true: np.ndarray, y_probs: np.ndarray, k: int) -> f
     return float(np.sum(top_k_labels)) / k
 
 
-def undersample_data(
-    data: pd.DataFrame,
-    target_col: str = "is_fraud",
-    ratio: int = UNDERSAMPLE_RATIO,
-    use_hard_negative_mining: bool = True
-) -> pd.DataFrame:
-    """
-    Enforce strict 1:N asymmetric undersampling with density-based hard-negative mining.
-    
-    Instead of random sampling, this implementation uses clustering to identify
-    normal entities that are closest to the fraud distribution in behavioral
-    feature space. This forces the model to learn complex decision boundaries.
-    
-    Args:
-        data: DataFrame with features and target
-        target_col: Name of binary target column
-        ratio: Undersampling ratio (normal:fraud)
-        use_hard_negative_mining: If True, use clustering-based sampling; 
-                                   if False, use random sampling (original behavior)
-    
-    Returns:
-        Undersampled DataFrame with balanced classes
-    """
-    fraud = data[data[target_col] == 1]
-    normal = data[data[target_col] == 0]
-    target_count = len(fraud) * ratio
 
-    if len(normal) <= target_count:
-        # No undersampling needed
-        result = pd.concat([fraud, normal]).sample(frac=1, random_state=42)
-        return result
-    
-    if not use_hard_negative_mining or len(fraud) < 2:
-        # Fall back to random sampling if disabled or insufficient fraud samples
-        normal = normal.sample(n=target_count, random_state=42)
-        result = pd.concat([fraud, normal]).sample(frac=1, random_state=42)
-        return result
-    
-    # Hard-negative mining using behavioral features only
-    behavioral_features = [
-        'vol_sent', 'vol_recv', 'tx_count', 'time_variance', 'flow_ratio',
-        'distinct_currencies_sent', 'distinct_currencies_recv',
-        'wire_count_sent', 'cash_count_sent', 'bitcoin_count_sent', 
-        'cheque_count_sent', 'credit_card_count_sent', 'ach_count_sent', 
-        'reinvestment_count_sent', 'wire_count_recv', 'cash_count_recv',
-        'bitcoin_count_recv', 'cheque_count_recv', 'credit_card_count_recv',
-        'ach_count_recv', 'reinvestment_count_recv'
-    ]
-    
-    # Use only features that exist in the DataFrame
-    available_features = [f for f in behavioral_features if f in normal.columns]
-    
-    if len(available_features) == 0:
-        # No behavioral features available, fall back to random
-        normal = normal.sample(n=target_count, random_state=42)
-        result = pd.concat([fraud, normal]).sample(frac=1, random_state=42)
-        return result
-    
-    # Compute fraud centroid in behavioral feature space
-    fraud_features = fraud[available_features].fillna(0).values
-    fraud_centroid = np.mean(fraud_features, axis=0)
-    
-    # Fit MiniBatchKMeans on normal class (memory-efficient for 8GB constraint)
-    normal_features = normal[available_features].fillna(0).values
-    
-    # Number of clusters: min(sqrt(n_normal), target_count/2)
-    # This ensures we have enough diversity while keeping memory usage low
-    n_clusters = min(int(np.sqrt(len(normal))), max(10, target_count // 2))
-    
-    kmeans = MiniBatchKMeans(
-        n_clusters=n_clusters,
-        random_state=42,
-        batch_size=1024,  # Memory-efficient batch processing
-        n_init=3,
-        max_iter=100
-    )
-    
-    cluster_labels = kmeans.fit_predict(normal_features)
-    cluster_centers = kmeans.cluster_centers_
-    
-    # Compute distance from each cluster center to fraud centroid
-    distances_to_fraud = np.linalg.norm(
-        cluster_centers - fraud_centroid.reshape(1, -1), 
-        axis=1
-    )
-    
-    # Rank clusters by proximity to fraud (closest = highest risk)
-    cluster_ranking = np.argsort(distances_to_fraud)
-    
-    # Sample from high-risk clusters (closest to fraud distribution)
-    selected_indices = []
-    samples_per_cluster = target_count // len(cluster_ranking)
-    remainder = target_count % len(cluster_ranking)
-    
-    for rank, cluster_id in enumerate(cluster_ranking):
-        cluster_mask = cluster_labels == cluster_id
-        cluster_indices = normal.index[cluster_mask].tolist()
-        
-        if not cluster_indices:
-            continue
-        
-        # Allocate more samples to closer clusters
-        n_samples = samples_per_cluster + (1 if rank < remainder else 0)
-        n_samples = min(n_samples, len(cluster_indices))
-        
-        sampled = np.random.RandomState(42 + rank).choice(
-            cluster_indices, 
-            size=n_samples, 
-            replace=False
-        )
-        selected_indices.extend(sampled)
-        
-        if len(selected_indices) >= target_count:
-            break
-    
-    # Ensure exact target count
-    selected_indices = selected_indices[:target_count]
-    normal_sampled = normal.loc[selected_indices]
-    
-    result = pd.concat([fraud, normal_sampled]).sample(frac=1, random_state=42)
-    return result
 
 
 def calibrate_threshold(
@@ -342,8 +221,6 @@ def forward_chaining_validation(
         inner_train_df = train_df.iloc[:split_idx]
         inner_val_df = train_df.iloc[split_idx:]
 
-        inner_train_df = undersample_data(inner_train_df, target_col)
-
         X_inner_train = inner_train_df[feature_cols]
         y_inner_train = inner_train_df[target_col].values
         X_inner_val = inner_val_df[feature_cols]
@@ -351,7 +228,18 @@ def forward_chaining_validation(
         X_test = test_df[feature_cols]
         y_test = test_df[target_col].values
 
-        calib_model = xgb.XGBClassifier(**XGBOOST_PARAMS)
+        # Calculate dynamic scale_pos_weight for imbalanced data (no undersampling)
+        n_neg_inner = np.sum(y_inner_train == 0)
+        n_pos_inner = np.sum(y_inner_train == 1)
+        scale_pos_weight_inner = n_neg_inner / n_pos_inner if n_pos_inner > 0 else 1.0
+
+        # Free memory immediately after extracting arrays
+        del inner_train_df
+        gc.collect()
+
+        calib_params = XGBOOST_PARAMS.copy()
+        calib_params['scale_pos_weight'] = scale_pos_weight_inner
+        calib_model = xgb.XGBClassifier(**calib_params)
         calib_model.fit(X_inner_train, y_inner_train)
         val_probs = calib_model.predict_proba(X_inner_val)[:, 1]
         optimal_threshold = calibrate_threshold(y_inner_val, val_probs)
@@ -359,11 +247,21 @@ def forward_chaining_validation(
         # ==========================================================
         # STAGE 1: THE NET (High Recall)
         # ==========================================================
-        final_train_df = undersample_data(train_df, target_col)
-        X_train_final = final_train_df[feature_cols]
-        y_train_final = final_train_df[target_col].values
+        X_train_final = train_df[feature_cols]
+        y_train_final = train_df[target_col].values
 
-        stage1_model = xgb.XGBClassifier(**XGBOOST_PARAMS)
+        # Calculate dynamic scale_pos_weight for full training set
+        n_neg_final = np.sum(y_train_final == 0)
+        n_pos_final = np.sum(y_train_final == 1)
+        scale_pos_weight_final = n_neg_final / n_pos_final if n_pos_final > 0 else 1.0
+
+        # Free memory immediately after extracting arrays
+        del train_df
+        gc.collect()
+
+        stage1_params = XGBOOST_PARAMS.copy()
+        stage1_params['scale_pos_weight'] = scale_pos_weight_final
+        stage1_model = xgb.XGBClassifier(**stage1_params)
         stage1_model.fit(X_train_final, y_train_final)
 
         # Predict on the test set with Stage 1
@@ -410,7 +308,7 @@ def forward_chaining_validation(
 
         # Safely free memory now that Stage 2 is trained.
         del calib_model, X_inner_train, y_inner_train, X_inner_val, y_inner_val
-        del inner_train_df, inner_val_df, val_probs
+        del inner_val_df, val_probs
         gc.collect()
 # ==========================================================
         # CASCADE INFERENCE & PROBABILITY FUSION
@@ -483,7 +381,7 @@ def forward_chaining_validation(
         y_pred = y_pred_final
         final_model = stage1_model  # Keep Stage 1 as the reference for SHAP extraction
 
-        del X_train_final, y_train_final, final_train_df, train_df
+        del X_train_final, y_train_final
         del stage2_model, s2_train_mask, X_train_s2, y_train_s2
         del y_probs_s1, y_pred_s1, y_probs_s2, y_probs_final, y_pred_final, test_suspect_mask
         gc.collect()
