@@ -4,7 +4,7 @@ A machine learning pipeline for detecting fraudulent *entities* in the AMLworld 
 
 ## Features
 
-- **Data Processing**: Filters and aggregates raw PIX transaction data from the AMLworld dataset
+- **Data Processing**: Filters and aggregates raw transaction data from the AMLworld dataset
 - **Feature Engineering**: Extracts behavioral features from account transaction histories
 - **Graph Analysis**: Leverages network patterns using community detection algorithms
 - **Model Training**: Implements forward-chaining cross-validation to prevent data leakage
