@@ -38,6 +38,24 @@ sys.path.append(str(root_path))
 from src.config import DATA_PATH
 
 
+class Tee:
+    """Duplicates stdout to both terminal and a file."""
+    def __init__(self, file_path):
+        self.terminal = sys.stdout
+        self.log = open(file_path, 'w', encoding='utf-8')
+    
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+    
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+    
+    def close(self):
+        self.log.close()
+
+
 K_VALUES = [10, 50, 100, 200, 300, 500]
 
 
@@ -533,6 +551,14 @@ def main():
     
     results_dir = DATA_PATH / "results"
     
+    # Initialize logging to file
+    log_file = results_dir / "06_ablation_study_log.txt"
+    tee = Tee(log_file)
+    original_stdout = sys.stdout
+    sys.stdout = tee
+    
+    print(f"\n[Logging initialized - output saved to {log_file}]")
+    
     baseline_preds_path = results_dir / "baseline_predictions.parquet"
     full_preds_path = results_dir / "full_predictions.parquet"
     
@@ -611,6 +637,10 @@ def main():
         print(f"  statistically significant (p={auprc_stats['p_value']:.4e})")
     
     print("\n→ Proceed to Phase 4: 07_feature_pruning.py")
+    
+    # Close logging
+    sys.stdout = original_stdout
+    tee.close()
 
 
 if __name__ == "__main__":

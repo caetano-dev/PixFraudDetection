@@ -42,6 +42,24 @@ sys.path.append(str(root_path))
 from src.config import OUTPUT_FEATURES_FILE, DATA_PATH
 
 
+class Tee:
+    """Duplicates stdout to both terminal and a file."""
+    def __init__(self, file_path):
+        self.terminal = sys.stdout
+        self.log = open(file_path, 'w', encoding='utf-8')
+    
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+    
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+    
+    def close(self):
+        self.log.close()
+
+
 CORRELATION_THRESHOLD = 0.80
 DROP_PERCENTAGE = 10
 DELTA_AUPRC_THRESHOLD = -0.01
@@ -718,6 +736,14 @@ def main():
     results_dir = DATA_PATH / "results"
     results_dir.mkdir(exist_ok=True, parents=True)
     
+    # Initialize logging to file
+    log_file = results_dir / "07_feature_pruning_log.txt"
+    tee = Tee(log_file)
+    original_stdout = sys.stdout
+    sys.stdout = tee
+    
+    print(f"\n[Logging initialized - output saved to {log_file}]")
+    
     shap_file = results_dir / "shap_feature_importance.csv"
     if not shap_file.exists():
         raise FileNotFoundError(
@@ -926,6 +952,10 @@ def main():
     print(f"Feature composition: {n_behavioral} behavioral, {n_topological} topological")
     
     print("\n✓ TCC Pipeline Complete - All 4 phases executed successfully")
+    
+    # Close logging
+    sys.stdout = original_stdout
+    tee.close()
 
 
 if __name__ == "__main__":

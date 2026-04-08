@@ -48,6 +48,24 @@ sys.path.append(str(root_path))
 from src.config import OUTPUT_FEATURES_FILE, DATA_PATH
 
 
+class Tee:
+    """Duplicates stdout to both terminal and a file."""
+    def __init__(self, file_path):
+        self.terminal = sys.stdout
+        self.log = open(file_path, 'w', encoding='utf-8')
+    
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+    
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+    
+    def close(self):
+        self.log.close()
+
+
 BEHAVIORAL_COLS = [
     'vol_sent', 'vol_recv', 'tx_count', 'time_variance', 'flow_ratio',
     'distinct_currencies_sent', 'distinct_currencies_recv',
@@ -574,6 +592,14 @@ def main():
 
     results_dir = DATA_PATH / "results"
     results_dir.mkdir(exist_ok=True, parents=True)
+    
+    # Initialize logging to file
+    log_file = results_dir / "05_train_models_log.txt"
+    tee = Tee(log_file)
+    original_stdout = sys.stdout
+    sys.stdout = tee
+    
+    print(f"\n[Logging initialized - output saved to {log_file}]")
 
     print("\n" + "=" * 80)
     print("PHASE 2A: TRAINING BASELINE MODEL (Behavioral Features Only)")
@@ -667,6 +693,10 @@ def main():
     print("  • plots/precision_at_k_comparison.png")
 
     print("\n→ Proceed to Phase 3: 06_ablation_study.py")
+    
+    # Close logging
+    sys.stdout = original_stdout
+    tee.close()
 
 
 if __name__ == "__main__":
