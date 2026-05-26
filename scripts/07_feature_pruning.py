@@ -68,7 +68,6 @@ MAX_ITERATIONS = 25
 MIN_FEATURES = 5
 SHAP_SAMPLE_SIZE = 800
 MIN_TRAIN_WINDOWS = 2
-UNDERSAMPLE_RATIO = 20
 CLASSIFICATION_THRESHOLD = 0.5
 K_VALUES = [100, 200, 300, 500]
 
@@ -106,86 +105,9 @@ XGBOOST_PARAMS = {
     'eval_metric': 'aucpr',
     'tree_method': 'hist',
     'random_state': 42,
-    'n_jobs': -1
+    'n_jobs': -1,
+    'scale_pos_weight': 1.0
 }
-
-
-def undersample_data(
-    data: pd.DataFrame,
-    target_col: str = "is_fraud",
-    ratio: int = UNDERSAMPLE_RATIO
-) -> pd.DataFrame:
-    """Enforce strict 1:N asymmetric undersampling."""
-    fraud = data[data[target_col] == 1]
-    normal = data[data[target_col] == 0]
-    target_count = len(fraud) * ratio
-
-    if len(normal) > target_count:
-        normal = normal.sample(n=target_count, random_state=42)
-
-    result = pd.concat([fraud, normal]).sample(frac=1, random_state=42)
-    return result
-
-
-def compute_collinearity_filter(
-    df: pd.DataFrame,
-    feature_cols: List[str],
-    shap_importance: Dict[str, float],
-    threshold: float = CORRELATION_THRESHOLD
-) -> Tuple[List[str], List[Tuple[str, str, float]]]:
-    """
-    Remove collinear features based on Spearman correlation.
-    Between correlated pairs, drop the feature with lower mean absolute SHAP.
-    
-    Returns:
-        - List of features after collinearity filtering
-        - List of dropped feature pairs (feat1, feat2, correlation)
-    """
-    print("\n" + "=" * 80)
-    print("STEP 1: COLLINEARITY FILTER")
-    print(f"Threshold: Spearman |ρ| > {threshold}")
-    print("=" * 80)
-    
-    available_features = [f for f in feature_cols if f in df.columns]
-    print(f"Computing Spearman correlation for {len(available_features)} features...")
-    
-    sample_size = min(10000, len(df))
-    df_sample = df[available_features].sample(n=sample_size, random_state=42)
-    
-    corr_matrix = df_sample.corr(method='spearman').abs()
-    
-    del df_sample
-    gc.collect()
-    
-    dropped_features = set()
-    dropped_pairs = []
-    
-    for i in range(len(corr_matrix.columns)):
-        for j in range(i + 1, len(corr_matrix.columns)):
-            feat1 = corr_matrix.columns[i]
-            feat2 = corr_matrix.columns[j]
-            correlation = corr_matrix.iloc[i, j]
-            
-            if correlation > threshold and feat1 not in dropped_features and feat2 not in dropped_features:
-                shap1 = shap_importance.get(feat1, 0)
-                shap2 = shap_importance.get(feat2, 0)
-                
-                to_drop = feat1 if shap1 < shap2 else feat2
-                
-                dropped_features.add(to_drop)
-                dropped_pairs.append((feat1, feat2, float(correlation)))
-                print(f"  Dropping '{to_drop}' (SHAP={shap_importance.get(to_drop, 0):.4f}) - "
-                      f"correlated with '{feat1 if to_drop == feat2 else feat2}' (ρ={correlation:.3f})")
-    
-    del corr_matrix
-    gc.collect()
-    
-    retained_features = [f for f in available_features if f not in dropped_features]
-    
-    print(f"\n[COLLINEARITY FILTER] Dropped {len(dropped_features)} features")
-    print(f"[COLLINEARITY FILTER] Retained {len(retained_features)} features")
-    
-    return retained_features, dropped_pairs
 
 
 def calibrate_threshold(
@@ -238,6 +160,8 @@ def evaluate_feature_set(
 ) -> Tuple[Dict[str, float], pd.DataFrame, Dict[str, float]]:
     """
     Run forward-chaining validation using the Two-Stage Cascade architecture.
+    Uses algorithmic weighting (scale_pos_weight) instead of undersampling.
+    Evaluates Stage 1 model strictly for SHAP and AUPRC integrity.
     """
     df = df.sort_values(by=window_col).reset_index(drop=True)
     unique_windows = sorted(df[window_col].unique())
@@ -245,7 +169,7 @@ def evaluate_feature_set(
     
     window_results = []
     all_y_true = []
-    all_y_probs = []
+    all_y_probs_stage1 = []
     all_y_pred = []
     
     global_shap_values = []
@@ -262,12 +186,10 @@ def evaluate_feature_set(
             gc.collect()
             continue
         
-        # Split for Stage 2 Calibration
+        # Split for Stage 2 Calibration (from unweighted training data)
         split_idx = int(len(train_df) * 0.8)
         inner_train_df = train_df.iloc[:split_idx]
         inner_val_df = train_df.iloc[split_idx:]
-
-        inner_train_df = undersample_data(inner_train_df, target_col)
 
         X_inner_train = inner_train_df[feature_cols]
         y_inner_train = inner_train_df[target_col].values
@@ -276,24 +198,33 @@ def evaluate_feature_set(
         X_test = test_df[feature_cols]
         y_test = test_df[target_col].values
 
-        # Calibration Model
-        calib_model = xgb.XGBClassifier(**XGBOOST_PARAMS)
+        # Calibration Model (with algorithmic weighting)
+        calib_params = XGBOOST_PARAMS.copy()
+        n_neg_calib = np.sum(y_inner_train == 0)
+        n_pos_calib = np.sum(y_inner_train == 1)
+        calib_params['scale_pos_weight'] = n_neg_calib / n_pos_calib if n_pos_calib > 0 else 1.0
+        
+        calib_model = xgb.XGBClassifier(**calib_params)
         calib_model.fit(X_inner_train, y_inner_train)
         val_probs = calib_model.predict_proba(X_inner_val)[:, 1]
         optimal_threshold = calibrate_threshold(y_inner_val, val_probs)
 
-        # STAGE 1: THE NET
-        final_train_df = undersample_data(train_df, target_col)
-        X_train_final = final_train_df[feature_cols]
-        y_train_final = final_train_df[target_col].values
+        # STAGE 1: THE NET (Full training data with algorithmic weighting)
+        X_train_final = train_df[feature_cols]
+        y_train_final = train_df[target_col].values
+        
+        stage1_params = XGBOOST_PARAMS.copy()
+        n_neg_s1 = np.sum(y_train_final == 0)
+        n_pos_s1 = np.sum(y_train_final == 1)
+        stage1_params['scale_pos_weight'] = n_neg_s1 / n_pos_s1 if n_pos_s1 > 0 else 1.0
 
-        stage1_model = xgb.XGBClassifier(**XGBOOST_PARAMS)
+        stage1_model = xgb.XGBClassifier(**stage1_params)
         stage1_model.fit(X_train_final, y_train_final)
 
         y_probs_s1 = stage1_model.predict_proba(X_test)[:, 1]
         y_pred_s1 = (y_probs_s1 >= optimal_threshold).astype(int)
 
-        # STAGE 2: THE FILTER
+        # STAGE 2: THE FILTER (optional refinement on high-confidence Stage 1 predictions)
         s2_train_mask = val_probs >= optimal_threshold
         X_train_s2 = X_inner_val[s2_train_mask]
         y_train_s2 = y_inner_val[s2_train_mask]
@@ -306,11 +237,9 @@ def evaluate_feature_set(
         if len(np.unique(y_train_s2)) < 2:
             stage2_model = stage1_model
         else:
-            # Algorithmic weighting for Stage 2
             n_neg_s2 = np.sum(y_train_s2 == 0)
             n_pos_s2 = np.sum(y_train_s2 == 1)
-            base_weight = n_neg_s2 / n_pos_s2 if n_pos_s2 > 0 else 1.0
-            STAGE2_PARAMS['scale_pos_weight'] = base_weight * 0.50
+            STAGE2_PARAMS['scale_pos_weight'] = n_neg_s2 / n_pos_s2 if n_pos_s2 > 0 else 1.0
 
             stage2_model = xgb.XGBClassifier(**STAGE2_PARAMS)
             stage2_model.fit(X_train_s2, y_train_s2)
@@ -320,18 +249,12 @@ def evaluate_feature_set(
         del inner_train_df, inner_val_df, val_probs
         gc.collect()
 
-        # CASCADE FUSION
-        test_suspect_mask = y_pred_s1 == 1
-        y_probs_s2 = np.zeros_like(y_probs_s1)
-        
-        if np.any(test_suspect_mask):
-            X_test_s2 = X_test[test_suspect_mask]
-            y_probs_s2[test_suspect_mask] = stage2_model.predict_proba(X_test_s2)[:, 1]
-
-        y_probs_final = np.where(test_suspect_mask, y_probs_s2, y_probs_s1 * 0.01)
+        # CASCADE FUSION: Keep Stage 1 probabilities for AUPRC integrity
+        # Stage 2 is purely for operational filtering, not for ranking
+        y_probs_final = y_probs_s1.copy()
         y_pred_final = (y_probs_final >= 0.5).astype(int)
         
-        # Metric Computation
+        # Metric Computation (strictly from Stage 1 probabilities)
         window_metrics = compute_classification_metrics(y_test, y_probs_final)
         for k in K_VALUES:
             window_metrics[f'P@{k}'] = compute_precision_at_k(y_test, y_probs_final, k)
@@ -353,10 +276,10 @@ def evaluate_feature_set(
         })
         
         all_y_true.extend(y_test)
-        all_y_probs.extend(y_probs_final)
+        all_y_probs_stage1.extend(y_probs_final)
         all_y_pred.extend(y_pred_final)
         
-        # SHAP extracted purely from Stage 1 to dictate RFE logic
+        # SHAP extracted from Stage 1 to dictate RFE logic
         explainer = shap.TreeExplainer(stage1_model)
         sample_size = min(SHAP_SAMPLE_SIZE, len(X_test))
         X_test_sampled = X_test.sample(sample_size, random_state=42)
@@ -364,30 +287,30 @@ def evaluate_feature_set(
         global_shap_values.append(shap_values)
         
         del stage1_model, stage2_model, explainer, X_test, y_test, test_df, shap_values, X_test_sampled
-        del X_train_final, y_train_final, final_train_df, train_df, X_train_s2, y_train_s2
+        del X_train_final, y_train_final, train_df
         gc.collect()
     
     results_df = pd.DataFrame(window_results)
     
     all_y_true = np.array(all_y_true)
-    all_y_probs = np.array(all_y_probs)
+    all_y_probs_stage1 = np.array(all_y_probs_stage1)
     all_y_pred = np.array(all_y_pred)
     
-    overall_metrics = compute_classification_metrics(all_y_true, all_y_probs)
+    overall_metrics = compute_classification_metrics(all_y_true, all_y_probs_stage1)
     overall_metrics.update({
         'overall_accuracy': accuracy_score(all_y_true, all_y_pred),
         'overall_precision': precision_score(all_y_true, all_y_pred, zero_division=0),
         'overall_recall': recall_score(all_y_true, all_y_pred, zero_division=0),
         'overall_f1_score': f1_score(all_y_true, all_y_pred, zero_division=0),
-        'overall_roc_auc': roc_auc_score(all_y_true, all_y_probs),
-        'overall_auprc': average_precision_score(all_y_true, all_y_probs),
+        'overall_roc_auc': roc_auc_score(all_y_true, all_y_probs_stage1),
+        'overall_auprc': average_precision_score(all_y_true, all_y_probs_stage1),
         'n_test_windows': len(window_results),
         'total_test_samples': len(all_y_true),
         'mean_window_auprc': results_df['auprc'].mean() if not results_df.empty else 0.0,
         'std_window_auprc': results_df['auprc'].std() if not results_df.empty else 0.0,
     })
     for k in K_VALUES:
-        overall_metrics[f'overall_P@{k}'] = compute_precision_at_k(all_y_true, all_y_probs, k)
+        overall_metrics[f'overall_P@{k}'] = compute_precision_at_k(all_y_true, all_y_probs_stage1, k)
     
     if global_shap_values:
         stacked_shap = np.vstack(global_shap_values)
@@ -400,6 +323,7 @@ def evaluate_feature_set(
         shap_importance = {f: 0.0 for f in feature_cols}
     
     return overall_metrics, results_df, shap_importance
+
 
 def identify_protected_features(
     df: pd.DataFrame,
@@ -415,7 +339,7 @@ def identify_protected_features(
     - Features that are behavioral (core transactional features)
     """
     print("\n" + "=" * 80)
-    print("STEP 2: TEMPORAL STABILITY PROTECTION")
+    print("STEP 1: TEMPORAL STABILITY PROTECTION")
     print(f"Protecting top {percentile}th percentile features by SHAP importance")
     print("=" * 80)
     
@@ -443,6 +367,7 @@ def identify_protected_features(
     return protected_features
 
 
+
 def run_shap_rfe_loop(
     df: pd.DataFrame,
     initial_features: List[str],
@@ -461,7 +386,7 @@ def run_shap_rfe_loop(
         - Best iteration index
     """
     print("\n" + "=" * 80)
-    print("STEP 3: ITERATIVE SHAP-RFE LOOP")
+    print("STEP 2: ITERATIVE SHAP-RFE LOOP")
     baseline_auprc = baseline_metrics['overall_auprc']
     print(f"Stopping criterion: ΔAUPRC < {DELTA_AUPRC_THRESHOLD} from baseline ({baseline_auprc:.4f})")
     print("=" * 80)
@@ -480,7 +405,7 @@ def run_shap_rfe_loop(
     })
     
     print(
-        f"\n[ITERATION 0] Baseline: {len(current_features)} features, "
+        f"\n[ITERATION 0] Baseline (all {len(current_features)} features): "
         f"AUPRC={baseline_auprc:.4f}, Acc={baseline_metrics['overall_accuracy']:.4f}, "
         f"F1={baseline_metrics['overall_f1_score']:.4f}"
     )
@@ -728,7 +653,6 @@ def main():
     print("Purpose: Identify efficient feature subset for operational deployment")
     print("Hardware Constraint: 8GB RAM")
     print(f"Configuration:")
-    print(f"  • Correlation threshold: {CORRELATION_THRESHOLD}")
     print(f"  • Drop percentage per iteration: {DROP_PERCENTAGE}%")
     print(f"  • ΔAUPRC threshold: {DELTA_AUPRC_THRESHOLD}")
     print(f"  • Protected percentile: {TEMPORAL_PROTECTION_PERCENTILE}%")
@@ -772,22 +696,15 @@ def main():
     print(f"\nDataset shape: {df.shape}")
     print(f"Initial features: {len(initial_features)}")
     
-    features_after_collinearity, dropped_pairs = compute_collinearity_filter(
-        df=df,
-        feature_cols=initial_features,
-        shap_importance=initial_shap,
-        threshold=CORRELATION_THRESHOLD
-    )
-    
-    print("\n[BASELINE EVALUATION] Computing baseline AUPRC after collinearity filter...")
+    print("\n[BASELINE EVALUATION] Computing baseline AUPRC with all 49 features...")
     baseline_metrics, baseline_window_results, baseline_shap = evaluate_feature_set(
         df=df,
-        feature_cols=features_after_collinearity,
+        feature_cols=initial_features,
         window_col=window_col,
         target_col=target_col
     )
     print(
-        f"Baseline metrics (post-collinearity): "
+        f"Baseline metrics (all features): "
         f"AUPRC={baseline_metrics['overall_auprc']:.4f}, "
         f"Acc={baseline_metrics['overall_accuracy']:.4f}, "
         f"Prec={baseline_metrics['overall_precision']:.4f}, "
@@ -798,14 +715,14 @@ def main():
     
     protected_features = identify_protected_features(
         df=df,
-        feature_cols=features_after_collinearity,
+        feature_cols=initial_features,
         shap_importance=baseline_shap,
         percentile=TEMPORAL_PROTECTION_PERCENTILE
     )
     
     final_features, iteration_history, best_iteration = run_shap_rfe_loop(
         df=df,
-        initial_features=features_after_collinearity,
+        initial_features=initial_features,
         protected_features=protected_features,
         initial_shap=baseline_shap,
         window_col=window_col,
@@ -889,7 +806,7 @@ def main():
         'delta_auprc': delta,
         'best_iteration': best_iteration,
         'discarded_features': discarded_features,
-        'collinearity_pairs': [(f1, f2, corr) for f1, f2, corr in dropped_pairs]
+        'collinearity_pairs': []
     }
     
     pruned_path = results_dir / "pruned_features.json"
@@ -956,6 +873,7 @@ def main():
     # Close logging
     sys.stdout = original_stdout
     tee.close()
+
 
 
 if __name__ == "__main__":
