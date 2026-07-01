@@ -11,7 +11,7 @@ class SubgraphMotifExtractor(FeatureExtractor):
         fan_threshold: int = 5, 
         cycle_bound: int = 5, 
         max_degree: int = 16, 
-        max_cycles: int = 1000
+        max_cycles: int = 2000
     ):
         self.fan_threshold = fan_threshold
         self.cycle_bound = cycle_bound
