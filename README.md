@@ -2,6 +2,8 @@
 
 A machine learning pipeline for detecting fraudulent *entities* in the AMLworld dataset. This project uses graph-based features, network analysis, and gradient boosting models to identify suspicious transaction patterns and account behaviors.
 
+## Note: 07_feature_pruning is not being used in the final thesis.
+
 ## Features
 
 - **Data Processing**: Filters and aggregates raw transaction data from the AMLworld dataset
